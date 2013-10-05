@@ -363,8 +363,13 @@ public class MultipleOutputs<KEYOUT, VALUEOUT> {
     @SuppressWarnings({"unchecked"})
     public void write(Object key, Object value) 
         throws IOException, InterruptedException {
+      write(key, value, (long)1);
+    }
+
+    public void write(Object key, Object value, long recordsRepresented) 
+        throws IOException, InterruptedException {
       context.getCounter(COUNTERS_GROUP, counterName).increment(1);
-      writer.write(key, value);
+      writer.write(key, value, recordsRepresented);
     }
 
     public void close(TaskAttemptContext context) 
@@ -408,7 +413,19 @@ public class MultipleOutputs<KEYOUT, VALUEOUT> {
   @SuppressWarnings("unchecked")
   public <K, V> void write(String namedOutput, K key, V value)
       throws IOException, InterruptedException {
-    write(namedOutput, key, value, namedOutput);
+    write(namedOutput, key, value, (long)1);
+  }
+
+  @SuppressWarnings("unchecked")
+  public <K, V> void write(String namedOutput, K key, V value, long recordsRepresented)
+      throws IOException, InterruptedException {
+    write(namedOutput, key, value, recordsRepresented, namedOutput);
+  }
+
+  @SuppressWarnings("unchecked")
+  public <K, V> void write(String namedOutput, K key, V value, String baseOutputPath)
+      throws IOException, InterruptedException {
+    write(namedOutput, key, value, (long)1, baseOutputPath);
   }
 
   /**
@@ -421,7 +438,7 @@ public class MultipleOutputs<KEYOUT, VALUEOUT> {
    * Note: Framework will generate unique filename for the baseOutputPath
    */
   @SuppressWarnings("unchecked")
-  public <K, V> void write(String namedOutput, K key, V value,
+  public <K, V> void write(String namedOutput, K key, V value, long recordsRepresented,
       String baseOutputPath) throws IOException, InterruptedException {
     checkNamedOutputName(context, namedOutput, false);
     checkBaseOutputPath(baseOutputPath);
@@ -430,7 +447,7 @@ public class MultipleOutputs<KEYOUT, VALUEOUT> {
         namedOutput + "'");
     }
     TaskAttemptContext taskContext = getContext(namedOutput);
-    getRecordWriter(taskContext, baseOutputPath).write(key, value);
+    getRecordWriter(taskContext, baseOutputPath).write(key, value,recordsRepresented);
   }
 
   /**
@@ -447,6 +464,12 @@ public class MultipleOutputs<KEYOUT, VALUEOUT> {
   @SuppressWarnings("unchecked")
   public void write(KEYOUT key, VALUEOUT value, String baseOutputPath) 
       throws IOException, InterruptedException {
+    write(key, value, (long)1, baseOutputPath);
+  }
+
+  @SuppressWarnings("unchecked")
+  public void write(KEYOUT key, VALUEOUT value, long recordsRepresented, 
+    String baseOutputPath) throws IOException, InterruptedException {
     checkBaseOutputPath(baseOutputPath);
     if (jobOutputFormatContext == null) {
       jobOutputFormatContext = 
@@ -454,7 +477,7 @@ public class MultipleOutputs<KEYOUT, VALUEOUT> {
                                    context.getTaskAttemptID(),
                                    new WrappedStatusReporter(context));
     }
-    getRecordWriter(jobOutputFormatContext, baseOutputPath).write(key, value);
+    getRecordWriter(jobOutputFormatContext, baseOutputPath).write(key, value, recordsRepresented);
   }
 
   // by being synchronized MultipleOutputTask can be use with a

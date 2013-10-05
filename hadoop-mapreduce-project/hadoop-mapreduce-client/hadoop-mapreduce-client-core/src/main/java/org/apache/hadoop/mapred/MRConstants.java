@@ -43,6 +43,10 @@ public interface MRConstants {
    */
   public static final String MAP_OUTPUT_LENGTH = "Map-Output-Length";
 
+  public static final String MAP_OUTPUT_NUM_RECORDS = "Map-Output-Num-Records";
+
+  public static final String MAP_OUTPUT_NUM_RECORDS_REPRESENTED = "Map-Output-Num-Records-Represented";
+
   /**
    * The custom http header used for the "raw" map output length.
    */

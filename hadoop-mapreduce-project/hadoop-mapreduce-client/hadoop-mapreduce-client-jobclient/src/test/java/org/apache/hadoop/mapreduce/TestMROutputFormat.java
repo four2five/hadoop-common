@@ -187,8 +187,13 @@ implements Configurable {
           InterruptedException {	
       }
 
-      @Override
       public void write(IntWritable key, IntWritable value) throws IOException,
+          InterruptedException {	
+        write(key, value, (long)1);
+      }
+
+      @Override
+      public void write(IntWritable key, IntWritable value, long recordsRepresented) throws IOException,
           InterruptedException {	
       }
     }; 

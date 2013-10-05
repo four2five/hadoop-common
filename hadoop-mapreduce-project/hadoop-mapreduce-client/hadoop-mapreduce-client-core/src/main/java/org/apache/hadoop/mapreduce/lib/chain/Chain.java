@@ -248,10 +248,14 @@ public class Chain {
      */
     public void write(KEYOUT key, VALUEOUT value) throws IOException,
         InterruptedException {
+      write(key, value, (long)1);
+    }
+    public void write(KEYOUT key, VALUEOUT value, long recordsRepresented) throws IOException,
+        InterruptedException {
       if (outputQueue != null) {
         writeToQueue(key, value);
       } else {
-        outputContext.write(key, value);
+        outputContext.write(key, value, recordsRepresented);
       }
     }
 

@@ -144,6 +144,7 @@ public class Reducer<KEYIN,VALUEIN,KEYOUT,VALUEOUT> {
    * is an identity function.
    */
   @SuppressWarnings("unchecked")
+  //protected void reduce(KEYIN key, Iterable<VALUEIN> values, Context context
   protected void reduce(KEYIN key, Iterable<VALUEIN> values, Context context
                         ) throws IOException, InterruptedException {
     for(VALUEIN value: values) {

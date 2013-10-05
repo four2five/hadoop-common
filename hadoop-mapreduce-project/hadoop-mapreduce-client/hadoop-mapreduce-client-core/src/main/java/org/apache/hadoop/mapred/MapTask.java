@@ -582,14 +582,18 @@ public class MapTask extends Task {
     }
 
     @Override
-    public void collect(K key, V value) throws IOException {
+    public void collect(K key, V value, long recordsRepresented) throws IOException {
       try {
-        collector.collect(key, value,
+        collector.collect(key, value, recordsRepresented,
                           partitioner.getPartition(key, value, numPartitions));
       } catch (InterruptedException ie) {
         Thread.currentThread().interrupt();
         throw new IOException("interrupt exception", ie);
       }
+    }
+
+    public void collect(K key, V value) throws IOException {
+      collect(key, value, (long)1);
     }
   }
 
@@ -628,11 +632,11 @@ public class MapTask extends Task {
 
     @Override
     @SuppressWarnings("unchecked")
-    public void write(K key, V value) 
+    public void write(K key, V value, long recordsRepresented) 
     throws IOException, InterruptedException {
       reporter.progress();
       long bytesOutPrev = getOutputBytes(fsStats);
-      out.write(key, value);
+      out.write(key, value, recordsRepresented);
       long bytesOutCurr = getOutputBytes(fsStats);
       fileOutputByteCounter.increment(bytesOutCurr - bytesOutPrev);
       mapOutputRecordCounter.increment(1);
@@ -688,8 +692,8 @@ public class MapTask extends Task {
     }
 
     @Override
-    public void write(K key, V value) throws IOException, InterruptedException {
-      collector.collect(key, value,
+    public void write(K key, V value, long recordsRepresented) throws IOException, InterruptedException {
+      collector.collect(key, value, recordsRepresented,
                         partitioner.getPartition(key, value, partitions));
     }
 
@@ -785,6 +789,7 @@ public class MapTask extends Task {
     private Counters.Counter mapOutputRecordCounter;
     private Counters.Counter fileOutputByteCounter;
     private List<Statistics> fsStats;
+    private long recordsRepresented;
 
     public DirectMapOutputCollector() {
     }
@@ -813,6 +818,7 @@ public class MapTask extends Task {
       out = job.getOutputFormat().getRecordWriter(fs, job, finalName, reporter);
       long bytesOutCurr = getOutputBytes(fsStats);
       fileOutputByteCounter.increment(bytesOutCurr - bytesOutPrev);
+      recordsRepresented = 0;
     }
 
     public void close() throws IOException {
@@ -829,13 +835,15 @@ public class MapTask extends Task {
                                ClassNotFoundException {
     }
 
-    public void collect(K key, V value, int partition) throws IOException {
+    public void collect(K key, V value, long recordsRepresented, 
+                        int partition) throws IOException {
       reporter.progress();
       long bytesOutPrev = getOutputBytes(fsStats);
       out.write(key, value);
       long bytesOutCurr = getOutputBytes(fsStats);
       fileOutputByteCounter.increment(bytesOutCurr - bytesOutPrev);
       mapOutputRecordCounter.increment(1);
+      this.recordsRepresented += recordsRepresented;
     }
 
     private long getOutputBytes(List<Statistics> stats) {
@@ -888,7 +896,8 @@ public class MapTask extends Task {
     private static final int KEYSTART = 1;         // key offset in acct
     private static final int PARTITION = 2;        // partition offset in acct
     private static final int VALLEN = 3;           // length of value
-    private static final int NMETA = 4;            // num meta ints
+    private static final int RECREP = 4;           // records represented offset in acct
+    private static final int NMETA = 5;            // num meta ints
     private static final int METASIZE = NMETA * 4; // size in bytes
 
     // spill accounting
@@ -1045,6 +1054,11 @@ public class MapTask extends Task {
      * storage to store one METADATA.
      */
     public synchronized void collect(K key, V value, final int partition
+                                     ) throws IOException {
+      collect(key, value, (long)1, partition);
+    }
+
+    public synchronized void collect(K key, V value, long recordsRepresented, final int partition
                                      ) throws IOException {
       reporter.progress();
       if (key.getClass() != keyClass) {
@@ -1776,6 +1790,14 @@ public class MapTask extends Task {
         getVBytesForOffset(offsetFor(current % maxRec), vbytes);
         return vbytes;
       }
+
+      public int getNumRecordsRepresented() throws IOException {
+        final int kvoff = offsetFor(current % maxRec);
+        LOG.info("getNumRecordsRepresented: " +  kvmeta.get(kvoff + RECREP));
+        return kvmeta.get(kvoff + RECREP);
+      }
+
+
       public Progress getProgress() {
         return null;
       }

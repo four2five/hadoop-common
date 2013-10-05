@@ -68,7 +68,7 @@ class OutputHandler<K extends WritableComparable,
    * The task output a normal record.
    */
   public void output(K key, V value) throws IOException {
-    collector.collect(key, value);
+    collector.collect(key, value, (long)1);
   }
 
   /**
@@ -77,7 +77,7 @@ class OutputHandler<K extends WritableComparable,
   public void partitionedOutput(int reduce, K key, 
                                 V value) throws IOException {
     PipesPartitioner.setNextPartition(reduce);
-    collector.collect(key, value);
+    collector.collect(key, value, (long)1);
   }
 
   /**

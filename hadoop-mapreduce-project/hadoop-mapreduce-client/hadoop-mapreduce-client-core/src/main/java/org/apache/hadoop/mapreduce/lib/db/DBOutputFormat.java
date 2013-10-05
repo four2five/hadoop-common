@@ -114,6 +114,10 @@ extends OutputFormat<K,V> {
 
     /** {@inheritDoc} */
     public void write(K key, V value) throws IOException {
+      write(key, value, (long)1);
+    }
+
+    public void write(K key, V value, long recordsRepresented) throws IOException {
       try {
         key.write(statement);
         statement.addBatch();

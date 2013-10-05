@@ -46,6 +46,14 @@ public interface RawKeyValueIterator {
    * @throws IOException
    */
   DataInputBuffer getValue() throws IOException;
+
+  /**
+   * The number of values represented by a K/V pair
+   *
+   * @return the number of values that were combined into this one
+   * @throws IOException
+   */
+  int getNumRecordsRepresented() throws IOException;
   
   /** 
    * Sets up the current key and value (for getKey and getValue).

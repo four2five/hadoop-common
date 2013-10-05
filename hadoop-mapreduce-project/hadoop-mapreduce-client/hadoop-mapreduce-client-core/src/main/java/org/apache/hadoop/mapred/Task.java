@@ -161,6 +161,7 @@ abstract public class Task implements Writable, Configurable {
   //skip ranges based on failed ranges from previous attempts
   private SortedRanges skipRanges = new SortedRanges();
   private boolean skipping = false;
+  private boolean sciTask = false;
   private boolean writeSkipRecs = true;
   
   //currently processing record start index
@@ -368,6 +369,14 @@ abstract public class Task implements Writable, Configurable {
     this.skipRanges = skipRanges;
   }
 
+  public boolean isSciTask() {
+    return sciTask;
+  }
+
+  public void setSciTask(boolean sciTask) {
+    this.sciTask = sciTask;
+  }
+
   /**
    * Is Task in skipping mode.
    */
@@ -471,6 +480,7 @@ abstract public class Task implements Writable, Configurable {
     taskStatus.write(out);
     skipRanges.write(out);
     out.writeBoolean(skipping);
+    out.writeBoolean(sciTask);
     out.writeBoolean(jobCleanup);
     if (jobCleanup) {
       WritableUtils.writeEnum(out, jobRunStateForCleanup);
@@ -492,6 +502,7 @@ abstract public class Task implements Writable, Configurable {
     currentRecIndexIterator = skipRanges.skipRangeIterator();
     currentRecStartIndex = currentRecIndexIterator.next();
     skipping = in.readBoolean();
+    sciTask = in.readBoolean();
     jobCleanup = in.readBoolean();
     if (jobCleanup) {
       jobRunStateForCleanup = 
@@ -1301,13 +1312,18 @@ abstract public class Task implements Writable, Configurable {
       this.writer = writer;
     }
 
-    public synchronized void collect(K key, V value)
+    public synchronized void collect(K key, V value, long recordsRepresented)
         throws IOException {
       outCounter.increment(1);
       writer.append(key, value);
       if ((outCounter.getValue() % progressBar) == 0) {
         progressable.progress();
       }
+    }
+
+    public synchronized void collect(K key, V value)
+        throws IOException {
+      collect(key, value, (long)1);
     }
   }
 
@@ -1617,10 +1633,14 @@ abstract public class Task implements Writable, Configurable {
       public void close(org.apache.hadoop.mapreduce.TaskAttemptContext context){
       }
 
-      @Override
       public void write(K key, V value
                         ) throws IOException, InterruptedException {
-        output.collect(key,value);
+       write(key,value, (long)1);
+      }
+
+      public void write(K key, V value, long recordsRepresented
+                        ) throws IOException, InterruptedException {
+        output.collect(key,value, recordsRepresented);
       }
     }
 

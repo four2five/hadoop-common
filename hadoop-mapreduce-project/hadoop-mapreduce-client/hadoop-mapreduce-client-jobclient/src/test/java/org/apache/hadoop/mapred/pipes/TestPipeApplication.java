@@ -557,8 +557,12 @@ public class TestPipeApplication {
     }
 
     public synchronized void collect(K key, V value) throws IOException {
+      collect(key, value, (long)1);
+    }
+
+    public synchronized void collect(K key, V value, long recordsRepresented) throws IOException {
       outCounter.increment(1);
-      writer.append(key, value);
+      writer.append(key, value, recordsRepresented);
       progressable.progress();
     }
   }
@@ -737,8 +741,14 @@ public class TestPipeApplication {
     @Override
     public synchronized void collect(IntWritable key, Text value)
             throws IOException {
+      collect(key, value, (long)1);
+    }
+
+    @Override
+    public synchronized void collect(IntWritable key, Text value, long recordsRepresented)
+            throws IOException {
       collect.put(key, value);
-      super.collect(key, value);
+      super.collect(key, value, recordsRepresented);
     }
 
     public Map<IntWritable, Text> getCollect() {

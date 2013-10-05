@@ -90,9 +90,13 @@ public class FilterOutputFormat <K,V> extends OutputFormat<K, V> {
       this.rawWriter = rwriter;
     }
     
-    @Override
     public void write(K key, V value) throws IOException, InterruptedException {
-      getRawWriter().write(key, value);
+      write(key, value, (long)1);
+    }
+
+    @Override
+    public void write(K key, V value, long recordsRepresented) throws IOException, InterruptedException {
+      getRawWriter().write(key, value, recordsRepresented);
     }
 
     @Override

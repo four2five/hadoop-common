@@ -88,7 +88,11 @@ public class TextOutputFormat<K, V> extends FileOutputFormat<K, V> {
 
     public synchronized void write(K key, V value)
       throws IOException {
+      write(key, value, (long)1);
+    }
 
+    public synchronized void write(K key, V value, long numRecords)
+      throws IOException {
       boolean nullKey = key == null || key instanceof NullWritable;
       boolean nullValue = value == null || value instanceof NullWritable;
       if (nullKey && nullValue) {

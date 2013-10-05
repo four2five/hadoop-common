@@ -58,7 +58,7 @@ public class RegexMapper<K> extends MapReduceBase
     String text = value.toString();
     Matcher matcher = pattern.matcher(text);
     while (matcher.find()) {
-      output.collect(new Text(matcher.group(group)), new LongWritable(1));
+      output.collect(new Text(matcher.group(group)), new LongWritable(1), (long)1);
     }
   }
 

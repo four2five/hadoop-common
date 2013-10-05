@@ -98,9 +98,15 @@ class ChainReduceContextImpl<KEYIN, VALUEIN, KEYOUT, VALUEOUT> implements
   }
 
   @Override
+  public void write(KEYOUT key, VALUEOUT value, long recordsRepresented) throws IOException,
+      InterruptedException {
+    rw.write(key, value, recordsRepresented);
+  }
+
+  @Override
   public void write(KEYOUT key, VALUEOUT value) throws IOException,
       InterruptedException {
-    rw.write(key, value);
+    write(key, value, (long)1);
   }
 
   @Override

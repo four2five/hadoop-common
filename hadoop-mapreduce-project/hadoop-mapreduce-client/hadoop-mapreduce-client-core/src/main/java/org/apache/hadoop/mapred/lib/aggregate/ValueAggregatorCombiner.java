@@ -67,9 +67,9 @@ public class ValueAggregatorCombiner<K1 extends WritableComparable,
     while (outputs.hasNext()) {
       Object v = outputs.next();
       if (v instanceof Text) {
-        output.collect(key, (Text)v);
+        output.collect(key, (Text)v, (long)1);
       } else {
-        output.collect(key, new Text(v.toString()));
+        output.collect(key, new Text(v.toString()), (long)1);
       }
     }
   }

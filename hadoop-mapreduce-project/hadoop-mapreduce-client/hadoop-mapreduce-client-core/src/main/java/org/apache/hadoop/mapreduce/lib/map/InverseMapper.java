@@ -33,7 +33,7 @@ public class InverseMapper<K, V> extends Mapper<K,V,V,K> {
   @Override
   public void map(K key, V value, Context context
                   ) throws IOException, InterruptedException {
-    context.write(value, key);
+    context.write(value, key, (long)1);
   }
   
 }

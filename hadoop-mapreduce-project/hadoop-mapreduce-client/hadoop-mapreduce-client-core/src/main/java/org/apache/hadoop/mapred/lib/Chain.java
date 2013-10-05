@@ -339,6 +339,11 @@ class Chain extends org.apache.hadoop.mapreduce.lib.chain.Chain {
 
     @SuppressWarnings({"unchecked"})
     public void collect(K key, V value) throws IOException {
+      collect(key, value, (long)1);
+    }
+
+    @SuppressWarnings({"unchecked"})
+    public void collect(K key, V value, long recordsRepresented) throws IOException {
       if (nextMapperIndex < mappers.size()) {
         // there is a next mapper in chain
 
@@ -364,7 +369,7 @@ class Chain extends org.apache.hadoop.mapreduce.lib.chain.Chain {
                        reporter);
       } else {
         // end of chain, user real output collector
-        output.collect(key, value);
+        output.collect(key, value, recordsRepresented);
       }
     }
 

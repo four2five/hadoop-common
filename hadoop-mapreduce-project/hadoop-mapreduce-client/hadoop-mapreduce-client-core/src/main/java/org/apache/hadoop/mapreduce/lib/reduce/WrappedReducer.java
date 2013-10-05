@@ -102,7 +102,13 @@ public class WrappedReducer<KEYIN, VALUEIN, KEYOUT, VALUEOUT>
     @Override
     public void write(KEYOUT key, VALUEOUT value) throws IOException,
         InterruptedException {
-      reduceContext.write(key, value);
+      write(key, value, (long)1);
+    }
+
+    @Override
+    public void write(KEYOUT key, VALUEOUT value, long recordsRepresented) throws IOException,
+        InterruptedException {
+      reduceContext.write(key, value, recordsRepresented);
     }
 
     @Override

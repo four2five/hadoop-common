@@ -1415,8 +1415,11 @@ public class JobImpl implements org.apache.hadoop.mapreduce.v2.app.job.Job,
         }
         
         long inputLength = 0;
+        int jbCounter = 0;
         for (int i = 0; i < job.numMapTasks; ++i) {
           inputLength += taskSplitMetaInfo[i].getInputDataLength();
+          LOG.info("TaskSplitMetaInfo[" + jbCounter + "]:" + taskSplitMetaInfo[i].toString());
+          jbCounter++;
         }
 
         job.makeUberDecision(inputLength);

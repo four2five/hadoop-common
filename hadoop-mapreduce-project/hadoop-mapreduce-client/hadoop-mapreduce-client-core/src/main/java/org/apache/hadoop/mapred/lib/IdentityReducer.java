@@ -42,7 +42,7 @@ public class IdentityReducer<K, V>
                      OutputCollector<K, V> output, Reporter reporter)
     throws IOException {
     while (values.hasNext()) {
-      output.collect(key, values.next());
+      output.collect(key, values.next(), (long)1);
     }
   }
 	

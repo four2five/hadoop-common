@@ -113,8 +113,12 @@ public class StubContext {
 
     List<Text> values = new ArrayList<Text>();
 
-    @Override
     public void write(Text key, Text value) throws IOException, InterruptedException {
+      write(key, value, (long)1);
+    }
+
+    @Override
+    public void write(Text key, Text value, long recordsRepresented) throws IOException, InterruptedException {
       keys.add(key);
       values.add(value);
     }

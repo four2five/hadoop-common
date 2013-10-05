@@ -286,8 +286,13 @@ public class TestMerge extends TestCase {
 
     public synchronized void collect(K key, V value, int partitionNumber
                                     ) throws IOException, InterruptedException {
+      collect(key, value, (long)1, partitionNumber);
+    }
+
+    public synchronized void collect(K key, V value, long recordsRepresented, int partitionNumber
+                                    ) throws IOException, InterruptedException {
       if (partitionNumber >= 0 && partitionNumber < numberOfPartitions) {
-        recordWriters[partitionNumber].write(key, value);
+        recordWriters[partitionNumber].write(key, value, recordsRepresented);
       } else {
         throw new IOException("Invalid partition number: " + partitionNumber);
       }
@@ -364,6 +369,10 @@ public class TestMerge extends TestCase {
     }
 
     public void write(K key, V value) throws IOException {
+      write(key, value, (long)1);
+    }
+
+    public void write(K key, V value, long recordsRepresented) throws IOException {
       if (key.getClass() != keyClass) {
         throw new IOException("wrong key class: "+ key.getClass()
                               +" is not "+ keyClass);

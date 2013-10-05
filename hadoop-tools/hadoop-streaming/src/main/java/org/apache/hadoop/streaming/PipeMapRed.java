@@ -305,9 +305,13 @@ public abstract class PipeMapRed {
         // this output just to avoid reducer hanging forever.
 
         OutputCollector collector = new OutputCollector() {
-          public void collect(Object key, Object value)
+          public void collect(Object key, Object value, long numRecords)
             throws IOException {
             //just consume it, no need to write the record anywhere
+          }
+          public void collect(Object key, Object value)
+            throws IOException {
+		          collect(key, value, (long)1);	
           }
         };
         Reporter reporter = Reporter.NULL;//dummy reporter

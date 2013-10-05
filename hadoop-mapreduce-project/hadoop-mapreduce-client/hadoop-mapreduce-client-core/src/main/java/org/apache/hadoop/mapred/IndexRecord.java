@@ -26,12 +26,17 @@ public class IndexRecord {
   public long startOffset;
   public long rawLength;
   public long partLength;
+  public long numRecords = -2;
+  public long numRecordsRepresented = -3;
 
   public IndexRecord() { }
 
-  public IndexRecord(long startOffset, long rawLength, long partLength) {
+  public IndexRecord(long startOffset, long rawLength, long partLength, long numRecords,
+                     long representedRecords) {
     this.startOffset = startOffset;
     this.rawLength = rawLength;
     this.partLength = partLength;
+    this.numRecords = numRecords;
+    this.numRecordsRepresented = representedRecords;
   }
 }

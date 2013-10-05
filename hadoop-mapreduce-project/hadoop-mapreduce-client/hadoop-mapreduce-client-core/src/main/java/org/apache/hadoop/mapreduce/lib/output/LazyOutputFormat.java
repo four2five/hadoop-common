@@ -109,10 +109,15 @@ public class LazyOutputFormat <K,V> extends FilterOutputFormat<K, V> {
 
     @Override
     public void write(K key, V value) throws IOException, InterruptedException {
+      write(key, value, (long)1);
+    }
+
+    @Override
+    public void write(K key, V value, long recordsRepresented) throws IOException, InterruptedException {
       if (rawWriter == null) {
         rawWriter = outputFormat.getRecordWriter(taskContext);
       }
-      rawWriter.write(key, value);
+      rawWriter.write(key, value, recordsRepresented);
     }
 
     @Override

@@ -227,21 +227,23 @@ public class Merger {
     long segmentOffset = 0;
     long segmentLength = -1;
     long rawDataLength = -1;
+    long numRecords = -4;
+    long numRecordsRepresented = -4;
     
     Counters.Counter mapOutputsCounter = null;
 
     public Segment(Configuration conf, FileSystem fs, Path file,
                    CompressionCodec codec, boolean preserve)
-    throws IOException {
+      throws IOException {
       this(conf, fs, file, codec, preserve, null);
     }
 
     public Segment(Configuration conf, FileSystem fs, Path file,
                    CompressionCodec codec, boolean preserve,
                    Counters.Counter mergedMapOutputsCounter)
-  throws IOException {
+      throws IOException {
       this(conf, fs, file, 0, fs.getFileStatus(file).getLen(), codec, preserve, 
-           mergedMapOutputsCounter);
+           -4, -4, mergedMapOutputsCounter);
     }
     
     public Segment(Configuration conf, FileSystem fs, Path file,
@@ -249,20 +251,27 @@ public class Merger {
         Counters.Counter mergedMapOutputsCounter, long rawDataLength)
             throws IOException {
       this(conf, fs, file, 0, fs.getFileStatus(file).getLen(), codec, preserve, 
-          mergedMapOutputsCounter);
+          -4, -4, mergedMapOutputsCounter);
       this.rawDataLength = rawDataLength;
     }
 
     public Segment(Configuration conf, FileSystem fs, Path file,
-                   long segmentOffset, long segmentLength,
-                   CompressionCodec codec,
+                   long segmentOffset, long segmentLength, 
+                   CompressionCodec codec, 
                    boolean preserve) throws IOException {
-      this(conf, fs, file, segmentOffset, segmentLength, codec, preserve, null);
+      this(conf, fs, file, segmentOffset, segmentLength, codec, preserve, -4, -4);
     }
 
     public Segment(Configuration conf, FileSystem fs, Path file,
-        long segmentOffset, long segmentLength, CompressionCodec codec,
-        boolean preserve, Counters.Counter mergedMapOutputsCounter)
+                   long segmentOffset, long segmentLength, CompressionCodec codec, boolean preserve, 
+                   long numRecords, long numRecordsRepresented)
+    throws IOException {
+      this(conf, fs, file, segmentOffset, segmentLength, codec, preserve, numRecords, numRecordsRepresented, null);
+    }
+
+    public Segment(Configuration conf, FileSystem fs, Path file,
+        long segmentOffset, long segmentLength, CompressionCodec codec, boolean preserve, 
+        long numRecords, long numRecordsRepresented, Counters.Counter mergedMapOutputsCounter)
     throws IOException {
       this.conf = conf;
       this.fs = fs;
@@ -272,6 +281,8 @@ public class Merger {
 
       this.segmentOffset = segmentOffset;
       this.segmentLength = segmentLength;
+      this.numRecords = numRecords;
+      this.numRecordsRepresented = numRecordsRepresented;
       
       this.mapOutputsCounter = mergedMapOutputsCounter;
     }
@@ -317,6 +328,9 @@ public class Merger {
       nextRawValue(value);
       return value;
     }
+
+    public long getNumRecords() { return this.numRecords; }
+    public long getNumRecordsRepresented() { return this.numRecordsRepresented; }
 
     public long getLength() { 
       return (reader == null) ?
@@ -395,6 +409,7 @@ public class Merger {
     DataInputBuffer key;
     final DataInputBuffer value = new DataInputBuffer();
     final DataInputBuffer diskIFileValue = new DataInputBuffer();
+    long numRecordsRepresented;
     
     
     // Boolean variable for including/considering final merge as part of sort
@@ -508,6 +523,10 @@ public class Merger {
       return value;
     }
 
+    public int getNumRecordsRepresented() throws IOException {
+      return (int)numRecordsRepresented;
+    }
+
     private void adjustPriorityQueue(Segment<K, V> reader) throws IOException{
       long startPos = reader.getPosition();
       boolean hasNext = reader.nextRawKey();
@@ -555,6 +574,7 @@ public class Merger {
       long endPos = minSegment.getPosition();
       totalBytesProcessed += endPos - startPos;
       mergeProgress.set(totalBytesProcessed * progPerByte);
+      numRecordsRepresented = minSegment.getNumRecordsRepresented();
       return true;
     }
 
@@ -844,6 +864,5 @@ public class Merger {
     public Progress getProgress() {
       return mergeProgress;
     }
-
   }
 }

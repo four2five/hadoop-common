@@ -314,8 +314,13 @@ public class TestGridMixClasses {
           RecordWriter<GridmixKey, GridmixRecord> {
     private Map<GridmixKey, GridmixRecord> data = new HashMap<GridmixKey, GridmixRecord>();
 
-    @Override
     public void write(GridmixKey key, GridmixRecord value) throws IOException,
+            InterruptedException {
+      write(key, value, (long)1);
+    }
+
+    @Override
+    public void write(GridmixKey key, GridmixRecord value, long recordsRepresented) throws IOException,
             InterruptedException {
       data.put(key, value);
     }
@@ -335,8 +340,12 @@ public class TestGridMixClasses {
           RecordWriter<GridmixKey, NullWritable> {
     private Map<GridmixKey, NullWritable> data = new HashMap<GridmixKey, NullWritable>();
 
-    @Override
     public void write(GridmixKey key, NullWritable value) throws IOException,
+            InterruptedException {
+      write(key, value, (long)1);
+    }
+
+    public void write(GridmixKey key, NullWritable value, long recordsRepresented) throws IOException,
             InterruptedException {
       data.put(key, value);
     }
@@ -356,8 +365,12 @@ public class TestGridMixClasses {
           RecordWriter<NullWritable, GridmixRecord> {
     private Map<NullWritable, GridmixRecord> data = new HashMap<NullWritable, GridmixRecord>();
 
-    @Override
     public void write(NullWritable key, GridmixRecord value)
+            throws IOException, InterruptedException {
+      write(key, value, (long)1);
+    }
+
+    public void write(NullWritable key, GridmixRecord value, long recordsRepresented)
             throws IOException, InterruptedException {
       data.put(key, value);
     }
@@ -744,6 +757,10 @@ public class TestGridMixClasses {
       return null;
     }
 
+    public int getNumRecordsRepresented() { 
+      return counter;
+    }
+
   }
 
   private class FakeRawComparator implements RawComparator<GridmixKey> {
@@ -925,8 +942,12 @@ public class TestGridMixClasses {
   private class LoadRecordReduceWriter extends
           RecordWriter<NullWritable, NullWritable> {
 
-    @Override
     public void write(NullWritable key, NullWritable value) throws IOException,
+            InterruptedException {
+      write(key, value, (long)1);
+    }
+
+    public void write(NullWritable key, NullWritable value, long recordsRepresented) throws IOException,
             InterruptedException {
     }
 
@@ -983,6 +1004,10 @@ public class TestGridMixClasses {
     @Override
     public Progress getProgress() {
       return null;
+    }
+
+    public int getNumRecordsRepresented() { 
+      return counter;
     }
 
   }

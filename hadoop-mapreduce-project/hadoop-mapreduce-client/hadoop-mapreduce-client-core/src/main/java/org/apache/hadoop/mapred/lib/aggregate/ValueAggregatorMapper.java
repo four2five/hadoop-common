@@ -53,7 +53,7 @@ public class ValueAggregatorMapper<K1 extends WritableComparable,
         ad.generateKeyValPairs(key, value).iterator();
       while (ens.hasNext()) {
         Entry<Text, Text> en = ens.next();
-        output.collect(en.getKey(), en.getValue());
+        output.collect(en.getKey(), en.getValue(), (long)1);
       }
     }
   }

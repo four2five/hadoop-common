@@ -417,11 +417,16 @@ public class ReduceTask extends Task {
     
     OutputCollector<OUTKEY,OUTVALUE> collector = 
       new OutputCollector<OUTKEY,OUTVALUE>() {
-        public void collect(OUTKEY key, OUTVALUE value)
+        public void collect(OUTKEY key, OUTVALUE value, long recordsRepresented)
           throws IOException {
           finalOut.write(key, value);
           // indicate that progress update needs to be sent
           reporter.progress();
+        }
+
+        public void collect(OUTKEY key, OUTVALUE value)
+          throws IOException {
+          collect(key, value, (long)1);
         }
       };
     
@@ -553,9 +558,9 @@ public class ReduceTask extends Task {
     }
 
     @Override
-    public void write(K key, V value) throws IOException, InterruptedException {
+    public void write(K key, V value, long recordsRepresented) throws IOException, InterruptedException {
       long bytesOutPrev = getOutputBytes(fsStats);
-      real.write(key,value);
+      real.write(key,value, recordsRepresented);
       long bytesOutCurr = getOutputBytes(fsStats);
       fileOutputByteCounter.increment(bytesOutCurr - bytesOutPrev);
       outputRecordCounter.increment(1);
@@ -596,6 +601,9 @@ public class ReduceTask extends Task {
       }
       public DataInputBuffer getValue() throws IOException {
         return rawIter.getValue();
+      }
+      public int getNumRecordsRepresented() throws IOException { 
+        return rawIter.getNumRecordsRepresented();
       }
       public boolean next() throws IOException {
         boolean ret = rawIter.next();

@@ -81,14 +81,14 @@ public class TestFileOutputCommitter extends TestCase {
     NullWritable nullWritable = NullWritable.get();
 
     try {
-      theRecordWriter.write(key1, val1);
-      theRecordWriter.write(null, nullWritable);
-      theRecordWriter.write(null, val1);
-      theRecordWriter.write(nullWritable, val2);
-      theRecordWriter.write(key2, nullWritable);
-      theRecordWriter.write(key1, null);
-      theRecordWriter.write(null, null);
-      theRecordWriter.write(key2, val2);
+      theRecordWriter.write(key1, val1, (long)1);
+      theRecordWriter.write(null, nullWritable, (long)1);
+      theRecordWriter.write(null, val1, (long)1);
+      theRecordWriter.write(nullWritable, val2, (long)1);
+      theRecordWriter.write(key2, nullWritable, (long)1);
+      theRecordWriter.write(key1, null, (long)1);
+      theRecordWriter.write(null, null, (long)1);
+      theRecordWriter.write(key2, val2, (long)1);
     } finally {
       theRecordWriter.close(context);
     }
@@ -102,7 +102,7 @@ public class TestFileOutputCommitter extends TestCase {
         key = i;
         Text val = (i%2 == 1) ? val1 : val2;
         theRecordWriter.write(new LongWritable(key),
-            val);        
+            val, (long)1);        
       }
     } finally {
       theRecordWriter.close(context);

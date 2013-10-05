@@ -79,6 +79,7 @@ public class IFile {
 
     // Count records written to disk
     private long numRecordsWritten = 0;
+    private long numRecordsRepresented = 0;
     private final Counters.Counter writtenRecordsCounter;
 
     IFileOutputStream checksumOut;
@@ -192,6 +193,10 @@ public class IFile {
     }
 
     public void append(K key, V value) throws IOException {
+      append(key, value, (long)1);
+    }
+
+    public void append(K key, V value, long recordsRepresented) throws IOException {
       if (key.getClass() != keyClass)
         throw new IOException("wrong key class: "+ key.getClass()
                               +" is not "+ keyClass);
@@ -228,9 +233,16 @@ public class IFile {
                                   WritableUtils.getVIntSize(keyLength) + 
                                   WritableUtils.getVIntSize(valueLength);
       ++numRecordsWritten;
+      numRecordsRepresented += recordsRepresented;
+      System.out.println("k: " + key.toString() + " recrep: " + recordsRepresented + " : " + numRecordsRepresented);
     }
     
     public void append(DataInputBuffer key, DataInputBuffer value)
+    throws IOException {
+      append(key, value, (long)1);
+    }
+
+    public void append(DataInputBuffer key, DataInputBuffer value, long recordsRepresented)
     throws IOException {
       int keyLength = key.getLength() - key.getPosition();
       if (keyLength < 0) {
@@ -254,6 +266,7 @@ public class IFile {
                       WritableUtils.getVIntSize(keyLength) + 
                       WritableUtils.getVIntSize(valueLength);
       ++numRecordsWritten;
+      numRecordsRepresented += recordsRepresented;
     }
     
     // Required for mark/reset
@@ -273,6 +286,18 @@ public class IFile {
     
     public long getCompressedLength() {
       return compressedBytesWritten;
+    }
+
+    public long getRecordsWritten() {
+      return numRecordsWritten;
+    }
+
+    public long getRecordsRepresented() {
+      return numRecordsRepresented;
+    }
+
+    public void incrementRecordsRepresented( long inRecs ) {
+      this.numRecordsRepresented += inRecs;
     }
   }
 

@@ -30,7 +30,7 @@ import org.apache.hadoop.mapred.Task.TaskReporter;
 public interface MapOutputCollector<K, V> {
   public void init(Context context
                   ) throws IOException, ClassNotFoundException;
-  public void collect(K key, V value, int partition
+  public void collect(K key, V value, long recordsRepresented, int partition
                      ) throws IOException, InterruptedException;
   public void close() throws IOException, InterruptedException;
     

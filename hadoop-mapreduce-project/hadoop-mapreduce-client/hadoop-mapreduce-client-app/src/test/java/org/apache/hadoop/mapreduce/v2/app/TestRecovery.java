@@ -1586,14 +1586,14 @@ public class TestRecovery {
   
   NullWritable nullWritable = NullWritable.get();
   try {
-    theRecordWriter.write(key2, val2);
-    theRecordWriter.write(null, nullWritable);
-    theRecordWriter.write(null, val2);
-    theRecordWriter.write(nullWritable, val1);
-    theRecordWriter.write(key1, nullWritable);
-    theRecordWriter.write(key2, null);
-    theRecordWriter.write(null, null);
-    theRecordWriter.write(key1, val1);
+    theRecordWriter.write(key2, val2, (long)1);
+    theRecordWriter.write(null, nullWritable, (long)1);
+    theRecordWriter.write(null, val2, (long)1);
+    theRecordWriter.write(nullWritable, val1, (long)1);
+    theRecordWriter.write(key1, nullWritable, (long)1);
+    theRecordWriter.write(key2, null, (long)1);
+    theRecordWriter.write(null, null, (long)1);
+    theRecordWriter.write(key1, val1, (long)1);
   } finally {
     theRecordWriter.close(tContext);
   }
@@ -1616,14 +1616,14 @@ public class TestRecovery {
     
     NullWritable nullWritable = NullWritable.get();
     try {
-      theRecordWriter.write(key1, val1);
-      theRecordWriter.write(null, nullWritable);
-      theRecordWriter.write(null, val1);
-      theRecordWriter.write(nullWritable, val2);
-      theRecordWriter.write(key2, nullWritable);
-      theRecordWriter.write(key1, null);
-      theRecordWriter.write(null, null);
-      theRecordWriter.write(key2, val2);
+      theRecordWriter.write(key1, val1, (long)1);
+      theRecordWriter.write(null, nullWritable, (long)1);
+      theRecordWriter.write(null, val1, (long)1);
+      theRecordWriter.write(nullWritable, val2, (long)1);
+      theRecordWriter.write(key2, nullWritable, (long)1);
+      theRecordWriter.write(key1, null, (long)1);
+      theRecordWriter.write(null, null, (long)1);
+      theRecordWriter.write(key2, val2, (long)1);
     } finally {
       theRecordWriter.close(tContext);
     }

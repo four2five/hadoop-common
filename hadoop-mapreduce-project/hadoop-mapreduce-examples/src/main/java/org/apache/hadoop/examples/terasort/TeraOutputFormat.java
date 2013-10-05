@@ -66,6 +66,11 @@ public class TeraOutputFormat extends FileOutputFormat<Text,Text> {
 
     public synchronized void write(Text key, 
                                    Text value) throws IOException {
+      write(key, value, (long)1);
+    }
+
+    public synchronized void write(Text key, 
+                                   Text value, long recordsRepresented) throws IOException {
       out.write(key.getBytes(), 0, key.getLength());
       out.write(value.getBytes(), 0, value.getLength());
     }

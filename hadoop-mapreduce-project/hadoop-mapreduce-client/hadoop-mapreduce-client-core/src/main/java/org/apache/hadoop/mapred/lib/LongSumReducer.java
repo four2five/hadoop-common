@@ -45,12 +45,14 @@ public class LongSumReducer<K> extends MapReduceBase
 
     // sum all values for this key
     long sum = 0;
+    long counter = 0;
     while (values.hasNext()) {
       sum += values.next().get();
+      counter++;
     }
 
     // output sum
-    output.collect(key, new LongWritable(sum));
+    output.collect(key, new LongWritable(sum), counter);
   }
 
 }

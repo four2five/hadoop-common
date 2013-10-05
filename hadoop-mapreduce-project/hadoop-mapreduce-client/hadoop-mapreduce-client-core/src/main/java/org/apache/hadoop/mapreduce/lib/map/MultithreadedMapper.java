@@ -210,10 +210,10 @@ public class MultithreadedMapper<K1, V1, K2, V2>
     }
 
     @Override
-    public void write(K2 key, V2 value) throws IOException,
+    public void write(K2 key, V2 value, long recordsRepresented) throws IOException,
                                                InterruptedException {
       synchronized (outer) {
-        outer.write(key, value);
+        outer.write(key, value, recordsRepresented);
       }
     }  
   }

@@ -39,7 +39,7 @@ public class InverseMapper<K, V>
   public void map(K key, V value,
                   OutputCollector<V, K> output, Reporter reporter)
     throws IOException {
-    output.collect(value, key);
+    output.collect(value, key, (long)1);
   }
   
 }

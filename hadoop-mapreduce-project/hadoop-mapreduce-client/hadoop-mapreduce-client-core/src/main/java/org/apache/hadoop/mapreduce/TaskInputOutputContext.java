@@ -61,7 +61,11 @@ public interface TaskInputOutputContext<KEYIN,VALUEIN,KEYOUT,VALUEOUT>
   /**
    * Generate an output key/value pair.
    */
+   
   public void write(KEYOUT key, VALUEOUT value) 
+      throws IOException, InterruptedException;
+  
+  public void write(KEYOUT key, VALUEOUT value, long recordsRepresented) 
       throws IOException, InterruptedException;
 
   /**

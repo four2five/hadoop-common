@@ -146,7 +146,7 @@ public class FieldSelectionMapReduce<K, V>
     helper.extractOutputKeyValue(key.toString(), val.toString(),
       fieldSeparator, mapOutputKeyFieldList, mapOutputValueFieldList,
       allMapValueFieldsFrom, ignoreInputKey, true);
-    output.collect(helper.getKey(), helper.getValue());
+    output.collect(helper.getKey(), helper.getValue(), (long)1);
   }
 
   private void parseOutputKeyValueSpec() {
@@ -185,7 +185,7 @@ public class FieldSelectionMapReduce<K, V>
         helper.extractOutputKeyValue(keyStr, values.next().toString(),
           fieldSeparator, reduceOutputKeyFieldList,
           reduceOutputValueFieldList, allReduceValueFieldsFrom, false, false);
-      output.collect(helper.getKey(), helper.getValue());
+      output.collect(helper.getKey(), helper.getValue(), (long)1);
     }
   }
 }
