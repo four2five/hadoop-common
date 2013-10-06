@@ -3938,7 +3938,14 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
     // we are about to copy job.xml from HDFS
     JobInProgress job = null;
     try {
-      job = new JobInProgress(this, this.conf, jobInfo, 0, ts);
+      //for the code here, depending on if we are using dependency scheduling or not
+      if( conf.useDependencyScheduling()) { 
+        LOG.info("hey JB, using dependency scheduling");
+        job = new JobInProgressDependency(this, this.conf, jobInfo, 0, ts);
+      } else { 
+        LOG.info("hey JB, using normal scheduling");
+        job = new JobInProgress(this, this.conf, jobInfo, 0, ts);
+      }
     } catch (Exception e) {
       throw new IOException(e);
     }

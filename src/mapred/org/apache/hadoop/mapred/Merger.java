@@ -153,8 +153,15 @@ class Merger {
     long progressBar = conf.getLong("mapred.merge.recordsBeforeProgress",
         10000);
     long recordCtr = 0;
+
+    // we need to convey the number of records and records represented from the files being 
+    // merged, into the final merged output. Here is our attempt to do that.
+    //writer.incrementNumRecords(records.getNumRecords());
+    //writer.incrementNumRecordsRepresented(rec
     while(records.next()) {
-      writer.append(records.getKey(), records.getValue());
+      //writer.append(records.getKey(), records.getValue(), records.getNumRecordsRepresented());
+      writer.append(records.getKey(), records.getValue(), 0);
+      //LOG.info("recordCtr: " + recordCtr + " recRep: " + records.getNumRecordsRepresented());
       
       if (((recordCtr++) % progressBar) == 0) {
         progressable.progress();
@@ -174,14 +181,16 @@ class Merger {
     CompressionCodec codec = null;
     long segmentOffset = 0;
     long segmentLength = -1;
+    long numRecords = -4;
+    long numRecordsRepresented = -4;
     
     public Segment(Configuration conf, FileSystem fs, Path file,
                    CompressionCodec codec, boolean preserve) throws IOException {
-      this(conf, fs, file, 0, fs.getFileStatus(file).getLen(), codec, preserve);
+      this(conf, fs, file, 0, fs.getFileStatus(file).getLen(), -4, -4, codec, preserve);
     }
 
     public Segment(Configuration conf, FileSystem fs, Path file,
-        long segmentOffset, long segmentLength, CompressionCodec codec,
+        long segmentOffset, long segmentLength, long numRecords, long numRecordsRepresented, CompressionCodec codec,
         boolean preserve) throws IOException {
       this.conf = conf;
       this.fs = fs;
@@ -191,6 +200,8 @@ class Merger {
 
       this.segmentOffset = segmentOffset;
       this.segmentLength = segmentLength;
+      this.numRecords = numRecords;
+      this.numRecordsRepresented = numRecordsRepresented;
     }
     
     public Segment(Reader<K, V> reader, boolean preserve) {
@@ -210,6 +221,9 @@ class Merger {
     
     DataInputBuffer getKey() { return key; }
     DataInputBuffer getValue() { return value; }
+
+    long getNumRecords() { return this.numRecords; }
+    long getNumRecordsRepresented() { return this.numRecordsRepresented; }
 
     long getLength() { 
       return (reader == null) ?
@@ -251,6 +265,7 @@ class Merger {
     
     DataInputBuffer key;
     DataInputBuffer value;
+    long numRecordsRepresented;
     
     Segment<K, V> minSegment;
     Comparator<Segment<K, V>> segmentComparator =   
@@ -325,6 +340,10 @@ class Merger {
       return value;
     }
 
+    public int getNumRecordsRepresented() throws IOException { 
+      return (int)numRecordsRepresented;
+    }
+
     private void adjustPriorityQueue(Segment<K, V> reader) throws IOException{
       long startPos = reader.getPosition();
       boolean hasNext = reader.next();
@@ -357,6 +376,7 @@ class Merger {
       
       key = minSegment.getKey();
       value = minSegment.getValue();
+      numRecordsRepresented = minSegment.getNumRecordsRepresented();
 
       return true;
     }

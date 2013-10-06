@@ -19,6 +19,7 @@ package org.apache.hadoop.mapred;
 
 import java.io.IOException;
 import java.security.PrivilegedExceptionAction;
+import java.util.Arrays;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
@@ -45,6 +46,8 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.LocalFileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.Text;
+import org.apache.hadoop.mapred.JobInProgress;
+import org.apache.hadoop.mapred.JobInProgress.KillInterruptedException;
 import org.apache.hadoop.mapred.CleanupQueue.PathDeletionContext;
 import org.apache.hadoop.mapred.Counters.CountersExceededException;
 import org.apache.hadoop.mapred.Counters.Group;
@@ -69,24 +72,28 @@ import org.apache.hadoop.security.token.TokenIdentifier;
 import org.apache.hadoop.util.StringUtils;
 
 /*************************************************************
- * JobInProgress maintains all the info for keeping
+ * JobInProgressDependency maintains all the info for keeping
  * a Job on the straight and narrow.  It keeps its JobProfile
  * and its latest JobStatus, plus a set of tables for 
  * doing bookkeeping of its Tasks.
  * ***********************************************************
  */
-public class JobInProgress {
+public class JobInProgressDependency extends JobInProgress {
+
+
   /**
    * Used when the a kill is issued to a job which is initializing.
    */
+   /*
   @SuppressWarnings("serial")
   static class KillInterruptedException extends InterruptedException {
     public KillInterruptedException(String msg) {
       super(msg);
     }
   }
+  */
 
-  static final Log LOG = LogFactory.getLog(JobInProgress.class);
+  static final Log LOG = LogFactory.getLog(JobInProgressDependency.class);
     
   JobProfile profile;
   JobStatus status;
@@ -98,6 +105,7 @@ public class JobInProgress {
   TaskInProgress reduces[] = new TaskInProgress[0];
   TaskInProgress cleanup[] = new TaskInProgress[0];
   TaskInProgress setup[] = new TaskInProgress[0];
+  ArrayList<ArrayList<TaskInProgress>> reducerToMapperDependencies = null;  
   int numMapTasks = 0;
   int numReduceTasks = 0;
   final long memoryPerMap;
@@ -105,6 +113,7 @@ public class JobInProgress {
   volatile int numSlotsPerMap = 1;
   volatile int numSlotsPerReduce = 1;
   final int maxTaskFailuresPerTracker;
+  private long finalMapTaskCompletionTime = -1;
   
   // Counters to track currently running/finished/failed Map/Reduce task-attempts
   int runningMapTasks = 0;
@@ -116,8 +125,10 @@ public class JobInProgress {
   private static long DEFAULT_REDUCE_INPUT_LIMIT = -1L;
   long reduce_input_limit = -1L;
   private static float DEFAULT_COMPLETED_MAPS_PERCENT_FOR_REDUCE_SLOWSTART = 0.05f;
+  private static float DEFAULT_RUNNING_REDUCES_PERCENT_FOR_MAP_SLOWSTART = 0.85f;
   int completedMapsForReduceSlowstart = 0;
-    
+  int runningReducesForMappersSlowstart = 0;
+
   // runningMapTasks include speculative tasks, so we need to capture 
   // speculative tasks separately 
   int speculativeMapTasks = 0;
@@ -318,10 +329,11 @@ public class JobInProgress {
   final private UserGroupInformation userUGI;
   
   /**
-   * Create an almost empty JobInProgress, which can be used only for tests
+   * Create an almost empty JobInProgressDependency, which can be used only for tests
    */
-  protected JobInProgress(JobID jobid, JobConf conf, JobTracker tracker) 
+  protected JobInProgressDependency(JobID jobid, JobConf conf, JobTracker tracker) 
   throws IOException {
+    super(jobid, conf, tracker);
     this.conf = conf;
     this.jobId = jobid;
     this.numMapTasks = conf.getNumMapTasks();
@@ -368,9 +380,10 @@ public class JobInProgress {
     }
   }
   
-  JobInProgress(JobTracker jobtracker, final JobConf default_conf, 
+  JobInProgressDependency(JobTracker jobtracker, final JobConf default_conf, 
       JobInfo jobInfo, int rCount, Credentials ts) 
   throws IOException, InterruptedException {
+    super(jobtracker, default_conf, jobInfo, rCount, ts);
     try {
       this.restartCount = rCount;
       this.jobId = JobID.downgrade(jobInfo.getJobID());
@@ -536,45 +549,102 @@ public class JobInProgress {
                                  throws UnknownHostException {
     Map<Node, List<TaskInProgress>> cache = 
       new IdentityHashMap<Node, List<TaskInProgress>>(maxLevel);
-    
-    Set<String> uniqueHosts = new TreeSet<String>();
-    for (int i = 0; i < splits.length; i++) {
-      String[] splitLocations = splits[i].getLocations();
-      if (splitLocations == null || splitLocations.length == 0) {
-        nonLocalMaps.add(maps[i]);
-        continue;
-      }
 
-      for(String host: splitLocations) {
-        Node node = jobtracker.resolveAndAddToTopology(host);
-        uniqueHosts.add(host);
-        LOG.info("tip:" + maps[i].getTIPId() + " has split on node:" + node);
-        for (int j = 0; j < maxLevel; j++) {
-          List<TaskInProgress> hostMaps = cache.get(node);
-          if (hostMaps == null) {
-            hostMaps = new ArrayList<TaskInProgress>();
-            cache.put(node, hostMaps);
-            hostMaps.add(maps[i]);
-          }
-          //check whether the hostMaps already contains an entry for a TIP
-          //This will be true for nodes that are racks and multiple nodes in
-          //the rack contain the input for a tip. Note that if it already
-          //exists in the hostMaps, it must be the last element there since
-          //we process one TIP at a time sequentially in the split-size order
+    return cache;
+  }
 
-          // -jbuck since we're removing the "in size order" aspect,
-          // does that break this logic? Seems like it should still hold...
-          if (hostMaps.get(hostMaps.size() - 1) != maps[i]) {
-            hostMaps.add(maps[i]);
-          }
-          node = node.getParent();
+  private void addToCache(
+                          Map<Node, List<TaskInProgress>> cache,
+                          //TaskSplitMetaInfo[] splits, 
+                          ArrayList<TaskInProgress> tips) 
+                          //int maxLevel)
+                          throws UnknownHostException {
+    synchronized(cache) { 
+      LOG.debug("JB, top of addToCache, cache size: " + cache.size() + 
+                " adding " + tips.size() + " elements");
+
+      {
+        Set<Map.Entry<Node, List<TaskInProgress>>> set = cache.entrySet();
+        for( Map.Entry<Node, List<TaskInProgress>> me : set) { 
+          LOG.info("node: " + me.getKey() + " entries: " + me.getValue().size());
         }
       }
+
+      //Set<String> uniqueHosts = new TreeSet<String>();
+      //for (int i = 0; i < splits.length; i++) {
+      for( int i=0; i<tips.size(); i++) { 
+        //String[] splitLocations = splits[i].getLocations();
+
+        // -jbuck is this necessary?
+        //tips.get(i).updateStatus(TaskStatus.State.UNASSIGNED);
+
+        String[] splitLocations = tips.get(i).getWrappedSplit().getLocations();
+        if (splitLocations == null || splitLocations.length == 0) {
+          //nonLocalMaps.add(maps[i]);
+          nonLocalMaps.add(tips.get(i));
+          continue;
+        }
+
+        for(String host: splitLocations) {
+          Node node = jobtracker.resolveAndAddToTopology(host);
+          //uniqueHosts.add(host);
+          //LOG.info("tip:" + maps[i].getTIPId() + " has split on node:" + node);
+          LOG.info("tip:" + tips.get(i).getTIPId() + " has split on node:" + node);
+          for (int j = 0; j < maxLevel; j++) {
+            LOG.info("node: " + node.getName());
+            List<TaskInProgress> hostMaps = cache.get(node);
+            if (hostMaps == null) {
+              LOG.debug("JB, hostmaps is NULL, creating a new one");
+              hostMaps = new ArrayList<TaskInProgress>();
+              cache.put(node, hostMaps);
+              //hostMaps.add(maps[i]);
+              hostMaps.add(tips.get(i));
+            }
+            LOG.debug("JB, post null-check, hostMaps is of size: " + hostMaps.size());
+            //check whether the hostMaps already contains an entry for a TIP
+            //This will be true for nodes that are racks and multiple nodes in
+            //the rack contain the input for a tip. Note that if it already
+            //exists in the hostMaps, it must be the last element there since
+            //we process one TIP at a time sequentially in the split-size order
+
+            // -jbuck since we're removing the "in size order" aspect,
+            // does that break this logic? Seems like it should still hold...
+            //if (hostMaps.get(hostMaps.size() - 1) != maps[i]) {
+            //  hostMaps.add(maps[i]);
+            //}
+
+            LOG.info("J: " + j + 
+              " hostMaps.size(): " + hostMaps.size() + " tips[" + i + "]:" + 
+              tips.get(i).getJobFile());
+            // the ordering is important, let it short-circuit if
+            // the node is empty
+            if ( hostMaps.size() == 0 ||
+                hostMaps.get(hostMaps.size() - 1) != tips.get(i)) {
+              hostMaps.add(tips.get(i));
+            }
+            node = node.getParent();
+          }
+        }
+      }
+
+      {
+        LOG.info("post add:");
+        Set<Map.Entry<Node, List<TaskInProgress>>> set = cache.entrySet();
+        for( Map.Entry<Node, List<TaskInProgress>> me : set) { 
+          LOG.info("node: " + me.getKey() + " entries: " + me.getValue().size());
+        }
+      }
+    //Map<Node, List<TaskInProgress>> cache = 
+      //new IdentityHashMap<Node, List<TaskInProgress>>(maxLevel);
     }
     
+    //return cache;
+  }
+ 
+  private void setLocalityWait(int jobNodes) { 
     // Calibrate the localityWaitFactor - Do not override user intent!
     if (localityWaitFactor == DEFAULT_LOCALITY_WAIT_FACTOR) {
-      int jobNodes = uniqueHosts.size();
+      //int jobNodes = uniqueHosts.size();
       int clusterNodes = jobtracker.getNumberOfUniqueHosts();
       
       if (clusterNodes > 0) {
@@ -583,10 +653,8 @@ public class JobInProgress {
       }
       LOG.info(jobId + " LOCALITY_WAIT_FACTOR=" + localityWaitFactor);
     }
-    
-    return cache;
   }
-  
+
   /**
    * Check if the job has been initialized.
    * @return <code>true</code> if the job has been initialized, 
@@ -745,6 +813,30 @@ public class JobInProgress {
     // set the launch time
     this.launchTime = jobtracker.getClock().getTime();
 
+    //create the reducer -> mapTask mapping here
+    this.reducerToMapperDependencies = 
+      createReducerToMapperArray(maps, numReduceTasks);
+
+    long totalConnections = 0;
+    //debugger
+    for( int i=0; i<reducerToMapperDependencies.size(); i++) { 
+      List<TaskInProgress> tempList = reducerToMapperDependencies.get(i);
+      System.out.println("Reducer[" + i + "]:" + "\n");
+      for( int j=0; j<tempList.size(); j++) { 
+        //System.out.println("\t" + tempList.get(j));
+        TaskInProgress tempTask = tempList.get(j);
+        // figure out which map task this is
+        for( int k =0; k<maps.length; k++) { 
+          if( maps[k] == tempTask )  {
+            System.out.println("\tmap: " + k);
+            totalConnections++;
+            break;
+          }
+        }
+      }
+    }
+
+    System.out.println("Total network connecions: " + totalConnections);
     //
     // Create reduce tasks
     //
@@ -752,17 +844,28 @@ public class JobInProgress {
     for (int i = 0; i < numReduceTasks; i++) {
       reduces[i] = new TaskInProgress(jobId, jobFile, 
                                       numMapTasks, i, 
-                                      jobtracker, conf, this, numSlotsPerReduce);
+                                      jobtracker, conf, this, numSlotsPerReduce,
+                                      reducerToMapperDependencies.get(i));
       nonRunningReduces.add(reduces[i]);
     }
 
+
     // Calculate the minimum number of maps to be complete before 
     // we should start scheduling reduces
+    /*
     completedMapsForReduceSlowstart = 
       (int)Math.ceil(
           (conf.getFloat("mapred.reduce.slowstart.completed.maps", 
                          DEFAULT_COMPLETED_MAPS_PERCENT_FOR_REDUCE_SLOWSTART) * 
            numMapTasks));
+    */
+   runningReducesForMappersSlowstart =
+      (int)Math.ceil(
+          (conf.getFloat("mapred.reduce.slowstart.running.reduces", 
+                         DEFAULT_RUNNING_REDUCES_PERCENT_FOR_MAP_SLOWSTART) * 
+           this.clusterSize * 
+           (conf.getInt("mapred.tasktracker.reduce.tasks.maximum",1))
+           ));
     
     // ... use the same for estimating the total output of all maps
     resourceEstimator.setThreshhold(completedMapsForReduceSlowstart);
@@ -798,21 +901,61 @@ public class JobInProgress {
     
     synchronized(jobInitKillStatus){
       jobInitKillStatus.initDone = true;
-
-      // set this before the throw to make sure cleanup works properly
-      tasksInited = true;
-
       if(jobInitKillStatus.killed) {
         throw new KillInterruptedException("Job " + jobId + " killed in init");
       }
     }
     
+    tasksInited = true;
     JobHistory.JobInfo.logInited(profile.getJobID(), this.launchTime, 
                                  numMapTasks, numReduceTasks);
     
    // Log the number of map and reduce tasks
    LOG.info("Job " + jobId + " initialized successfully with " + numMapTasks
             + " map tasks and " + numReduceTasks + " reduce tasks.");
+  }
+
+  private ArrayList<ArrayList<TaskInProgress>>  
+  createReducerToMapperArray(TaskInProgress[] maps, int numReduceTasks)  {
+    ArrayList<ArrayList<TaskInProgress>> retListList = 
+      new ArrayList<ArrayList<TaskInProgress>>(numReduceTasks);
+
+    // seed it
+    for( int i=0; i<numReduceTasks; i++) { 
+      retListList.add( new ArrayList<TaskInProgress>());
+    }
+
+    TaskSplitMetaInfo tempTSMI;
+    int[] reducerDeps;
+    ArrayList<TaskInProgress> tempList;
+
+    for( int i=0; i<maps.length; i++) { 
+      tempTSMI = maps[i].getWrappedSplit();
+      if( null == tempTSMI) { 
+        LOG.info("called getWrappedSplit() and it returned a NULL value. Nerds...");
+        continue;
+      }
+
+      reducerDeps = tempTSMI.getReducerDependencyInfo();
+      // get each dependency for this split/Map task
+
+      LOG.debug("Map task:" + i + ", part:" + maps[i].idWithinJob() + " tsmi: " + 
+                tempTSMI.toString() + "  feeds data to reducers");
+      for( int j=0; j<reducerDeps.length; j++) { 
+        // then add this split to the list for that reducer
+        if( reducerDeps[j] >= numReduceTasks ) { 
+          LOG.warn("reducerDep: " + reducerDeps[j] + " > numReduceTasks: " + numReduceTasks + 
+                   " BAD JB");
+          continue;
+        }
+
+        LOG.info("\t" + reducerDeps[j]);
+        tempList = retListList.get(reducerDeps[j]);
+        tempList.add(maps[i]);
+      }
+    }
+
+    return retListList;
   }
 
   TaskSplitMetaInfo[] createSplits(org.apache.hadoop.mapreduce.JobID jobId)
@@ -824,7 +967,7 @@ public class JobInProgress {
   }
 
   /////////////////////////////////////////////////////
-  // Accessors for the JobInProgress
+  // Accessors for the JobInProgressDependency
   /////////////////////////////////////////////////////
   public JobProfile getProfile() {
     return profile;
@@ -1212,11 +1355,9 @@ public class JobInProgress {
         }
       }
     }
-
-    //create the reducer -> mapTask mapping here
         
     //
-    // Update JobInProgress status
+    // Update JobInProgressDependency status
     //
     if(LOG.isDebugEnabled()) {
       LOG.debug("Taking progress for " + tip.getTIPId() + " from " + 
@@ -1321,16 +1462,23 @@ public class JobInProgress {
                                             int clusterSize, 
                                             int numUniqueHosts
                                            ) throws IOException {
+    //LOG.info("JB, call into obtainNewMapTask");
     if (status.getRunState() != JobStatus.RUNNING) {
       LOG.info("Cannot create task split for " + profile.getJobID());
       try { throw new IOException("state = " + status.getRunState()); }
       catch (IOException ioe) {ioe.printStackTrace();}
       return null;
     }
+
+    if (!scheduleMappers()) { 
+      LOG.debug("JB, scheduleMappers returned false");
+      return null;
+    }
         
     int target = findNewMapTask(tts, clusterSize, numUniqueHosts, anyCacheLevel,
                                 status.mapProgress());
     if (target == -1) {
+      LOG.info("JB, target == -1, returning NULL");
       return null;
     }
     
@@ -1523,6 +1671,7 @@ public class JobInProgress {
       } else {
         cleanupTaskList.add(cleanup[1]);
       }
+      LOG.debug("JB, looking for cleanup task");
       TaskInProgress tip = findTaskFromList(cleanupTaskList,
                              tts, numUniqueHosts, false);
       if (tip == null) {
@@ -1614,6 +1763,7 @@ public class JobInProgress {
       } else {
         setupTaskList.add(setup[1]);
       }
+      LOG.info("finding setup task");
       TaskInProgress tip = findTaskFromList(setupTaskList,
                              tts, numUniqueHosts, false);
       if (tip == null) {
@@ -1631,6 +1781,11 @@ public class JobInProgress {
   
   public synchronized boolean scheduleReduces() {
     return finishedMapTasks >= completedMapsForReduceSlowstart;
+  }
+  
+  public synchronized boolean scheduleMappers() {
+    LOG.debug("JB runningReducesForMappersSlowstart: " + runningReducesForMappersSlowstart); 
+    return runningReduceTasks >= runningReducesForMappersSlowstart;
   }
   
   /**
@@ -1683,9 +1838,11 @@ public class JobInProgress {
     
     // Ensure we have sufficient map outputs ready to shuffle before 
     // scheduling reduces
+    /*
     if (!scheduleReduces()) {
       return null;
     }
+    */
 
     int  target = findNewReduceTask(tts, clusterSize, numUniqueHosts, 
                                     status.reduceProgress());
@@ -1694,10 +1851,46 @@ public class JobInProgress {
     }
     
     Task result = reduces[target].getTaskToRun(tts.getTrackerName());
+
+    //set the dependencies info for the reducers
+    // -jbuck here
+  //ArrayList<ArrayList<TaskInProgress>> reducerToMapperDependencies = null;  
+
+    LOG.debug("JB, this reducer depends on " + this.reducerToMapperDependencies.get(target).size() + " mappers");
+    ArrayList<TaskInProgress> tempList = this.reducerToMapperDependencies.get(target);
+    //int mySize = this.reducerToMapperDependencies.get(target).size();
+    //org.apache.hadoop.mapred.TaskTracker.TaskInProgress[] tips = new org.apache.hadoop.mapred.TaskTracker.TaskInProgress[mySize];
+    //TaskInProgress[] tips = new TaskInProgress[mySize];
+    //LOG.info("Tips size: " + tips.length);
+    //tips = this.reducerToMapperDependencies.get(target).toArray(tips);
+    int[] maps = new int[tempList.size()];
+    for( int i=0; i<tempList.size(); i++) { 
+      maps[i] = tempList.get(i).getTIPId().getId();
+    }
+    //result.setDependencies( this.reducerToMapperDependencies.get(target).toArray(tips));
+    result.setDependencies(maps);
+
     if (result != null) {
       addRunningTaskToTIP(reduces[target], result.getTaskID(), tts, true);
     }
 
+    // add the maps that this Reduce task depends on to the cache
+  //private void addToCache(
+  //                        Map<Node, List<TaskInProgress>> cache,
+  //                        //TaskSplitMetaInfo[] splits, 
+  //                        ArrayList<TaskInProgress> tips, 
+   //                       int maxLevel)
+
+    LOG.debug("JB, Adding " + reduces[target].getDependencies().size() + 
+             " dependencies for reducer " + target + " to the cache " + 
+             " of size " + nonRunningMapCache.size() + ".\nnamely:");
+    for(int i=0; i<reduces[target].getDependencies().size(); i++) { 
+      LOG.info("\t" + reduces[target].getDependencies().get(i).getTIPId());
+      //tip.getTIPId()
+    }
+
+    addToCache(nonRunningMapCache, reduces[target].getDependencies()); 
+    LOG.debug("JB, post addToCache, size: " + nonRunningMapCache.size());
     return result;
   }
   
@@ -1758,7 +1951,6 @@ public class JobInProgress {
     } else {
       ++runningReduceTasks;
 
-      //-jbuck add the corresponding map tasks here
       name = Values.REDUCE.name();
       counter = Counter.TOTAL_LAUNCHED_REDUCES;
       if (tip.getActiveTasks().size() > 1)
@@ -2150,35 +2342,53 @@ public class JobInProgress {
       Collection<TaskInProgress> tips, TaskTrackerStatus ttStatus,
       int numUniqueHosts,
       boolean removeFailedTip) {
-    Iterator<TaskInProgress> iter = tips.iterator();
-    while (iter.hasNext()) {
-      TaskInProgress tip = iter.next();
 
-      // Select a tip if
-      //   1. runnable   : still needs to be run and is not completed
-      //   2. ~running   : no other node is running it
-      //   3. earlier attempt failed : has not failed on this host
-      //                               and has failed on all the other hosts
-      // A TIP is removed from the list if 
-      // (1) this tip is scheduled
-      // (2) if the passed list is a level 0 (host) cache
-      // (3) when the TIP is non-schedulable (running, killed, complete)
-      if (tip.isRunnable() && !tip.isRunning()) {
-        // check if the tip has failed on this host
-        if (!tip.hasFailedOnMachine(ttStatus.getHost()) || 
-             tip.getNumberOfFailedMachines() >= numUniqueHosts) {
-          // check if the tip has failed on all the nodes
-          iter.remove();
-          return tip;
-        } else if (removeFailedTip) { 
-          // the case where we want to remove a failed tip from the host cache
-          // point#3 in the TIP removal logic above
-          iter.remove();
+    synchronized(tips) { 
+      Iterator<TaskInProgress> iter = tips.iterator();
+      while (iter.hasNext()) {
+        TaskInProgress tip = iter.next();
+        LOG.info("tip: " + tip.getTIPId());
+        if( null != tip.getWrappedSplit() ) { 
+          int[] tempArray =  tip.getWrappedSplit().getReducerDependencyInfo();
+          LOG.debug("JB, reducers that depend on this map: " + Arrays.toString(tempArray));
+          //LOG.info("tip: " + tip.getTIPId());
         }
-      } else {
-        // see point#3 in the comment above for TIP removal logic
-        iter.remove();
-      }
+
+	      // Select a tip if
+	      //   1. runnable   : still needs to be run and is not completed
+	      //   2. ~running   : no other node is running it
+	      //   3. earlier attempt failed : has not failed on this host
+	      //                               and has failed on all the other hosts
+	      // A TIP is removed from the list if 
+	      // (1) this tip is scheduled
+	      // (2) if the passed list is a level 0 (host) cache
+	      // (3) when the TIP is non-schedulable (running, killed, complete)
+	      if (tip.isRunnable() && !tip.isRunning()) {
+	        // check if the tip has failed on this host
+	        if (!tip.hasFailedOnMachine(ttStatus.getHost()) || 
+	             tip.getNumberOfFailedMachines() >= numUniqueHosts) {
+	          // check if the tip has failed on all the nodes
+	          iter.remove();
+	          return tip;
+	        } else if (removeFailedTip) { 
+	          // the case where we want to remove a failed tip from the host cache
+	          // point#3 in the TIP removal logic above
+	          iter.remove();
+	        }
+	      } else {
+	        // see point#3 in the comment above for TIP removal logic
+	        if( tip.isRunning() ) { 
+	          LOG.debug("JB tip is running, removing it from the list");
+	        }
+	
+	        if( !tip.isRunnable() ) { 
+	          LOG.debug("JB tip is not runnable, removing it");
+	         
+	        }
+	        
+	        iter.remove();
+	      }
+	    }
     }
     return null;
   }
@@ -2208,12 +2418,17 @@ public class JobInProgress {
 
       if (!tip.hasRunOnMachine(ttStatus.getHost(), 
                                ttStatus.getTrackerName())) {
-        if (tip.hasSpeculativeTask(currentTime, avgProgress)) {
+
+        // finalMapTaskCompletionTime is only set after the final MapTask completes, so 
+        // it only pertains to Reduce Tasks.
+        if (tip.hasSpeculativeTask(currentTime, avgProgress, finalMapTaskCompletionTime)) {
+
           // In case of shared list we don't remove it. Since the TIP failed 
           // on this tracker can be scheduled on some other tracker.
           if (shouldRemove) {
             iter.remove(); //this tracker is never going to run it again
           }
+          LOG.info("Adding a speculative task\n\n" + tip.toString());
           return tip;
         } 
       } else {
@@ -2295,6 +2510,7 @@ public class JobInProgress {
 
     // 0) Schedule the task with the most failures, unless failure was on this
     //    machine
+    LOG.info("JB finding a failed task to retry");
     tip = findTaskFromList(failedMaps, tts, numUniqueHosts, false);
     if (tip != null) {
       // Add to the running list
@@ -2323,29 +2539,45 @@ public class JobInProgress {
       int maxLevelToSchedule = Math.min(maxCacheLevel, maxLevel);
       for (level = 0;level < maxLevelToSchedule; ++level) {
         List <TaskInProgress> cacheForLevel = nonRunningMapCache.get(key);
+
+
         if (cacheForLevel != null) {
+          //LOG.info("JB, finding a non-running task, cacheforLevel.size(): " + cacheForLevel.size());
           tip = findTaskFromList(cacheForLevel, tts, 
               numUniqueHosts,level == 0);
           if (tip != null) {
             // Add to running cache
             scheduleMap(tip);
 
-            // remove the cache if its empty
+            // remove the cache if its empty -
+            // -jbuck nope, we're chaning how the cache works
+            /*
             if (cacheForLevel.size() == 0) {
               nonRunningMapCache.remove(key);
             }
+            */
 
+            //LOG.info("JB, returning a valid TIP");
             return tip.getIdWithinJob();
+          } else { 
+            LOG.info("JB, tip is NULL"); 
           }
+        } else { 
+          LOG.info("JB, cacheForLevel is null for key: " + key.toString());
         }
         key = key.getParent();
       }
       
       // Check if we need to only schedule a local task (node-local/rack-local)
       if (level == maxCacheLevel) {
+        LOG.info("JB, level == maxCacheLevel");
         return -1;
       }
+    } else { 
+      LOG.info("JB, node is null");
     }
+
+    LOG.info("JB, moving onto level 2");
 
     //2. Search breadth-wise across parents at max level for non-running 
     //   TIP if
@@ -2369,15 +2601,18 @@ public class JobInProgress {
 
       List<TaskInProgress> cache = nonRunningMapCache.get(parent);
       if (cache != null) {
+        LOG.info("JB, finding a local task above the node-level");
         tip = findTaskFromList(cache, tts, numUniqueHosts, false);
         if (tip != null) {
           // Add to the running cache
           scheduleMap(tip);
 
           // remove the cache if empty
+          /*
           if (cache.size() == 0) {
             nonRunningMapCache.remove(parent);
           }
+          */
           LOG.info("Choosing a non-local task " + tip.getTIPId());
           return tip.getIdWithinJob();
         }
@@ -2385,6 +2620,7 @@ public class JobInProgress {
     }
 
     // 3. Search non-local tips for a new task
+    LOG.info("JB, finding a non-local task");
     tip = findTaskFromList(nonLocalMaps, tts, numUniqueHosts, false);
     if (tip != null) {
       // Add to the running list
@@ -2488,6 +2724,7 @@ public class JobInProgress {
 
     // 1. check for a never-executed reduce tip
     // reducers don't have a cache and so pass -1 to explicitly call that out
+    LOG.info("JB, finding a new non-running reduce task");
     tip = findTaskFromList(nonRunningReduces, tts, numUniqueHosts, false);
     if (tip != null) {
       scheduleReduce(tip);
@@ -2495,11 +2732,16 @@ public class JobInProgress {
     }
 
     // 2. check for a reduce tip to be speculated
-    if (hasSpeculativeReduces) {
+
+    // finalMapTaskCompletionTime == -1 until the last Map Task finishes. 
+    // Don't start speculative Reducers if MapTasks are still running
+    if (hasSpeculativeReduces && (-1 != finalMapTaskCompletionTime) ) {
+    //if (hasSpeculativeReduces) {
       tip = findSpeculativeTask(runningReduces, tts, avgProgress, 
                                 jobtracker.getClock().getTime(), false);
       if (tip != null) {
         scheduleReduce(tip);
+        LOG.info("Scheduling a speculative reduce task\n\t" + tip.toString());
         return tip.getIdWithinJob();
       }
     }
@@ -2543,7 +2785,7 @@ public class JobInProgress {
   }
   
   /**
-   * A taskid assigned to this JobInProgress has reported in successfully.
+   * A taskid assigned to this JobInProgressDependency has reported in successfully.
    */
   public synchronized boolean completedTask(TaskInProgress tip, 
                                             TaskStatus status)
@@ -2658,6 +2900,8 @@ public class JobInProgress {
       retireMap(tip);
       if ((finishedMapTasks + failedMapTIPs) == (numMapTasks)) {
         this.status.setMapProgress(1.0f);
+        finalMapTaskCompletionTime  = jobtracker.getClock().getTime();
+
         if (canLaunchJobCleanupTask()) {
           checkCounterLimitsAndFail();
         }
@@ -2927,15 +3171,15 @@ public class JobInProgress {
   
   /**
    * Fails the job and all its component tasks. This should be called only from
-   * {@link JobInProgress} or {@link JobTracker}. Look at 
-   * {@link JobTracker#failJob(JobInProgress)} for more details.
+   * {@link JobInProgressDependency} or {@link JobTracker}. Look at 
+   * {@link JobTracker#failJob(JobInProgressDependency)} for more details.
    */
   synchronized void fail() {
     terminate(JobStatus.FAILED);
   }
   
   /**
-   * A task assigned to this JobInProgress has reported in as failed.
+   * A task assigned to this JobInProgressDependency has reported in as failed.
    * Most of the time, we'll just reschedule execution.  However, after
    * many repeated failures we may instead decide to allow the entire 
    * job to fail or succeed if the user doesn't care about a few tasks failing.
@@ -3220,16 +3464,11 @@ public class JobInProgress {
       // Cancel task tracker reservation
       cancelReservedSlots();
 
-      //  Waiting metrics are incremented in JobInProgress.initTasks()
-      //  If a job gets an exception before that, we do not want to
-      //  incorrectly decrement.
-      if (tasksInited) {
-        jobtracker.getInstrumentation().decWaitingMaps(getJobID(), pendingMaps());
-        jobtracker.getInstrumentation().decWaitingReduces(getJobID(), pendingReduces());
-        this.queueMetrics.decWaitingMaps(getJobID(), pendingMaps());
-        this.queueMetrics.decWaitingReduces(getJobID(), pendingReduces());
-      }
       // Let the JobTracker know that a job is complete
+      jobtracker.getInstrumentation().decWaitingMaps(getJobID(), pendingMaps());
+      jobtracker.getInstrumentation().decWaitingReduces(getJobID(), pendingReduces());
+      this.queueMetrics.decWaitingMaps(getJobID(), pendingMaps());
+      this.queueMetrics.decWaitingReduces(getJobID(), pendingReduces());
       jobtracker.storeCompletedJob(this);
       jobtracker.finalizeJob(this);
 
@@ -3366,21 +3605,21 @@ public class JobInProgress {
   }
   
   /**
-   * @return The JobID of this JobInProgress.
+   * @return The JobID of this JobInProgressDependency.
    */
   public JobID getJobID() {
     return jobId;
   }
   
   /**
-   * @return submitHostName  of this JobInProgress.
+   * @return submitHostName  of this JobInProgressDependency.
    */
   public String getJobSubmitHostName() {
     return this.submitHostName;
   }
   
   /**
-   * @return submitHostAddress  of this JobInProgress.
+   * @return submitHostAddress  of this JobInProgressDependency.
    */
   public String getJobSubmitHostAddress() {
     return this.submitHostAddress;
@@ -3397,8 +3636,8 @@ public class JobInProgress {
   
   /**
    * To keep track of kill and initTasks status of this job. initTasks() take 
-   * a lock on JobInProgress object. kill should avoid waiting on 
-   * JobInProgress lock since it may take a while to do initTasks().
+   * a lock on JobInProgressDependency object. kill should avoid waiting on 
+   * JobInProgressDependency lock since it may take a while to do initTasks().
    */
   private static class JobInitKillStatus {
     //flag to be set if kill is called
@@ -3472,7 +3711,7 @@ public class JobInProgress {
       }
     }
 
-    static SummaryBuilder getTaskLaunchTimesSummary(JobInProgress job) {
+    static SummaryBuilder getTaskLaunchTimesSummary(JobInProgressDependency job) {
       SummaryBuilder summary = new SummaryBuilder();
       Map<TaskType, Long> timeMap = job.getFirstTaskLaunchTimes();
 
@@ -3488,12 +3727,12 @@ public class JobInProgress {
     /**
      * Log a summary of the job's runtime.
      * 
-     * @param job {@link JobInProgress} whose summary is to be logged, cannot
+     * @param job {@link JobInProgressDependency} whose summary is to be logged, cannot
      *            be <code>null</code>.
      * @param cluster {@link ClusterStatus} of the cluster on which the job was
      *                run, cannot be <code>null</code>
      */
-    public static void logJobSummary(JobInProgress job, ClusterStatus cluster) {
+    public static void logJobSummary(JobInProgressDependency job, ClusterStatus cluster) {
       JobStatus status = job.getStatus();
       JobProfile profile = job.getProfile();
       Counters jobCounters = job.getJobCounters();
@@ -3520,8 +3759,7 @@ public class JobInProgress {
           .add("mapSlotSeconds", mapSlotSeconds)
           .add("reduceSlotsSeconds", reduceSlotSeconds)
           .add("clusterMapCapacity", cluster.getMaxMapTasks())
-          .add("clusterReduceCapacity", cluster.getMaxReduceTasks())
-          .add("jobName", profile.getJobName());
+          .add("clusterReduceCapacity", cluster.getMaxReduceTasks());
 
       LOG.info(summary);
     }

@@ -37,7 +37,8 @@ abstract public class FSInputChecker extends FSInputStream {
   /** The file name from which data is read from */
   protected Path file;
   private Checksum sum;
-  private boolean verifyChecksum = true;
+  //private boolean verifyChecksum = true;
+  private boolean verifyChecksum = false;
   private byte[] buf;
   private byte[] checksum;
   private int pos;
@@ -273,10 +274,12 @@ abstract public class FSInputChecker extends FSInputStream {
     long crc = getChecksum();
     long sumValue = sum.getValue();
     sum.reset();
+		/*
     if (crc != sumValue) {
       throw new ChecksumException(
           "Checksum error: "+file+" at "+errPos, errPos);
     }
+		*/
   }
   
   /* calculate checksum value */

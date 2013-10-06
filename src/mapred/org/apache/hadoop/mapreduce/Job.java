@@ -441,6 +441,11 @@ public class Job extends JobContext {
     conf.setBoolean(JOB_CANCEL_DELEGATION_TOKEN, value);
   }
 
+  public void setDependencyScheduling(boolean dependencyScheduling) { 
+    ensureState(JobState.DEFINE);
+    conf.setBoolean("mapred.dependency_scheduling", dependencyScheduling);
+  }
+
   /**
    * Default to the new APIs unless they are explicitly set or the old mapper or
    * reduce attributes are used.

@@ -35,6 +35,6 @@ public class IdentityMapper<K, V>
   public void map(K key, V val,
                   OutputCollector<K, V> output, Reporter reporter)
     throws IOException {
-    output.collect(key, val);
+    output.collect(key, val,(long)1);
   }
 }

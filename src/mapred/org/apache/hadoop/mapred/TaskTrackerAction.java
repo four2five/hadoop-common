@@ -112,6 +112,10 @@ abstract class TaskTrackerAction implements Writable {
   }
   
   public void readFields(DataInput in) throws IOException {
-    actionType = WritableUtils.readEnum(in, ActionType.class);
+    readFields(in, false);
+  }
+  
+  public void readFields(DataInput in, boolean sciMapTask) throws IOException {
+	actionType = WritableUtils.readEnum(in, ActionType.class);
   }
 }

@@ -143,7 +143,8 @@ class JobQueueTaskScheduler extends TaskScheduler {
     // schedule the "highest priority" task i.e. the task from the job 
     // with the highest priority.
     //
-    
+
+    // Map specific
     final int trackerCurrentMapCapacity = 
       Math.min((int)Math.ceil(mapLoadFactor * trackerMapCapacity), 
                               trackerMapCapacity);
@@ -207,7 +208,7 @@ class JobQueueTaskScheduler extends TaskScheduler {
     //
     // Same thing, but for reduce tasks
     // However we _never_ assign more than 1 reduce task per heartbeat
-    //
+    // -jbuck: we need to change this
     final int trackerCurrentReduceCapacity = 
       Math.min((int)Math.ceil(reduceLoadFactor * trackerReduceCapacity), 
                trackerReduceCapacity);

@@ -27,7 +27,7 @@ import org.apache.hadoop.io.Writable;
 
 /** Interface that represents the client side information for a file.
  */
-public class FileStatus implements Writable, Comparable {
+public class FileStatus implements Writable, Comparable<FileStatus> {
 
   private Path path;
   private long length;
@@ -217,8 +217,7 @@ public class FileStatus implements Writable, Comparable {
    * @throws ClassCastException if the specified object's is not of 
    *         type FileStatus
    */
-  public int compareTo(Object o) {
-    FileStatus other = (FileStatus)o;
+  public int compareTo(FileStatus other) {
     return this.getPath().compareTo(other.getPath());
   }
   

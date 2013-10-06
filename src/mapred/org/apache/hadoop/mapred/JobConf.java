@@ -1131,6 +1131,17 @@ public class JobConf extends Configuration {
    * @return the number of reduce tasks for this job.
    */
   public int getNumMapTasks() { return getInt("mapred.map.tasks", 1); }
+
+  public void setDependencyScheduling(boolean dependencyScheduling) { 
+    setBoolean("mapred.dependency_scheduling", dependencyScheduling); 
+  }
+
+  public boolean useDependencyScheduling() { return getBoolean("mapred.dependency_scheduling", false); }
+  
+  public boolean isDamasc() { return getBoolean("damasc.scihadoop", false); }
+  
+  public boolean useSciTask() { return getBoolean("mapred.sci_task", false); }
+
   
   /**
    * Set the number of map tasks for this job.

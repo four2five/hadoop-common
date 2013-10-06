@@ -21,6 +21,7 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
+import java.util.Arrays;
 
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.Writable;
@@ -66,14 +67,30 @@ public class JobSplit {
     private long startOffset;
     private long inputDataLength;
     private String[] locations;
+    private int[] reducersThatDependOnThisSplit;
 
     public SplitMetaInfo() {}
     
     public SplitMetaInfo(String[] locations, long startOffset, 
         long inputDataLength) {
+      this(locations, startOffset, inputDataLength, new int[0]);
+    }
+
+    public SplitMetaInfo(String[] locations, long startOffset, 
+        long inputDataLength, int[] reducersThatDependOnThisSplit) {
       this.locations = locations;
       this.startOffset = startOffset;
       this.inputDataLength = inputDataLength;
+      this.reducersThatDependOnThisSplit = reducersThatDependOnThisSplit;
+      if (null != this.reducersThatDependOnThisSplit ) { 
+      /*
+        System.out.println("Constructor, " + 
+          this.reducersThatDependOnThisSplit.length + 
+          " dependencies");
+      */
+      } else { 
+        this.reducersThatDependOnThisSplit = new int[0];
+      }
     }
     
     public SplitMetaInfo(InputSplit split, long startOffset) throws IOException {
@@ -81,6 +98,16 @@ public class JobSplit {
         this.locations = split.getLocations();
         this.inputDataLength = split.getLength();
         this.startOffset = startOffset;
+        if( split.hasReducerDependencyInfo()) { 
+          this.reducersThatDependOnThisSplit = reducersThatDependOnThisSplit;
+          if( null == this.reducersThatDependOnThisSplit) { 
+            System.out.println("reducersThatDependOnThisSplit is null. Not good");
+          }
+        } else  {
+          this.reducersThatDependOnThisSplit = new int[0];
+        }
+        System.out.println("Constructor, " + this.reducersThatDependOnThisSplit.length + 
+          " dependencies");
       } catch (InterruptedException ie) {
         throw new IOException(ie);
       }
@@ -89,7 +116,11 @@ public class JobSplit {
     public String[] getLocations() {
       return locations;
     }
-  
+
+    public int[] getReducersThatDependOnThisSplit() { 
+      return reducersThatDependOnThisSplit;
+    }
+
     public long getStartOffset() {
       return startOffset;
     }
@@ -101,7 +132,11 @@ public class JobSplit {
     public void setInputDataLocations(String[] locations) {
       this.locations = locations;
     }
-    
+
+    public void setReducersThatDependOnThisSplit( int[] reducersThatDependOnThisSplit) { 
+      this.reducersThatDependOnThisSplit = reducersThatDependOnThisSplit;
+    }
+
     public void setInputDataLength(long length) {
       this.inputDataLength = length;
     }
@@ -112,6 +147,19 @@ public class JobSplit {
       for (int i = 0; i < locations.length; i++) {
         locations[i] = Text.readString(in);
       }
+
+      len = WritableUtils.readVInt(in);
+      reducersThatDependOnThisSplit = new int[len];
+      for (int i=0; i<reducersThatDependOnThisSplit.length; i++) { 
+        reducersThatDependOnThisSplit[i] = WritableUtils.readVInt(in);
+      }
+
+      System.out.println("Read in " + reducersThatDependOnThisSplit.length + 
+        " dependencies:\n");
+      for( int i=0; i<reducersThatDependOnThisSplit.length; i++) { 
+        System.out.println("\t" + reducersThatDependOnThisSplit[i]);
+      }
+
       startOffset = WritableUtils.readVLong(in);
       inputDataLength = WritableUtils.readVLong(in);
     }
@@ -121,6 +169,20 @@ public class JobSplit {
       for (int i = 0; i < locations.length; i++) {
         Text.writeString(out, locations[i]);
       }
+
+      /*
+      if( null != reducersThatDependOnThisSplit ) { 
+        System.out.println("Writing out " + 
+          reducersThatDependOnThisSplit.length + 
+          " dependencies");
+      }
+      */
+
+      WritableUtils.writeVInt(out, reducersThatDependOnThisSplit.length);
+      for( int i=0; i<reducersThatDependOnThisSplit.length; i++) { 
+        WritableUtils.writeVInt(out, reducersThatDependOnThisSplit[i]);
+      }
+
       WritableUtils.writeVLong(out, startOffset);
       WritableUtils.writeVLong(out, inputDataLength);
     }
@@ -134,6 +196,8 @@ public class JobSplit {
       for (String loc : locations) {
         buf.append("  " + loc + "\n");
       }
+      buf.append("SMI reducers that depend on this split : " + "\n");
+      buf.append(Arrays.toString(reducersThatDependOnThisSplit));
       return buf.toString();
     }
   }
@@ -145,20 +209,49 @@ public class JobSplit {
     private TaskSplitIndex splitIndex;
     private long inputDataLength;
     private String[] locations;
+    private int[] reducersThatDependOnThisSplit;
+
+    /*
+        if( split.hasReducerDependencyInfo ) { 
+          this.reducersThatDependOnThisSplit = split.getReducerDependencyInfo();
+        } else { 
+          this.reducersThatDependOnThisSplit = new int[0];
+        }
+    */
     public TaskSplitMetaInfo(){
       this.splitIndex = new TaskSplitIndex();
       this.locations = new String[0];
+      this.reducersThatDependOnThisSplit = new int[0];
     }
     public TaskSplitMetaInfo(TaskSplitIndex splitIndex, String[] locations, 
         long inputDataLength) {
+        this(splitIndex, locations, inputDataLength, new int[0]);
+    }
+    public TaskSplitMetaInfo(TaskSplitIndex splitIndex, String[] locations, 
+        long inputDataLength, int[] reducersThatDependOnThisSplit) {
       this.splitIndex = splitIndex;
       this.locations = locations;
       this.inputDataLength = inputDataLength;
+      if( null == reducersThatDependOnThisSplit) { 
+        this.reducersThatDependOnThisSplit = new int[0];
+      } else  {
+        this.reducersThatDependOnThisSplit = reducersThatDependOnThisSplit;
+      }
     }
+
     public TaskSplitMetaInfo(InputSplit split, long startOffset) 
     throws InterruptedException, IOException {
-      this(new TaskSplitIndex("", startOffset), split.getLocations(), 
-          split.getLength());
+        this(new TaskSplitIndex("", startOffset), split.getLocations(), 
+            split.getLength(), split.getReducerDependencyInfo());
+    /*
+      if( split.hasReducerDependencyInfo() ) {
+        this(new TaskSplitIndex("", startOffset), split.getLocations(), 
+            split.getLength(), split.getReducerDependencyInfo());
+      } else { 
+        this(new TaskSplitIndex("", startOffset), split.getLocations(), 
+            split.getLength(), new int[0]);
+      }
+      */
     }
     
     public TaskSplitMetaInfo(String[] locations, long startOffset, 
@@ -179,8 +272,24 @@ public class JobSplit {
     public String[] getLocations() {
       return locations;
     }
+    public int[] getReducerDependencyInfo() { 
+      return reducersThatDependOnThisSplit;
+    }
     public long getStartOffset() {
       return splitIndex.getStartOffset();
+    }
+
+    @Override
+    public String toString() {
+      StringBuffer buf = new StringBuffer();
+      buf.append("data-size : " + inputDataLength + "\n");
+      buf.append("locations : " + "\n");
+      for (String loc : locations) {
+        buf.append("  " + loc + "\n");
+      }
+      buf.append("TSMI reducers that depend on this split : " + "\n");
+      buf.append(Arrays.toString(reducersThatDependOnThisSplit));
+      return buf.toString();
     }
   }
   

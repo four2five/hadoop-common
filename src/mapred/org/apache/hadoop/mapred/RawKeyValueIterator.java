@@ -42,6 +42,8 @@ public interface RawKeyValueIterator {
    * @throws IOException
    */
   DataInputBuffer getValue() throws IOException;
+
+  int getNumRecordsRepresented() throws IOException; 
   
   /** 
    * Sets up the current key and value (for getKey and getValue).

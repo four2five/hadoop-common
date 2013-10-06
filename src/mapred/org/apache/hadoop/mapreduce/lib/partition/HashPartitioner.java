@@ -26,6 +26,8 @@ public class HashPartitioner<K, V> extends Partitioner<K, V> {
   /** Use {@link Object#hashCode()} to partition. */
   public int getPartition(K key, V value,
                           int numReduceTasks) {
+    //System.out.println("k:" + key.toString() + " hashcode: " + key.hashCode() + 
+    //  " partition: " + ((key.hashCode() & Integer.MAX_VALUE) % numReduceTasks));
     return (key.hashCode() & Integer.MAX_VALUE) % numReduceTasks;
   }
 

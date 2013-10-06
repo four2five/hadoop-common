@@ -30,11 +30,13 @@ public class IntSumReducer<Key> extends Reducer<Key,IntWritable,
   public void reduce(Key key, Iterable<IntWritable> values, 
                      Context context) throws IOException, InterruptedException {
     int sum = 0;
+    long count = 0;
     for (IntWritable val : values) {
       sum += val.get();
+      count++;
     }
     result.set(sum);
-    context.write(key, result);
+    context.write(key, result,count);
   }
 
 }

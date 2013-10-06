@@ -106,7 +106,8 @@ public class TestJobCounters extends TestCase {
       org.apache.hadoop.mapreduce.Counters counter, long fileBytesRead,
       long fileBytesWritten, long mapOutputBytes,
       long mapOutputMaterializedBytes) {
-    assertTrue(counter
+    assertTrue(counter            //just consume it, no need to write the record anywhere
+
         .findCounter(
             org.apache.hadoop.mapreduce.lib.input.FileInputFormat.Counter.BYTES_READ)
         .getValue() != 0);

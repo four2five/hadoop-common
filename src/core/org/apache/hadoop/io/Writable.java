@@ -77,4 +77,5 @@ public interface Writable {
    * @throws IOException
    */
   void readFields(DataInput in) throws IOException;
+  
 }

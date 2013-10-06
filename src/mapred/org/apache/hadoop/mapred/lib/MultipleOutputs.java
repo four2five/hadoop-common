@@ -514,8 +514,13 @@ public class MultipleOutputs {
     return new OutputCollector() {
 
       @SuppressWarnings({"unchecked"})
-      public void collect(Object key, Object value) throws IOException {
+      public void collect(Object key, Object value, long recordsRepresented) throws IOException {
         writer.write(key, value);
+      }
+      
+      @SuppressWarnings({"unchecked"})
+      public void collect(Object key, Object value) throws IOException {
+        collect(key, value, (long)1);
       }
 
     };

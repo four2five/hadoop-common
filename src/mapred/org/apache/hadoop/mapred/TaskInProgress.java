@@ -54,7 +54,8 @@ class TaskInProgress {
   static final int MAX_TASK_EXECS = 1;
   int maxTaskAttempts = 4;    
   static final double SPECULATIVE_GAP = 0.2;
-  static final long SPECULATIVE_LAG = 60 * 1000;
+  //static final long SPECULATIVE_LAG = 60 * 1000;
+  static final long SPECULATIVE_LAG = 90 * 1000;
   private static final int NUM_ATTEMPTS_PER_RESTART = 1000;
 
   public static final Log LOG = LogFactory.getLog(TaskInProgress.class);
@@ -68,6 +69,7 @@ class TaskInProgress {
   private TaskID id;
   private JobInProgress job;
   private final int numSlotsRequired;
+  private ArrayList<TaskInProgress> dependencies;
 
   // Status of the TIP
   private int successEventNumber = -1;
@@ -76,6 +78,7 @@ class TaskInProgress {
   private double progress = 0;
   private String state = "";
   private long startTime = 0;
+  private long lastMapFinishTime = 0;
   private long execStartTime = 0;
   private long execFinishTime = 0;
   private int completes = 0;
@@ -84,6 +87,7 @@ class TaskInProgress {
   private long maxSkipRecords = 0;
   private FailedRanges failedRanges = new FailedRanges();
   private volatile boolean skipping = false;
+  private volatile boolean sciTask = false;
   private boolean jobCleanup = false; 
   private boolean jobSetup = false;
    
@@ -145,6 +149,7 @@ class TaskInProgress {
     this.partition = partition;
     this.maxSkipRecords = SkipBadRecords.getMapperMaxSkipRecords(conf);
     this.numSlotsRequired = numSlotsRequired;
+    this.dependencies = null;
     setMaxTaskAttempts();
     init(jobid);
   }
@@ -156,6 +161,15 @@ class TaskInProgress {
                         int numMaps, 
                         int partition, JobTracker jobtracker, JobConf conf,
                         JobInProgress job, int numSlotsRequired) {
+    this(jobid, jobFile, numMaps, partition, jobtracker, conf, job, 
+      numSlotsRequired, null);
+  }
+
+  public TaskInProgress(JobID jobid, String jobFile, 
+                        int numMaps, 
+                        int partition, JobTracker jobtracker, JobConf conf,
+                        JobInProgress job, int numSlotsRequired,
+                        ArrayList<TaskInProgress> dependencies) {
     this.jobFile = jobFile;
     this.splitInfo = null;
     this.numMaps = numMaps;
@@ -165,6 +179,7 @@ class TaskInProgress {
     this.conf = conf;
     this.maxSkipRecords = SkipBadRecords.getReducerMaxSkipGroups(conf);
     this.numSlotsRequired = numSlotsRequired;
+    this.dependencies = dependencies;
     setMaxTaskAttempts();
     init(jobid);
   }
@@ -206,6 +221,10 @@ class TaskInProgress {
     jobSetup = true;
   }
 
+  public ArrayList<TaskInProgress> getDependencies() { 
+    return dependencies;
+  }
+
   public boolean isOnlyCommitPending() {
     for (TaskStatus t : taskStatuses.values()) {
       if (t.getRunState() == TaskStatus.State.COMMIT_PENDING) {
@@ -230,6 +249,7 @@ class TaskInProgress {
     this.startTime = jobtracker.getClock().getTime();
     this.id = new TaskID(jobId, isMapTask(), partition);
     this.skipping = startSkipping();
+    this.sciTask = sciTask();
   }
 
   ////////////////////////////////////
@@ -289,6 +309,14 @@ class TaskInProgress {
    */
   public boolean isMapTask() {
     return splitInfo != null;
+  }
+
+  public TaskSplitMetaInfo getTSMI() { 
+    if( splitInfo == null ) { 
+      return null;
+    } else {
+        return splitInfo;
+    }
   }
     
   /**
@@ -723,6 +751,10 @@ class TaskInProgress {
     }
     return false;
   }
+  
+  private boolean sciTask() { 
+    return conf.useSciTask();
+  }
 
   /**
    * Finalize the <b>completed</b> task; note that this might not be the first 
@@ -923,19 +955,29 @@ class TaskInProgress {
    * far behind, and has been behind for a non-trivial amount of 
    * time.
    */
-  boolean hasSpeculativeTask(long currentTime, double averageProgress) {
+  boolean hasSpeculativeTask(long currentTime, double averageProgress, long lastMapEndTime) {
     //
     // REMIND - mjc - these constants should be examined
     // in more depth eventually...
     //
       
+    if( lastMapEndTime == -1) { 
+      lastMapEndTime = startTime;
+    }
+
     if (!skipping && activeTasks.size() <= MAX_TASK_EXECS &&
         (averageProgress - progress >= SPECULATIVE_GAP) &&
-        (currentTime - startTime >= SPECULATIVE_LAG) 
-        && completes == 0 && !isOnlyCommitPending()) {
+        //(currentTime - startTime >= SPECULATIVE_LAG) 
+        (currentTime - lastMapEndTime >= SPECULATIVE_LAG) 
+        && completes == 0 && !isOnlyCommitPending() ) {
       return true;
     }
     return false;
+  }
+
+  boolean hasSpeculativeTask(long currentTime, double averageProgress) {
+
+    return hasSpeculativeTask( currentTime, averageProgress, -1);
   }
     
   /**
@@ -1015,6 +1057,7 @@ class TaskInProgress {
     }
     t.setSkipRanges(failedRanges.getSkipRanges());
     t.setSkipping(skipping);
+    t.setSciTask(sciTask);
     if(failedRanges.isTestAttempt()) {
       t.setWriteSkipRecs(false);
     }
@@ -1051,6 +1094,10 @@ class TaskInProgress {
     
   boolean wasKilled(TaskAttemptID taskid) {
     return tasksToKill.containsKey(taskid);
+  }
+
+  public String getJobFile() { 
+    return jobFile;
   }
   
   /**
@@ -1143,6 +1190,10 @@ class TaskInProgress {
     } else {
       return 0;
     }
+  }
+
+  public TaskSplitMetaInfo getWrappedSplit() { 
+    return this.splitInfo;
   }
   
   /**

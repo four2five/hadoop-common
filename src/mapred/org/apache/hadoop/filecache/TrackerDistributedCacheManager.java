@@ -387,10 +387,12 @@ public class TrackerDistributedCacheManager {
     if (modifiedTime != desiredTimestamp) {
       DateFormat df = DateFormat.getDateTimeInstance(DateFormat.SHORT, 
                                                      DateFormat.SHORT);
+      /*
       throw new IOException("The distributed cache object " + source + 
                             " changed during the job from " + 
                             df.format(new Date(desiredTimestamp)) + " to " +
                             df.format(new Date(modifiedTime)));
+      */
     }
     
     Path parchive = null;

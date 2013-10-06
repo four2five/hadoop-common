@@ -55,7 +55,7 @@ import org.apache.hadoop.io.compress.CompressionCodec;
  * <p>Users can optionally specify a <code>combiner</code>, via 
  * {@link Job#setCombinerClass(Class)}, to perform local aggregation of the 
  * intermediate outputs, which helps to cut down the amount of data transferred 
- * from the <code>Mapper</code> to the <code>Reducer</code>.
+ * from the <code>Mapper</code> to the <code>Reducer</code>.write
  * 
  * <p>Applications can specify if and how the intermediate
  * outputs are to be compressed and which {@link CompressionCodec}s are to be
@@ -121,7 +121,7 @@ public class Mapper<KEYIN, VALUEIN, KEYOUT, VALUEOUT> {
   @SuppressWarnings("unchecked")
   protected void map(KEYIN key, VALUEIN value, 
                      Context context) throws IOException, InterruptedException {
-    context.write((KEYOUT) key, (VALUEOUT) value);
+    context.write((KEYOUT) key, (VALUEOUT) value, (long)1);
   }
 
   /**

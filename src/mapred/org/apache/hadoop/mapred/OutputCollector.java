@@ -37,5 +37,14 @@ public interface OutputCollector<K, V> {
    * @param value to value to collect.
    * @throws IOException
    */
+  //void collect(K key, V value) throws IOException;
+  void collect(K key, V value, long recordsRepresented) throws IOException;
+  
+  /** Adds a key/value pair to the output.
+  *
+  * @param key the key to collect.
+  * @param value to value to collect.
+  * @throws IOException
+  */
   void collect(K key, V value) throws IOException;
 }

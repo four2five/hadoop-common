@@ -47,6 +47,7 @@ import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.hadoop.io.serializer.Deserializer;
 import org.apache.hadoop.io.serializer.SerializationFactory;
+import org.apache.hadoop.mapred.TaskTracker.TaskInProgress;
 import org.apache.hadoop.mapred.IFile.Writer;
 import org.apache.hadoop.mapreduce.JobStatus;
 import org.apache.hadoop.net.NetUtils;
@@ -141,6 +142,7 @@ abstract public class Task implements Writable, Configurable {
   //skip ranges based on failed ranges from previous attempts
   private SortedRanges skipRanges = new SortedRanges();
   private boolean skipping = false;
+  private boolean sciTask = false;
   private boolean writeSkipRecs = true;
   
   //currently processing record start index
@@ -330,6 +332,14 @@ abstract public class Task implements Writable, Configurable {
   public void setSkipping(boolean skipping) {
     this.skipping = skipping;
   }
+  
+  public boolean isSciTask() { 
+    return sciTask;
+  }
+  
+  public void setSciTask(boolean sciTask) { 
+    this.sciTask = sciTask;
+  }
 
   /**
    * Return current state of the task. 
@@ -419,6 +429,7 @@ abstract public class Task implements Writable, Configurable {
     taskStatus.write(out);
     skipRanges.write(out);
     out.writeBoolean(skipping);
+    out.writeBoolean(sciTask);
     out.writeBoolean(jobCleanup);
     if (jobCleanup) {
       WritableUtils.writeEnum(out, jobRunStateForCleanup);
@@ -439,6 +450,7 @@ abstract public class Task implements Writable, Configurable {
     currentRecIndexIterator = skipRanges.skipRangeIterator();
     currentRecStartIndex = currentRecIndexIterator.next();
     skipping = in.readBoolean();
+    sciTask = in.readBoolean();
     jobCleanup = in.readBoolean();
     if (jobCleanup) {
       jobRunStateForCleanup = 
@@ -493,6 +505,14 @@ abstract public class Task implements Writable, Configurable {
   private AtomicBoolean taskDone = new AtomicBoolean(false);
   
   public abstract boolean isMapTask();
+
+  // this is for reducers to communicate their dependency info
+  //public org.apache.hadoop.mapred.TaskInProgress[] getDependencies() { return new org.apache.hadoop.mapred.TaskInProgress[0]; }
+  public int[] getDependencies() { return new int[0]; }
+
+  // this is for reducers to allow their dependencies to be set
+  //public void  setDependencies( org.apache.hadoop.mapred.TaskInProgress[] dependencies) { return; }
+  public void  setDependencies( int[] dependencies) { return; }
 
   public Progress getProgress() { return taskProgress; }
 
@@ -1151,13 +1171,18 @@ abstract public class Task implements Writable, Configurable {
       this.writer = writer;
     }
     
-    public synchronized void collect(K key, V value)
+    public synchronized void collect(K key, V value, long recordsRepresented)
         throws IOException {
       outCounter.increment(1);
-      writer.append(key, value);
+      writer.append(key, value, recordsRepresented);
       if ((outCounter.getValue() % progressBar) == 0) {
         progressable.progress();
       }
+    }
+    
+    public synchronized void collect(K key, V value)
+    	throws IOException { 
+    	collect(key, value, (long)1);
     }
   }
 
@@ -1414,6 +1439,7 @@ abstract public class Task implements Writable, Configurable {
       keyClass = (Class<K>) job.getMapOutputKeyClass();
       valueClass = (Class<V>) job.getMapOutputValueClass();
       comparator = (RawComparator<K>) job.getOutputKeyComparator();
+      System.out.println("OldCombinerRunner");
     }
 
     @SuppressWarnings("unchecked")
@@ -1462,6 +1488,7 @@ abstract public class Task implements Writable, Configurable {
       valueClass = (Class<V>) context.getMapOutputValueClass();
       comparator = (RawComparator<K>) context.getSortComparator();
       this.committer = committer;
+      System.out.println("NewCombinerRunner");
     }
 
     private static class OutputConverter<K,V>
@@ -1475,10 +1502,15 @@ abstract public class Task implements Writable, Configurable {
       public void close(org.apache.hadoop.mapreduce.TaskAttemptContext context){
       }
 
-      @Override
       public void write(K key, V value
                         ) throws IOException, InterruptedException {
-        output.collect(key,value);
+        output.collect(key,value, 1);
+      }
+      
+      @Override
+      public void write(K key, V value, long recordsRepresented
+                        ) throws IOException, InterruptedException {
+        output.collect(key,value, recordsRepresented );
       }
     }
 

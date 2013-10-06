@@ -168,7 +168,7 @@ public class FieldSelectionMapReduce<K, V>
     if (newTextVal != null) {
       newTextVal = new Text(newVal);
     }
-    output.collect(newTextKey, newTextVal);
+    output.collect(newTextKey, newTextVal,(long)1 );
   }
 
   /**
@@ -331,7 +331,7 @@ public class FieldSelectionMapReduce<K, V>
       if (newVal != null) {
         newTextVal = new Text(newVal);
       }
-      output.collect(newTextKey, newTextVal);
+      output.collect(newTextKey, newTextVal, (long)1);
     }
   }
 }

@@ -150,10 +150,13 @@ public class Reducer<KEYIN,VALUEIN,KEYOUT,VALUEOUT> {
    * is an identity function.
    */
   @SuppressWarnings("unchecked")
-  protected void reduce(KEYIN key, Iterable<VALUEIN> values, Context context
+  //protected void reduce(KEYIN key, Iterable<VALUEIN> values, long recordsRepresented, 
+  protected void reduce(KEYIN key, Iterable<VALUEIN> values,  
+                        Context context
                         ) throws IOException, InterruptedException {
+    //context.incrementRecordsRepresented( recordsRepresented);
     for(VALUEIN value: values) {
-      context.write((KEYOUT) key, (VALUEOUT) value);
+      context.write((KEYOUT) key, (VALUEOUT) value, (long)0);
     }
   }
 

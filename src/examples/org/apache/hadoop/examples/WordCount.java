@@ -27,7 +27,7 @@ public class WordCount {
       StringTokenizer itr = new StringTokenizer(value.toString());
       while (itr.hasMoreTokens()) {
         word.set(itr.nextToken());
-        context.write(word, one);
+        context.write(word, one, (long)1);
       }
     }
   }
@@ -44,7 +44,7 @@ public class WordCount {
         sum += val.get();
       }
       result.set(sum);
-      context.write(key, result);
+      context.write(key, result, (long)1);
     }
   }
 

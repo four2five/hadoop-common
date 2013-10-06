@@ -181,7 +181,7 @@ public class SecondarySort {
         }
         key.set(left, right);
         value.set(right);
-        context.write(key, value);
+        context.write(key, value, (long)1);
       }
     }
   }
@@ -199,10 +199,10 @@ public class SecondarySort {
     public void reduce(IntPair key, Iterable<IntWritable> values,
                        Context context
                        ) throws IOException, InterruptedException {
-      context.write(SEPARATOR, null);
+      context.write(SEPARATOR, null, (long)1);
       first.set(Integer.toString(key.getFirst()));
       for(IntWritable value: values) {
-        context.write(first, value);
+        context.write(first, value, (long)1);
       }
     }
   }

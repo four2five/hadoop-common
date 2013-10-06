@@ -100,8 +100,12 @@ class PipesReducer<K2 extends WritableComparable, V2 extends Writable,
     if (isOk) {
       OutputCollector<K3, V3> nullCollector = new OutputCollector<K3, V3>() {
         public void collect(K3 key, 
-                            V3 value) throws IOException {
+                            V3 value, long recordsRepresented) throws IOException {
           // NULL
+        }
+        
+        public void collect(K3 key, V3 value) throws IOException { 
+        	collect(key, value, (long)1);
         }
       };
       startApplication(nullCollector, Reporter.NULL);

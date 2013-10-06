@@ -292,11 +292,18 @@ abstract class GridmixJob implements Callable<Job>, Delayed {
       FileSystem fs = file.getFileSystem(job.getConfiguration());
       final FSDataOutputStream fileOut = fs.create(file, false);
       return new RecordWriter<K,GridmixRecord>() {
-        @Override
         public void write(K ignored, GridmixRecord value)
             throws IOException {
+          write(ignored, value, (long)1);
+        }
+
+        @Override
+        public void write(K ignored, GridmixRecord value, long recordsRepresented)
+            throws IOException {
+          //value.writeRandom(fileOut, value.getSize(), recordsRepresented);
           value.writeRandom(fileOut, value.getSize());
         }
+
         @Override
         public void close(TaskAttemptContext ctxt) throws IOException {
           fileOut.close();

@@ -65,7 +65,7 @@ public class JobSplitWriter {
     T[] array = (T[]) splits.toArray(new InputSplit[splits.size()]);
     createSplitFiles(jobSubmitDir, conf, fs, array);
   }
-  
+
   public static <T extends InputSplit> void createSplitFiles(Path jobSubmitDir, 
       Configuration conf, FileSystem fs, T[] splits) 
   throws IOException, InterruptedException {
@@ -136,7 +136,7 @@ public class JobSplitWriter {
         info[i++] = 
           new JobSplit.SplitMetaInfo( 
               locations, offset,
-              split.getLength());
+              split.getLength(), split.getReducerDependencyInfo());
         offset += currCount - prevCount;
       }
     }

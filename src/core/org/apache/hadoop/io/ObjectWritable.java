@@ -234,6 +234,7 @@ public class ObjectWritable implements Writable, Configurable {
       }
       
       Writable writable = WritableFactories.newInstance(instanceClass, conf);
+      //-jbuck here
       writable.readFields(in);
       instance = writable;
 

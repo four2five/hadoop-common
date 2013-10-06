@@ -50,6 +50,8 @@ class LaunchTaskAction extends TaskTrackerAction {
   
   public void readFields(DataInput in) throws IOException {
     boolean isMapTask = in.readBoolean();
+    
+    
     if (isMapTask) {
       task = new MapTask();
     } else {

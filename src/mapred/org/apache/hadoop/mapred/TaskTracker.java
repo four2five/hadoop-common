@@ -1318,7 +1318,7 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
                   localStorage.getDirsString());
       tip.setJobConf(jobConf);
       tip.setUGI(rjob.ugi);
-      tip.launchTask(rjob);
+      tip.launchTask(rjob, tip);
     }
   }
     
@@ -2369,9 +2369,11 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
             if (!canLaunch) {
               continue;
             }
-            LOG.info("In TaskLauncher, current free slots : " + numFreeSlots.get()+
+            /*
+            LOG.info("Hey JB, In TaskLauncher, current free slots : " + numFreeSlots.get()+
                      " and trying to launch "+tip.getTask().getTaskID() + 
                      " which needs " + task.getNumSlotsRequired() + " slots");
+            */
             numFreeSlots.set(numFreeSlots.get() - task.getNumSlotsRequired());
             assert (numFreeSlots.get() >= 0);
           }
@@ -2386,6 +2388,7 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
             }
             tip.slotTaken = true;
           }
+          LOG.info("post-synch");
           //got a free slot. launch the task
           startNewTask(tip);
         } catch (InterruptedException e) { 
@@ -2423,13 +2426,16 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
    * @throws InterruptedException 
    */
   void startNewTask(final TaskInProgress tip) throws InterruptedException {
+    LOG.info("in startNewTask: ");
     Thread launchThread = new Thread(new Runnable() {
       @Override
       public void run() {
         try {
+          LOG.info("about to localizeJob: " + tip.toString());
           RunningJob rjob = localizeJob(tip);
           tip.getTask().setJobFile(rjob.getLocalizedJobConf().toString());
           // Localization is done. Neither rjob.jobConf nor rjob.ugi can be null
+          LOG.info("about to launch job: " + tip.toString());
           launchTaskForJob(tip, new JobConf(rjob.getJobConf()), rjob); 
         } catch (Throwable e) {
           String msg = ("Error initializing " + tip.getTask().getTaskID() + 
@@ -2451,6 +2457,7 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
         }
       }
     });
+    LOG.info("launchThread.start() job: " + tip.toString());
     launchThread.start();
   }
 
@@ -2603,7 +2610,7 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
     void localizeTask(Task task) throws IOException{
 
       // Do the task-type specific localization
-//TODO: are these calls really required
+      //TODO: are these calls really required
       task.localizeConfiguration(localJobConf);
       
       task.setConf(localJobConf);
@@ -2660,7 +2667,8 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
     /**
      * Kick off the task execution
      */
-    public synchronized void launchTask(RunningJob rjob) throws IOException {
+    public synchronized void launchTask(RunningJob rjob, TaskInProgress tip) throws IOException {
+
       if (this.taskStatus.getRunState() == TaskStatus.State.UNASSIGNED ||
           this.taskStatus.getRunState() == TaskStatus.State.FAILED_UNCLEAN ||
           this.taskStatus.getRunState() == TaskStatus.State.KILLED_UNCLEAN) {
@@ -3889,6 +3897,17 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
         //the actual number of bytes being transferred
         response.setHeader(MAP_OUTPUT_LENGTH,
             Long.toString(info.partLength));
+
+        LOG.info("creating header, " + info.numRecords + " records representing " + 
+                 info.numRecordsRepresented + " records from map " + 
+                 mapId +  " for reducer " + reduce);
+
+        response.setHeader(MAP_OUTPUT_NUM_RECORDS,
+            Long.toString(info.numRecords));
+
+            //MAP_OUTPUT_NUM_RECORDS_REPRESENTED
+        response.setHeader(MAP_OUTPUT_NUM_RECORDS_REPRESENTED,
+            Long.toString(info.numRecordsRepresented));
 
         //set the custom "for-reduce-task" http header to the reduce task number
         //for which this map output is being transferred

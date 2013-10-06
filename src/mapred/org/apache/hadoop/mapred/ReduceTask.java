@@ -18,6 +18,8 @@
 
 package org.apache.hadoop.mapred;
 
+import edu.ucsc.srl.damasc.hadoop.HadoopUtils;
+
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.File;
@@ -29,6 +31,7 @@ import java.net.URL;
 import java.net.URLClassLoader;
 import java.net.URLConnection;
 import java.text.DecimalFormat;
+import java.util.Arrays;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -107,6 +110,15 @@ class ReduceTask extends Task {
   private int numMaps;
   private ReduceCopier reduceCopier;
 
+  private long numRecordsAssigned;
+  private long numRecordsRepresentedAssigned;
+  private int[] reduceCorner;
+  private int[] reduceShape;
+  //private org.apache.hadoop.mapred.TaskInProgress[] mapTaskDependencies;
+  private int[] mapTaskDependencies;
+  private String[] mapTaskDependenciesTaskIds;
+  boolean startReducersDynamically; 
+
   private CompressionCodec codec;
 
 
@@ -154,12 +166,21 @@ class ReduceTask extends Task {
 
   public ReduceTask() {
     super();
+    //mapTaskDependencies = new org.apache.hadoop.mapred.TaskInProgress[0];
+    mapTaskDependencies = new int[0];
   }
 
   public ReduceTask(String jobFile, TaskAttemptID taskId,
                     int partition, int numMaps, int numSlotsRequired) {
     super(jobFile, taskId, partition, numSlotsRequired);
     this.numMaps = numMaps;
+    // setup the number of records this Reduce Task will ultimately receive
+    int reducerID = taskId.getId();
+
+    LOG.info("In Reducer constructor for reducer " + reducerID + 
+              " with taskID: " + taskId.toString());
+
+    mapTaskDependencies = new int[0];
   }
   
   private CompressionCodec initCodec() {
@@ -186,6 +207,28 @@ class ReduceTask extends Task {
   }
 
   public int getNumMaps() { return numMaps; }
+
+  @Override
+  //public org.apache.hadoop.mapred.TaskInProgress[] getDependencies() { 
+  public int[] getDependencies() { 
+    return mapTaskDependencies;
+  }
+
+  @Override 
+  //public void setDependencies( org.apache.hadoop.mapred.TaskInProgress[] dependencies) { 
+  public void setDependencies( int[] dependencies) { 
+    LOG.info("Setting a dependency of length: " + dependencies.length);
+    //mapTaskDependencies = dependencies; 
+    mapTaskDependencies = dependencies; 
+  }
+
+  public String[] createMapTaskDependencyStrings( TaskID redTask, int[] mapTaskIds) { 
+ 
+    TaskID localTaskId = TaskID.forName(redTask.toString());
+    LOG.info("cloned taskId: " + localTaskId.toString());
+
+    return new String[0];
+  }
   
   /**
    * Localize the given JobConf to be specific for this task.
@@ -194,6 +237,61 @@ class ReduceTask extends Task {
   public void localizeConfiguration(JobConf conf) throws IOException {
     super.localizeConfiguration(conf);
     conf.setNumMapTasks(numMaps);
+
+    TaskAttemptID attempt = getTaskID();
+    TaskID task = attempt.getTaskID();
+    int reducerID = task.getId();
+
+    if( conf.getBoolean( "damasc.scihadoop", false)) { 
+	    LOG.info("In ReduceTask localizeConfiguration for reducer " + reducerID + 
+	              " with taskAttepID: " + task.toString() + " and  damasc.scihadoop is on");
+	
+	    this.mapTaskDependenciesTaskIds = createMapTaskDependencyStrings( task, this.mapTaskDependencies);
+	
+	    /*
+	    LOG.info("I depend on these map tasks: ");
+	    for( int i=0; i< this.mapTaskDependencies.length; i++ ) { 
+	      LOG.info("\t" + this.mapTaskDependenciesTaskIds[i]);
+	    }
+	    */
+	
+	
+	    // determine how many records this reducer will process
+	    reduceCorner = HadoopUtils.getReducerWriteCorner(reducerID, conf);
+	    if( null == reduceCorner) { 
+	      LOG.warn("JB, reduceCorner is NULL");
+	    }
+	    reduceShape = HadoopUtils.getReducerWriteShape(reducerID, conf);
+	    if( null == reduceShape) { 
+	      LOG.warn("JB, reduceShape is NULL");
+	    }
+	    int[] totalOutputShape = HadoopUtils.getTotalOutputSpace(conf);
+	    if( null == totalOutputShape) { 
+	    	LOG.warn("JB, totalOutputShape is NULL");
+	    }
+	    int[] roundedReduceShape = HadoopUtils.roundArrayShape(reduceShape, totalOutputShape); 
+	    LOG.info("Rounded reduce shape is: " + HadoopUtils.arrayToString(roundedReduceShape) );
+	    long[] strides = HadoopUtils.computeStrides(totalOutputShape);
+	
+	    //numRecordsAssigned = HadoopUtils.calcTotalSize(reduceShape);
+	    numRecordsAssigned = HadoopUtils.multiplyAndSumArrays(reduceShape, strides);
+	    if( null == HadoopUtils.getExtractionShape(conf, reduceCorner.length)){ 
+	      LOG.warn("JB, getExtractionShape is NULL");
+	    }
+	    numRecordsRepresentedAssigned = numRecordsAssigned * 
+	      HadoopUtils.calcTotalSize(HadoopUtils.getExtractionShape(conf, reduceCorner.length));
+	
+	    LOG.info("reducer: " + reducerID + 
+	             " assigned corner: " + Arrays.toString(reduceCorner) +
+	             " shape: " + Arrays.toString(reduceShape) + 
+	             " rounded shape: " + Arrays.toString(roundedReduceShape) + 
+	             " total output shape: " + Arrays.toString(totalOutputShape) + 
+	             " assigned records: " + numRecordsAssigned + 
+	             " assigned represented records: " + numRecordsRepresentedAssigned);
+
+    } else  {
+    	LOG.info(" damasc.scihadoop is NOT on");
+    }
   }
 
   @Override
@@ -201,6 +299,12 @@ class ReduceTask extends Task {
     super.write(out);
 
     out.writeInt(numMaps);                        // write the number of maps
+
+    // write out the map tasks that this reducer dpeneds on
+    out.writeInt(mapTaskDependencies.length);
+    for( int i=0; i<mapTaskDependencies.length; i++) { 
+      out.writeInt(mapTaskDependencies[i]); 
+    }
   }
 
   @Override
@@ -208,6 +312,11 @@ class ReduceTask extends Task {
     super.readFields(in);
 
     numMaps = in.readInt();
+
+    mapTaskDependencies = new int[in.readInt()];
+    for( int i=0; i<mapTaskDependencies.length; i++) { 
+      mapTaskDependencies[i] = in.readInt();
+    }
   }
   
   // Get the input files for the reducer.
@@ -379,10 +488,13 @@ class ReduceTask extends Task {
     // Initialize the codec
     codec = initCodec();
 
+    // should we start reducers dynamically?
+    startReducersDynamically = HadoopUtils.startReducerDynamically(job);
+
     boolean isLocal = "local".equals(job.get("mapred.job.tracker", "local"));
     if (!isLocal) {
       reduceCopier = new ReduceCopier(umbilical, job, reporter);
-      if (!reduceCopier.fetchOutputs()) {
+      if (!reduceCopier.fetchOutputs(startReducersDynamically)) {
         if(reduceCopier.mergeThrowable instanceof FSError) {
           throw (FSError)reduceCopier.mergeThrowable;
         }
@@ -492,11 +604,18 @@ class ReduceTask extends Task {
     
     OutputCollector<OUTKEY,OUTVALUE> collector = 
       new OutputCollector<OUTKEY,OUTVALUE>() {
-        public void collect(OUTKEY key, OUTVALUE value)
+        public void collect(OUTKEY key, OUTVALUE value, long recordsRepresented)
+        //public void collect(OUTKEY key, OUTVALUE value)
           throws IOException {
+          //out.write(key, value, recordsRepresented);
           out.write(key, value);
           // indicate that progress update needs to be sent
           reporter.progress();
+        }
+        
+        public void collect(OUTKEY key, OUTVALUE value)
+          throws IOException {
+        	collect(key, value, (long)1);
         }
       };
     
@@ -582,9 +701,9 @@ class ReduceTask extends Task {
     }
 
     @Override
-    public void write(K key, V value) throws IOException, InterruptedException {
+    public void write(K key, V value, long recordsRepresented) throws IOException, InterruptedException {
       long bytesOutPrev = getOutputBytes(fsStats);
-      real.write(key,value);
+      real.write(key,value, recordsRepresented);
       long bytesOutCurr = getOutputBytes(fsStats);
       fileOutputByteCounter.increment(bytesOutCurr - bytesOutPrev);
       outputRecordCounter.increment(1);
@@ -620,6 +739,9 @@ class ReduceTask extends Task {
       }
       public DataInputBuffer getValue() throws IOException {
         return rawIter.getValue();
+      }
+      public int getNumRecordsRepresented() throws IOException {
+        return rawIter.getNumRecordsRepresented();
       }
       public boolean next() throws IOException {
         boolean ret = rawIter.next();
@@ -965,19 +1087,26 @@ class ReduceTask extends Task {
       
       // the size of the file copied, -1 if the transfer failed
       private final long size;
+      private final long records;
+      private final long recordsRepresented;
       
       //a flag signifying whether a copy result is obsolete
       private static final int OBSOLETE = -2;
       
       private CopyOutputErrorType error = CopyOutputErrorType.NO_ERROR;
-      CopyResult(MapOutputLocation loc, long size) {
+      CopyResult(MapOutputLocation loc, long size, long records, long recordsRepresented) {
         this.loc = loc;
         this.size = size;
+        this.records = records;
+        this.recordsRepresented = recordsRepresented;
       }
 
-      CopyResult(MapOutputLocation loc, long size, CopyOutputErrorType error) {
+      CopyResult(MapOutputLocation loc, long size, long records, 
+                 long recordsRepresented, CopyOutputErrorType error) {
         this.loc = loc;
         this.size = size;
+        this.records = records;
+        this.recordsRepresented = recordsRepresented;
         this.error = error;
       }
 
@@ -986,6 +1115,8 @@ class ReduceTask extends Task {
         return size == OBSOLETE;
       }
       public long getSize() { return size; }
+      public long getRecords() { return records; }
+      public long getRecordsRepresented() { return recordsRepresented; }
       public String getHost() { return loc.getHost(); }
       public MapOutputLocation getLocation() { return loc; }
       public CopyOutputErrorType getError() { return error; }
@@ -1026,6 +1157,10 @@ class ReduceTask extends Task {
       public URL getOutputLocation() {
         return taskOutput;
       }
+
+      public String toString() { 
+        return getHost() + ":" + getTaskAttemptId().toString();
+      }
     }
     
     /** Describes the output of a map; could either be on disk or in-memory. */
@@ -1039,22 +1174,28 @@ class ReduceTask extends Task {
       byte[] data;
       final boolean inMemory;
       long compressedSize;
+      long numRecords;
+      long numRecordsRepresented;
       
       public MapOutput(TaskID mapId, TaskAttemptID mapAttemptId, 
-                       Configuration conf, Path file, long size) {
+                       Configuration conf, Path file, long size, 
+                       long numRecords, long numRecordsRepresented) {
         this.mapId = mapId;
         this.mapAttemptId = mapAttemptId;
         
         this.conf = conf;
         this.file = file;
         this.compressedSize = size;
+        this.numRecords = numRecords;
+        this.numRecordsRepresented = numRecordsRepresented;
         
         this.data = null;
         
         this.inMemory = false;
       }
       
-      public MapOutput(TaskID mapId, TaskAttemptID mapAttemptId, byte[] data, int compressedLength) {
+      public MapOutput(TaskID mapId, TaskAttemptID mapAttemptId, byte[] data, 
+                       int compressedLength, long numRecords, long numRecordsRepresented) {
         this.mapId = mapId;
         this.mapAttemptId = mapAttemptId;
         
@@ -1063,6 +1204,8 @@ class ReduceTask extends Task {
         
         this.data = data;
         this.compressedSize = compressedLength;
+        this.numRecords = numRecords;
+        this.numRecordsRepresented = numRecordsRepresented;
         
         this.inMemory = true;
       }
@@ -1273,7 +1416,8 @@ class ReduceTask extends Task {
        */
       public synchronized boolean fail() {
         if (currentLocation != null) {
-          finish(-1, CopyOutputErrorType.OTHER_ERROR);
+          FileSize fileSize = new FileSize(-1, -1, -1);
+          finish(fileSize, CopyOutputErrorType.OTHER_ERROR);
           return true;
         } else {
           return false;
@@ -1291,11 +1435,12 @@ class ReduceTask extends Task {
         currentLocation = loc;
       }
       
-      private synchronized void finish(long size, CopyOutputErrorType error) {
+      private synchronized void finish(FileSize fileSize, CopyOutputErrorType error) {
         if (currentLocation != null) {
-          LOG.debug(getName() + " finishing " + currentLocation + " =" + size);
+          LOG.debug(getName() + " finishing " + currentLocation + " =" + fileSize.bytes);
           synchronized (copyResults) {
-            copyResults.add(new CopyResult(currentLocation, size, error));
+            copyResults.add(new CopyResult(currentLocation, fileSize.bytes, fileSize.records, 
+                                           fileSize.recordsRepresented, error));
             copyResults.notify();
           }
           currentLocation = null;
@@ -1310,7 +1455,7 @@ class ReduceTask extends Task {
         while (true) {        
           try {
             MapOutputLocation loc = null;
-            long size = -1;
+            FileSize fileSize = null;
             
             synchronized (scheduledCopies) {
               while (scheduledCopies.isEmpty()) {
@@ -1323,7 +1468,7 @@ class ReduceTask extends Task {
             try {
               shuffleClientMetrics.threadBusy();
               start(loc);
-              size = copyOutput(loc);
+              fileSize = copyOutput(loc);
               shuffleClientMetrics.successFetch();
               error = CopyOutputErrorType.NO_ERROR;
             } catch (IOException e) {
@@ -1335,10 +1480,15 @@ class ReduceTask extends Task {
                 error = CopyOutputErrorType.READ_ERROR;
               }
               // Reset 
-              size = -1;
+              fileSize = null;
             } finally {
               shuffleClientMetrics.threadFree();
-              finish(size, error);
+              if( null == fileSize ){ 
+                fileSize = new FileSize(-1, -1, -1);
+                LOG.warn("fileSize is NULL. Skipping file for " + loc.getTaskAttemptId() + 
+                         " from " + loc.getHost());
+              }
+              finish(fileSize, error);
             }
           } catch (InterruptedException e) { 
             break; // ALL DONE
@@ -1370,12 +1520,13 @@ class ReduceTask extends Task {
        * @throws IOException if there is an error copying the file
        * @throws InterruptedException if the copier should give up
        */
-      private long copyOutput(MapOutputLocation loc
+      private FileSize copyOutput(MapOutputLocation loc
                               ) throws IOException, InterruptedException {
         // check if we still need to copy the output from this location
         if (copiedMapOutputs.contains(loc.getTaskId()) || 
             obsoleteMapIds.contains(loc.getTaskAttemptId())) {
-          return CopyResult.OBSOLETE;
+          // set file size to CopyResult.OBSOLETE
+          return new FileSize(CopyResult.OBSOLETE, -1, -1);
         } 
  
         // a temp filename. If this file gets created in ramfs, we're fine,
@@ -1400,17 +1551,21 @@ class ReduceTask extends Task {
         }
         
         // The size of the map-output
-        long bytes = mapOutput.compressedSize;
+        //long bytes = mapOutput.compressedSize;
+        //long records = mapOutput.numRecords;
+        FileSize fileSize = new FileSize(mapOutput.compressedSize, 
+                                         mapOutput.numRecords, mapOutput.numRecordsRepresented);
         
         // lock the ReduceTask while we do the rename
         synchronized (ReduceTask.this) {
           if (copiedMapOutputs.contains(loc.getTaskId())) {
             mapOutput.discard();
-            return CopyResult.OBSOLETE;
+            return new FileSize(CopyResult.OBSOLETE, -1, -1);
+            //return null;
           }
 
           // Special case: discard empty map-outputs
-          if (bytes == 0) {
+          if (fileSize.bytes == 0) {
             try {
               mapOutput.discard();
             } catch (IOException ioe) {
@@ -1420,7 +1575,7 @@ class ReduceTask extends Task {
             // Note that we successfully copied the map-output
             noteCopiedMapOutput(loc.getTaskId());
             
-            return bytes;
+            return fileSize;
           }
           
           // Process map-output
@@ -1434,7 +1589,8 @@ class ReduceTask extends Task {
             filename = new Path(tmpMapOutput.getParent(), filename.getName());
             if (!localFileSys.rename(tmpMapOutput, filename)) {
               localFileSys.delete(tmpMapOutput, true);
-              bytes = -1;
+              fileSize.bytes = -1;
+              fileSize.records = -1;
               throw new IOException("Failed to rename map output " + 
                   tmpMapOutput + " to " + filename);
             }
@@ -1448,7 +1604,7 @@ class ReduceTask extends Task {
           noteCopiedMapOutput(loc.getTaskId());
         }
         
-        return bytes;
+        return fileSize;
       }
       
       /**
@@ -1457,6 +1613,8 @@ class ReduceTask extends Task {
        * 
        * @param taskId map taskid
        */
+       // this is only called in one place, and that call is wrapped in a 
+       // synchronized(ReduceTask.this)
       private void noteCopiedMapOutput(TaskID taskId) {
         copiedMapOutputs.add(taskId);
         ramManager.setNumCopiedMapOutputs(numMaps - copiedMapOutputs.size());
@@ -1480,6 +1638,7 @@ class ReduceTask extends Task {
         URL url = mapOutputLoc.getOutputLocation();
         URLConnection connection = url.openConnection();
         
+        LOG.debug("setupSecureConnection: " + mapOutputLoc.toString());
         InputStream input = setupSecureConnection(mapOutputLoc, connection);
  
         // Validate header from map output
@@ -1501,8 +1660,20 @@ class ReduceTask extends Task {
         
         long decompressedLength = 
           Long.parseLong(connection.getHeaderField(RAW_MAP_OUTPUT_LENGTH));  
+
         long compressedLength = 
           Long.parseLong(connection.getHeaderField(MAP_OUTPUT_LENGTH));
+
+        //String numKeysString = connection.getHeaderField(MAP_OUTPUT_NUM_RECORDS);
+        long numKeys = 
+          Long.parseLong(connection.getHeaderField(MAP_OUTPUT_NUM_RECORDS));
+        long numKeysRepresented = 
+          Long.parseLong(connection.getHeaderField(MAP_OUTPUT_NUM_RECORDS_REPRESENTED));
+
+
+          LOG.info("output from Map task: " + mapId + " had " + 
+                   numKeys + " records representing " + numKeysRepresented + 
+                   " inputs for reducer " + reduce);
 
         if (compressedLength < 0 || decompressedLength < 0) {
           LOG.warn(getName() + " invalid lengths in map output header: id: " +
@@ -1544,7 +1715,8 @@ class ReduceTask extends Task {
 
           mapOutput = shuffleInMemory(mapOutputLoc, connection, input,
                                       (int)decompressedLength,
-                                      (int)compressedLength);
+                                      (int)compressedLength,
+                                      numKeys, numKeysRepresented);
         } else {
           if (LOG.isDebugEnabled()) {
             LOG.debug("Shuffling " + decompressedLength + " bytes (" + 
@@ -1552,8 +1724,8 @@ class ReduceTask extends Task {
                 "into Local-FS from " + mapOutputLoc.getTaskAttemptId());
           }
           
-          mapOutput = shuffleToDisk(mapOutputLoc, input, filename, 
-              compressedLength);
+          mapOutput = shuffleToDisk(mapOutputLoc, input, filename,
+              compressedLength, numKeys, numKeysRepresented);
         }
             
         return mapOutput;
@@ -1647,7 +1819,8 @@ class ReduceTask extends Task {
                                         URLConnection connection, 
                                         InputStream input,
                                         int mapOutputLength,
-                                        int compressedLength)
+                                        int compressedLength,
+                                        long numKeys, long numKeysRepresented)
       throws IOException, InterruptedException {
         // Reserve ram for the map-output
         boolean createdNow = ramManager.reserve(mapOutputLength, input);
@@ -1685,7 +1858,8 @@ class ReduceTask extends Task {
         byte[] shuffleData = new byte[mapOutputLength];
         MapOutput mapOutput = 
           new MapOutput(mapOutputLoc.getTaskId(), 
-                        mapOutputLoc.getTaskAttemptId(), shuffleData, compressedLength);
+                        mapOutputLoc.getTaskAttemptId(), shuffleData, 
+                        compressedLength, numKeys, numKeysRepresented);
         
         int bytesRead = 0;
         try {
@@ -1775,7 +1949,9 @@ class ReduceTask extends Task {
       private MapOutput shuffleToDisk(MapOutputLocation mapOutputLoc,
                                       InputStream input,
                                       Path filename,
-                                      long mapOutputLength) 
+                                      long mapOutputLength,
+                                      long numRecords,
+                                      long numRecordsRepresented) 
       throws IOException {
         // Find out a suitable location for the output on local-filesystem
         Path localFilename = 
@@ -1785,7 +1961,7 @@ class ReduceTask extends Task {
         MapOutput mapOutput = 
           new MapOutput(mapOutputLoc.getTaskId(), mapOutputLoc.getTaskAttemptId(), 
                         conf, localFileSys.makeQualified(localFilename), 
-                        mapOutputLength);
+                        mapOutputLength, numRecords, numRecordsRepresented);
 
 
         // Copy data to local-disk
@@ -1981,17 +2157,21 @@ class ReduceTask extends Task {
     }
     
     
-    public boolean fetchOutputs() throws IOException {
+    public boolean fetchOutputs(boolean startReducerDynamically) throws IOException {
       int totalFailures = 0;
       int            numInFlight = 0, numCopied = 0;
+      long recordsCopied = 0;
+      long recordsRepresentedCopied = 0;
       DecimalFormat  mbpsFormat = new DecimalFormat("0.00");
       final Progress copyPhase = 
         reduceTask.getProgress().phase();
       LocalFSMerger localFSMergerThread = null;
       InMemFSMergeThread inMemFSMergeThread = null;
       GetMapEventsThread getMapEventsThread = null;
-      
-      for (int i = 0; i < numMaps; i++) {
+
+    //mapTaskDependencies = dependencies; 
+      LOG.info("Adding " + mapTaskDependencies.length + " copyPhases");
+      for (int i = 0; i < mapTaskDependencies.length; i++) {
         copyPhase.addPhase();       // add sub-phase per file
       }
       
@@ -2021,10 +2201,44 @@ class ReduceTask extends Task {
       long currentTime = startTime;
       long lastProgressTime = startTime;
       long lastOutputTime = 0;
+      int lastNumMaps = -1;
       
         // loop until we get all required outputs
-        while (copiedMapOutputs.size() < numMaps && mergeThrowable == null) {
-          
+        long requiredOutputs = 0;
+
+        if( startReducerDynamically ) { 
+          requiredOutputs = mapTaskDependencies.length;
+        } else { 
+          requiredOutputs = numMaps;
+        }
+
+        while (copiedMapOutputs.size() < requiredOutputs && 
+               //recordsCopied < numRecordsAssigned && // -jbuck hope this works
+               mergeThrowable == null) {
+      
+          if( lastNumMaps != copiedMapOutputs.size()) { 
+            LOG.info("Reduce task " + reduceTask.getTaskID() + 
+             " has " + (((float)recordsCopied / numRecordsAssigned)* 100) + " % records " + 
+             " representing " + 
+             (((float)recordsRepresentedCopied / numRecordsRepresentedAssigned)*100) + 
+             " %input records");
+            LOG.debug("Reduce task " + reduceTask.getTaskID() + 
+             " has " + recordsCopied + " of " + numRecordsAssigned + " records " + 
+             " representing " + 
+             recordsRepresentedCopied + " of " +  numRecordsRepresentedAssigned + 
+             " %input records");
+            lastNumMaps = copiedMapOutputs.size();
+          }
+
+          if( startReducerDynamically && 
+              recordsRepresentedCopied >= numRecordsRepresentedAssigned ) {
+            LOG.info("Reduce task " + reduceTask.getTaskID() + 
+                     " has all of the records it will receive." + 
+                     " Short circuiting ReduceTask.fetchOutputs()");
+            //numMaps = copiedMapOutputs.size(); // shouldn't need this anymore
+          } 
+
+
           currentTime = System.currentTimeMillis();
           boolean logNow = false;
           if (currentTime - lastOutputTime > MIN_LOG_TIME) {
@@ -2033,7 +2247,7 @@ class ReduceTask extends Task {
           }
           if (logNow) {
             LOG.info(reduceTask.getTaskID() + " Need another " 
-                   + (numMaps - copiedMapOutputs.size()) + " map output(s) "
+                   + (requiredOutputs - copiedMapOutputs.size()) + " map output(s) "
                    + "where " + numInFlight + " is already in progress");
           }
 
@@ -2133,6 +2347,8 @@ class ReduceTask extends Task {
                   }
 
                   uniqueHosts.add(host);
+                  //-jbuck determine if this reducer cares about this map task output
+                  LOG.info("In shuffler, MapOutputLoc: " + loc.toString() + " has task id: " + loc.getTaskId());
                   scheduledCopies.add(loc);
                   locItr.remove();  // remove from knownOutputs
                   numInFlight++; numScheduled++;
@@ -2189,6 +2405,8 @@ class ReduceTask extends Task {
             
             if (cr.getSuccess()) {  // a successful copy
               numCopied++;
+              recordsCopied += cr.getRecords();
+              recordsRepresentedCopied += cr.getRecordsRepresented();
               lastProgressTime = System.currentTimeMillis();
               reduceShuffleBytes.increment(cr.getSize());
                 
@@ -2198,8 +2416,10 @@ class ReduceTask extends Task {
               float transferRate = mbs/secsSinceStart;
                 
               copyPhase.startNextPhase();
-              copyPhase.setStatus("copy (" + numCopied + " of " + numMaps 
-                                  + " at " +
+              copyPhase.setStatus("copy (" + numCopied + " of " + requiredOutputs + " maps " +
+                                  recordsRepresentedCopied + " of " + 
+                                  numRecordsRepresentedAssigned +  " records " +
+                                  " at " +
                                   mbpsFormat.format(transferRate) +  " MB/s)");
                 
               // Note successful fetch for this mapId to invalidate
@@ -2208,7 +2428,7 @@ class ReduceTask extends Task {
             } else if (cr.isObsolete()) {
               //ignore
               LOG.info(reduceTask.getTaskID() + 
-                       " Ignoring obsolete copy result for Map Task: " + 
+                       "Ignoring obsolete copy result for Map Task: " + 
                        cr.getLocation().getTaskAttemptId() + " from host: " + 
                        cr.getHost());
             } else {
@@ -2254,7 +2474,8 @@ class ReduceTask extends Task {
                 
                 // check if the reducer has progressed enough
                 boolean reducerProgressedEnough = 
-                    (((float)numCopied / numMaps) 
+                    //(((float)numCopied / mapTaskDependencies.length) 
+                    (((float)numCopied / requiredOutputs) 
                      >= MIN_REQUIRED_PROGRESS_PERCENT);
                 
                 // check if the reducer is stalled for a long time
@@ -2275,7 +2496,7 @@ class ReduceTask extends Task {
                 
                 // kill if not healthy and has insufficient progress
                 if ((fetchFailedMaps.size() >= maxFailedUniqueFetches ||
-                     fetchFailedMaps.size() == (numMaps - copiedMapOutputs.size()))
+                     fetchFailedMaps.size() == (requiredOutputs - copiedMapOutputs.size()))
                     && !reducerHealthy 
                     && (!reducerProgressedEnough || reducerStalled)) { 
                   LOG.fatal("Shuffle failed with too many fetch failures " + 
@@ -2300,6 +2521,15 @@ class ReduceTask extends Task {
             uniqueHosts.remove(cr.getHost());
             numInFlight--;
           }
+        }
+
+        // all maps done
+        if( recordsRepresentedCopied == numRecordsRepresentedAssigned ) { 
+          LOG.info("Reduce task " + reduceTask.getTaskID() + 
+                   " is done with " + recordsRepresentedCopied + " / " +  numRecordsRepresentedAssigned + " done");
+        } else { 
+          LOG.info("Reduce task " + reduceTask.getTaskID() + 
+                   " is done with only " + recordsRepresentedCopied + " / " +  numRecordsRepresentedAssigned + " present");
         }
         
         // all done, inform the copiers to exit
@@ -2352,7 +2582,14 @@ class ReduceTask extends Task {
             return false;
           }
         }
-        return mergeThrowable == null && copiedMapOutputs.size() == numMaps;
+        if( null != mergeThrowable) { 
+            LOG.warn("JB, mergeThrowable is NOT null");
+        } else if( copiedMapOutputs.size() != requiredOutputs) { 
+            LOG.debug("JB, copiedMaps.size(): " + copiedMapOutputs.size() + " != requiredOutputs : " + requiredOutputs);
+        } else { 
+            LOG.info("JB, damned if I know why these are failing");
+        }
+        return mergeThrowable == null && copiedMapOutputs.size() == requiredOutputs;
     }
     
     // Notify the JobTracker
@@ -2876,18 +3113,27 @@ class ReduceTask extends Task {
               URI u = URI.create(event.getTaskTrackerHttp());
               String host = u.getHost();
               TaskAttemptID taskId = event.getTaskAttemptId();
-              URL mapOutputLocation = new URL(event.getTaskTrackerHttp() + 
+              //LOG.info("\tcalling thisReducerCaresAboutThisOutput for task: " + taskId.getTaskID() + " with mapTaskDependencies.length: " + mapTaskDependencies.length);
+              //boolean startReducersDynamically = HadoopUtils.startReducerDynamically(job);
+
+              if( thisReducerCaresAboutThisOutput( taskId.getTaskID(), mapTaskDependencies) || !startReducersDynamically) {
+
+                URL mapOutputLocation = new URL(event.getTaskTrackerHttp() + 
                                       "/mapOutput?job=" + taskId.getJobID() +
                                       "&map=" + taskId + 
                                       "&reduce=" + getPartition());
-              List<MapOutputLocation> loc = mapLocations.get(host);
-              if (loc == null) {
-                loc = Collections.synchronizedList
-                  (new LinkedList<MapOutputLocation>());
-                mapLocations.put(host, loc);
-               }
-              loc.add(new MapOutputLocation(taskId, host, mapOutputLocation));
-              numNewMaps ++;
+                List<MapOutputLocation> loc = mapLocations.get(host);
+                if (loc == null) {
+                  loc = Collections.synchronizedList
+                    (new LinkedList<MapOutputLocation>());
+                  mapLocations.put(host, loc);
+                }
+                loc.add(new MapOutputLocation(taskId, host, mapOutputLocation));
+                numNewMaps++;
+              } else { 
+        //LOG.info(reduceTask.getTaskID() + " Thread started: " + getName());
+                LOG.debug("Reducer "  + reduceTask.getTaskID() + " is ignoring output from " + taskId.toString() );
+              }
             }
             break;
             case FAILED:
@@ -2895,7 +3141,7 @@ class ReduceTask extends Task {
             case OBSOLETE:
             {
               obsoleteMapIds.add(event.getTaskAttemptId());
-              LOG.info("Ignoring obsolete output of " + event.getTaskStatus() + 
+              LOG.info("Ignoring1 obsolete output of " + event.getTaskStatus() + 
                        " map-task: '" + event.getTaskAttemptId() + "'");
             }
             break;
@@ -2911,6 +3157,39 @@ class ReduceTask extends Task {
         return numNewMaps;
       }
     }
+
+    //if( thisReducerCaresAboutThisOutput( taskId.getTaskID(),mapTaskDependencies )) {
+    private boolean thisReducerCaresAboutThisOutput( TaskID task, int[] mapTaskDependencies ) { 
+      boolean retBool = false;
+
+      for( int i=0; i<mapTaskDependencies.length; i++) { 
+        if( task.getId() == mapTaskDependencies[i]) { 
+          retBool = true;
+        }
+      }
+
+      return retBool;
+    }
+  }
+
+  class FileSize { 
+    public long bytes;
+    public long records;
+    public long recordsRepresented;
+
+    public FileSize()
+    {
+      bytes = 0;
+      records = 0;
+      recordsRepresented = 0;
+    }
+
+    public FileSize( long inBytes, long inRecords, long inRecordsRepresented) { 
+      this.bytes = inBytes;
+      this.records = inRecords;
+      this.recordsRepresented = inRecordsRepresented;
+    }
+
   }
 
   /**

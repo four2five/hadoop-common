@@ -94,7 +94,7 @@ public class TestMRSequenceFileAsBinaryOutputFormat extends TestCase {
         dwritable.write(outbuf);
         bval.set(outbuf.getData(), 0, outbuf.getLength());
         outbuf.reset();
-        writer.write(bkey, bval);
+        writer.write(bkey, bval, (long)1);
       }
     } finally {
       writer.close(context);

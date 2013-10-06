@@ -97,7 +97,8 @@ class SpillRecord {
   public IndexRecord getIndex(int partition) {
     final int pos = partition * MapTask.MAP_OUTPUT_INDEX_RECORD_LENGTH / 8;
     return new IndexRecord(entries.get(pos), entries.get(pos + 1),
-                           entries.get(pos + 2));
+                           entries.get(pos + 2), entries.get(pos + 3),
+                           entries.get(pos+4));
   }
 
   /**
@@ -108,6 +109,8 @@ class SpillRecord {
     entries.put(pos, rec.startOffset);
     entries.put(pos + 1, rec.rawLength);
     entries.put(pos + 2, rec.partLength);
+    entries.put(pos + 3, rec.numRecords);
+    entries.put(pos + 4, rec.numRecordsRepresented);
   }
 
   /**
@@ -147,12 +150,17 @@ class IndexRecord {
   long startOffset;
   long rawLength;
   long partLength;
+  long numRecords = -2;
+  long numRecordsRepresented = -3;
 
   public IndexRecord() { }
 
-  public IndexRecord(long startOffset, long rawLength, long partLength) {
+  public IndexRecord(long startOffset, long rawLength, long partLength, long numRecords, 
+                     long representedRecords ) {
     this.startOffset = startOffset;
     this.rawLength = rawLength;
     this.partLength = partLength;
+    this.numRecords = numRecords;
+    this.numRecordsRepresented = representedRecords;
   }
 }

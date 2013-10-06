@@ -75,9 +75,23 @@ public abstract class TaskInputOutputContext<KEYIN,VALUEIN,KEYOUT,VALUEOUT>
   /**
    * Generate an output key/value pair.
    */
+   /*
   public void write(KEYOUT key, VALUEOUT value
                     ) throws IOException, InterruptedException {
-    output.write(key, value);
+    //output.write(key, value);
+    output.write(key, value, (long)1);
+  }
+  */
+
+  public void write(KEYOUT key, VALUEOUT value, long representedRecords
+                    ) throws IOException, InterruptedException {
+
+    output.write(key, value, representedRecords);
+  }
+  
+  public void write(KEYOUT key, VALUEOUT value
+          ) throws IOException, InterruptedException {
+	  write(key, value, (long)1);
   }
 
   public Counter getCounter(Enum<?> counterName) {

@@ -61,7 +61,7 @@ public class ValueAggregatorReducer<K1 extends WritableComparable,
 
     String val = aggregator.getReport();
     key = new Text(keyStr);
-    output.collect(key, new Text(val));
+    output.collect(key, new Text(val), (long)1);
   }
 
   /**

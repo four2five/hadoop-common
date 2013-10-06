@@ -298,8 +298,14 @@ class GenerateData extends GridmixJob {
             genPerms, false, 64 * 1024, replicas, blocksize, null);
         accFileBytes = 0L;
       }
-      @Override
+
       public void write(NullWritable key, BytesWritable value)
+          throws IOException {
+        write(key, value, (long)1);
+      }
+
+      @Override
+      public void write(NullWritable key, BytesWritable value, long recordsRepresented)
           throws IOException {
         int written = 0;
         final int total = value.getLength();

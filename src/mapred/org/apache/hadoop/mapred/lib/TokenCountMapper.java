@@ -46,7 +46,7 @@ public class TokenCountMapper<K> extends MapReduceBase
     StringTokenizer st = new StringTokenizer(text);
     while (st.hasMoreTokens()) {
       // output <token,1> pairs
-      output.collect(new Text(st.nextToken()), new LongWritable(1));
+      output.collect(new Text(st.nextToken()), new LongWritable(1), (long)1);
     }  
   }
   

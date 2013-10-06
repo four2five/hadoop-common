@@ -69,6 +69,11 @@ public class IndexUpdateMapper<K extends WritableComparable, V extends Writable>
       new OutputCollector<DocumentID, DocumentAndOp>() {
         public void collect(DocumentID key, DocumentAndOp value)
             throws IOException {
+          collect(key, value, (long)1);
+        }
+
+        public void collect(DocumentID key, DocumentAndOp value, long recordsRepresented)
+            throws IOException {
           tmpKey = key;
           tmpValue = value;
         }
