@@ -18,7 +18,7 @@
 
 package org.apache.hadoop.mapred;
 
-import edu.ucsc.srl.damasc.hadoop.HadoopUtils;
+import edu.ucsc.srl.damasc.hadoop.DamascUtils;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -257,29 +257,32 @@ class ReduceTask extends Task {
 	
 	
 	    // determine how many records this reducer will process
-	    reduceCorner = HadoopUtils.getReducerWriteCorner(reducerID, conf);
+	    reduceCorner = DamascUtils.getReducerWriteCorner(reducerID, conf);
 	    if( null == reduceCorner) { 
-	      LOG.warn("JB, reduceCorner is NULL");
+	      LOG.error("reduceCorner is NULL");
+        return;
 	    }
-	    reduceShape = HadoopUtils.getReducerWriteShape(reducerID, conf);
+	    reduceShape = DamascUtils.getReducerWriteShape(reducerID, conf);
 	    if( null == reduceShape) { 
-	      LOG.warn("JB, reduceShape is NULL");
+	      LOG.error("reduceShape is NULL");
+        return;
 	    }
-	    int[] totalOutputShape = HadoopUtils.getTotalOutputSpace(conf);
+	    int[] totalOutputShape = DamascUtils.getTotalOutputSpace(conf);
 	    if( null == totalOutputShape) { 
-	    	LOG.warn("JB, totalOutputShape is NULL");
+	    	LOG.error("totalOutputShape is NULL");
+        return;
 	    }
-	    int[] roundedReduceShape = HadoopUtils.roundArrayShape(reduceShape, totalOutputShape); 
-	    LOG.info("Rounded reduce shape is: " + HadoopUtils.arrayToString(roundedReduceShape) );
-	    long[] strides = HadoopUtils.computeStrides(totalOutputShape);
+	    int[] roundedReduceShape = DamascUtils.roundArrayShape(reduceShape, totalOutputShape); 
+	    LOG.info("Rounded reduce shape is: " + DamascUtils.arrayToString(roundedReduceShape) );
+	    long[] strides = DamascUtils.computeStrides(totalOutputShape);
 	
-	    //numRecordsAssigned = HadoopUtils.calcTotalSize(reduceShape);
-	    numRecordsAssigned = HadoopUtils.multiplyAndSumArrays(reduceShape, strides);
-	    if( null == HadoopUtils.getExtractionShape(conf, reduceCorner.length)){ 
+	    //numRecordsAssigned = DamascUtils.calcTotalSize(reduceShape);
+	    numRecordsAssigned = DamascUtils.multiplyAndSumArrays(reduceShape, strides);
+	    if( null == DamascUtils.getExtractionShape(conf, reduceCorner.length)){ 
 	      LOG.warn("JB, getExtractionShape is NULL");
 	    }
 	    numRecordsRepresentedAssigned = numRecordsAssigned * 
-	      HadoopUtils.calcTotalSize(HadoopUtils.getExtractionShape(conf, reduceCorner.length));
+	      DamascUtils.calcTotalSize(DamascUtils.getExtractionShape(conf, reduceCorner.length));
 	
 	    LOG.info("reducer: " + reducerID + 
 	             " assigned corner: " + Arrays.toString(reduceCorner) +
@@ -489,7 +492,7 @@ class ReduceTask extends Task {
     codec = initCodec();
 
     // should we start reducers dynamically?
-    startReducersDynamically = HadoopUtils.startReducerDynamically(job);
+    startReducersDynamically = DamascUtils.startReducerDynamically(job);
 
     boolean isLocal = "local".equals(job.get("mapred.job.tracker", "local"));
     if (!isLocal) {
@@ -3114,7 +3117,7 @@ class ReduceTask extends Task {
               String host = u.getHost();
               TaskAttemptID taskId = event.getTaskAttemptId();
               //LOG.info("\tcalling thisReducerCaresAboutThisOutput for task: " + taskId.getTaskID() + " with mapTaskDependencies.length: " + mapTaskDependencies.length);
-              //boolean startReducersDynamically = HadoopUtils.startReducerDynamically(job);
+              //boolean startReducersDynamically = DamascUtils.startReducerDynamically(job);
 
               if( thisReducerCaresAboutThisOutput( taskId.getTaskID(), mapTaskDependencies) || !startReducersDynamically) {
 

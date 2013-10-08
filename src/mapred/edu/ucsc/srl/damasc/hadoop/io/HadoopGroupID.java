@@ -6,7 +6,7 @@ import java.io.DataInput;
 import java.io.DataOutput;
 
 import edu.ucsc.srl.damasc.hadoop.io.HadoopArraySpec;
-import edu.ucsc.srl.damasc.hadoop.HadoopUtils;
+import edu.ucsc.srl.damasc.hadoop.DamascUtils;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -192,7 +192,7 @@ public class HadoopGroupID implements WritableComparable {
    * logical space
    */
   public long flatten( int[] variableShape ) throws IOException {
-    long[] strides = HadoopUtils.computeStrides( variableShape);
+    long[] strides = DamascUtils.computeStrides( variableShape);
     long flattenedID = 0;
 
     for( int i = 0; i < this._groupID.length; i++) {
@@ -220,7 +220,7 @@ public class HadoopGroupID implements WritableComparable {
    */
   public int[] unflatten( int[] variableShape, long flattenedValue ) 
                           throws IOException {
-    long[] strides = HadoopUtils.computeStrides( variableShape);
+    long[] strides = DamascUtils.computeStrides( variableShape);
     int[] results = new int[variableShape.length];
 
     for( int i = 0; i < variableShape.length; i++) {

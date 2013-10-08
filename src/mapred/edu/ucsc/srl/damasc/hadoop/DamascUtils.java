@@ -6,6 +6,7 @@ import java.util.Arrays;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Iterator;
+import java.util.regex.Pattern;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -22,12 +23,12 @@ import edu.ucsc.srl.damasc.hadoop.io.HadoopGroupID;
  * A collection of methods that are used in various parts of the code to read / write
  * global configuration data as well as some small helper functions
  */
-public class HadoopUtils {
+public class DamascUtils {
 
     //private static final long defaultReducerKeyLimit = 
     //  1024*1024; // 1 million keys 
 
-    private static final Log LOG = LogFactory.getLog(HadoopUtils.class);
+    private static final Log LOG = LogFactory.getLog(DamascUtils.class);
     public static final String PARTITIONER_CLASS = "damasc.partitioner_class";
     public static final String REDUCER_SHAPE_WEIGHT = "damasc.reducer_shape_weight";
     public static final String CEPH_DEFAULT_URI = "damasc.ceph_uri";
@@ -109,7 +110,7 @@ public class HadoopUtils {
     //private static boolean reducerKeyLimitSet = false;
 
 
-    public HadoopUtils() {
+    public DamascUtils() {
     }
 
     public static enum Operator { average, simpleMax, max, simpleMedian, median, nulltest, optUnknown }
@@ -175,8 +176,8 @@ public class HadoopUtils {
       }
       */
 
-      String inVariableAsString = HadoopUtils.arrayToString(inVariableShape);
-      LOG.debug("in HadoopUtils, setting VariableShape to: " + inVariableAsString);
+      String inVariableAsString = DamascUtils.arrayToString(inVariableShape);
+      LOG.debug("in DamascUtils, setting VariableShape to: " + inVariableAsString);
       conf.set( VARIABLE_SHAPE_PREFIX, inVariableAsString);
 
       variableShape = inVariableShape;
@@ -195,23 +196,29 @@ public class HadoopUtils {
         // now we force the variable shape to be set at run time and not
         // parsed from the input spec
 
-        //if( !variableShapeSet) {
+        String dimString = conf.get(VARIABLE_SHAPE_PREFIX, "");
 
-            String dimString = conf.get(VARIABLE_SHAPE_PREFIX, "");
+        // sanity checking
+        if (dimString == "") {
+            return null;
+        } else {
+            String openB = Pattern.quote("[");
+            String closeB = Pattern.quote("]");
+            dimString = dimString.replaceAll(openB,"");
+            dimString = dimString.replaceAll(closeB,"");
+            dimString = dimString.replaceAll("\\s+", "");
+        }
 
-            String[] dimStrings = dimString.split(",");
-            variableShape = new int[dimStrings.length];
+        String[] dimStrings = dimString.split(",");
+        variableShape = new int[dimStrings.length];
 
-            for( int i=0; i<variableShape.length; i++) {
-                variableShape[i] = Integer.parseInt(dimStrings[i]);
-            }
-
-
-            //variableShapeSet = true;
-        //}
+        for( int i=0; i<variableShape.length; i++) {
+            variableShape[i] = Integer.parseInt(dimStrings[i]);
+        }
 
         return variableShape.clone();
     }
+
     /**
      * Indicates if the Variable Shape has already been set for the current job
      * @return boolean true if the variable shape has been set, false otherwise
@@ -353,8 +360,8 @@ public class HadoopUtils {
      */
     public static long getValidLow(Configuration conf) {
         //if ( !validSet ) {
-            validLow = conf.getLong(HadoopUtils.LOW_FILTER, Long.MIN_VALUE);
-            validHigh = conf.getLong(HadoopUtils.HIGH_FILTER, Long.MAX_VALUE);
+            validLow = conf.getLong(DamascUtils.LOW_FILTER, Long.MIN_VALUE);
+            validHigh = conf.getLong(DamascUtils.HIGH_FILTER, Long.MAX_VALUE);
          //   validSet = true;
         //}
 
@@ -368,8 +375,8 @@ public class HadoopUtils {
      */
     public static long getValidHigh(Configuration conf) {
         //if ( !validSet ) {
-            validLow = conf.getLong(HadoopUtils.LOW_FILTER, Long.MIN_VALUE);
-            validHigh = conf.getLong(HadoopUtils.HIGH_FILTER, Long.MAX_VALUE);
+            validLow = conf.getLong(DamascUtils.LOW_FILTER, Long.MIN_VALUE);
+            validHigh = conf.getLong(DamascUtils.HIGH_FILTER, Long.MAX_VALUE);
          //   validSet = true;
         //}
 
@@ -383,7 +390,7 @@ public class HadoopUtils {
      * No Scan feature is enabled or not
      */
     public static String getNoScanString(Configuration conf) {
-        return conf.get(HadoopUtils.NO_SCAN, "TRUE");  // default to true (no scan enabled)
+        return conf.get(DamascUtils.NO_SCAN, "TRUE");  // default to true (no scan enabled)
     }
 
     /**
@@ -393,7 +400,7 @@ public class HadoopUtils {
      * configured for
      */
     public static String getNumberReducersString(Configuration conf) {
-        return conf.get(HadoopUtils.NUMBER_REDUCERS, "1"); // default to one reducer
+        return conf.get(DamascUtils.NUMBER_REDUCERS, "1"); // default to one reducer
     }
 
     /**
@@ -403,7 +410,7 @@ public class HadoopUtils {
      * should be used for this job
      */
     public static String getUseCombinerString(Configuration conf) {
-        return conf.get(HadoopUtils.USE_COMBINER, "TRUE");  // default to true (combiner enabled)
+        return conf.get(DamascUtils.USE_COMBINER, "TRUE");  // default to true (combiner enabled)
     }
 
     /**
@@ -414,7 +421,7 @@ public class HadoopUtils {
      * Query Aware partitioning should be used for this job
      */
     public static String getQueryDependantString(Configuration conf) {
-        return conf.get(HadoopUtils.QUERY_DEPENDANT, "FALSE"); // default to false (not query dependent)
+        return conf.get(DamascUtils.QUERY_DEPENDANT, "FALSE"); // default to false (not query dependent)
     }
 
     /**
@@ -424,7 +431,7 @@ public class HadoopUtils {
      * this program is applying a Holistic function
      */
     public static String getHolisticString(Configuration conf) {
-        return conf.get(HadoopUtils.HOLISTIC, "FALSE"); // default to false (not holistic)
+        return conf.get(DamascUtils.HOLISTIC, "FALSE"); // default to false (not holistic)
     }
 
     /**
@@ -434,7 +441,7 @@ public class HadoopUtils {
      * this program
      */
     public static String getOperatorString(Configuration conf) {
-        return conf.get(HadoopUtils.OPERATOR, "");
+        return conf.get(DamascUtils.OPERATOR, "");
     }
 
     /**
@@ -444,15 +451,15 @@ public class HadoopUtils {
      * @return a String containing the Partitioning mode 
      */
     public static String getPartModeString(Configuration conf) {
-        return conf.get(HadoopUtils.PART_MODE, "Record");
+        return conf.get(DamascUtils.PART_MODE, "Record");
     }
 
     public static String getPartitionerClassString(Configuration conf) { 
-      return conf.get(HadoopUtils.PARTITIONER_CLASS, "arrayspec");
+      return conf.get(DamascUtils.PARTITIONER_CLASS, "arrayspec");
     }
 
     public static String getFSTypeString(Configuration conf) {
-        return conf.get(HadoopUtils.FS_TYPE, "unknown");
+        return conf.get(DamascUtils.FS_TYPE, "unknown");
     }
 
     /**
@@ -462,7 +469,7 @@ public class HadoopUtils {
      * @return a String containing the Placement mode 
      */
     public static String getPlacementModeString(Configuration conf) {
-        return conf.get(HadoopUtils.PLACEMENT_MODE, "Sampling");
+        return conf.get(DamascUtils.PLACEMENT_MODE, "Sampling");
     }
 
     /**
@@ -472,13 +479,13 @@ public class HadoopUtils {
      * @return a String containing the multiple file mode 
      */
     public static String getMultiFileModeString(Configuration conf) {
-        return conf.get(HadoopUtils.MULTI_FILE_MODE, "concat");
+        return conf.get(DamascUtils.MULTI_FILE_MODE, "concat");
     }
  
     // use /etc/ceph/ceph.conf as the default Ceph configuration file path
     public static String getCephConfPathString(Configuration conf) {
-        LOG.debug("CEPH_CONF_PATH: " + HadoopUtils.CEPH_CONF_PATH);
-        String foo = conf.get(HadoopUtils.CEPH_CONF_PATH, "/etc/ceph/ceph.conf");
+        LOG.debug("CEPH_CONF_PATH: " + DamascUtils.CEPH_CONF_PATH);
+        String foo = conf.get(DamascUtils.CEPH_CONF_PATH, "/etc/ceph/ceph.conf");
         LOG.debug("foo: " + foo);
         return foo;
     }
@@ -771,7 +778,7 @@ public class HadoopUtils {
     }
 
     public static void setNumberReducers(Configuration conf, int numReducers) {
-        conf.set(HadoopUtils.NUMBER_REDUCERS, Integer.toString(numReducers)); 
+        conf.set(DamascUtils.NUMBER_REDUCERS, Integer.toString(numReducers)); 
         // do this to force the next call to getNumberReducers:w
         //numberReducersSet = false;
     }
@@ -1102,18 +1109,18 @@ public class HadoopUtils {
     public static int[] inflate( int[] variableShape, long element ) 
       throws IOException {
         int[] retArray = new int[variableShape.length];
-        LOG.debug("inflage: variableShape: " + HadoopUtils.arrayToString(variableShape) + " element: " + element);
+        LOG.debug("inflage: variableShape: " + DamascUtils.arrayToString(variableShape) + " element: " + element);
         
         long[] strides = computeStrides( variableShape );
         
-        LOG.debug("inflate: strides: " + HadoopUtils.arrayToString(strides));
+        LOG.debug("inflate: strides: " + DamascUtils.arrayToString(strides));
 
         for ( int i = 0; i < variableShape.length; i++) {
             retArray[i] = (int)(element / strides[i]);
             element = element - (retArray[i] * strides[i]);    
         }
         
-        LOG.debug("inflate returning: " + HadoopUtils.arrayToString(retArray));
+        LOG.debug("inflate returning: " + DamascUtils.arrayToString(retArray));
 
         return retArray;
     } 
@@ -1370,6 +1377,10 @@ public class HadoopUtils {
 
   public static int[] getTotalOutputSpace(Configuration conf) { 
     int[] variableShape = getVariableShape(conf);
+    if (null == variableShape) { 
+      return null;
+    }
+
     int[] extractionShape = getExtractionShape(conf, variableShape.length);
 
     int[] outputSpace = new int[variableShape.length];
@@ -1378,7 +1389,7 @@ public class HadoopUtils {
       outputSpace[i] = (int)((double)variableShape[i] / extractionShape[i]); 
     }
 
-    //LOG.debug("Total output space: " + HadoopUtils.arrayToString(outputSpace));
+    //LOG.debug("Total output space: " + DamascUtils.arrayToString(outputSpace));
     return outputSpace;
   }
 
@@ -1423,7 +1434,7 @@ public class HadoopUtils {
 
     // total size in terms of keys
     long totalSize = calcTotalSize(totalOutputSpace);
-    LOG.debug("totalOS: " + HadoopUtils.arrayToString(totalOutputSpace) + 
+    LOG.debug("totalOS: " + DamascUtils.arrayToString(totalOutputSpace) + 
                        " maxRedKeys: " + maxReducerKeyCount);
     int numReducers = (int)(Math.ceil((double)totalSize / maxReducerKeyCount));
 
@@ -1446,7 +1457,7 @@ public class HadoopUtils {
     // reasonable default value
     int recordDimension = totalOutputShape.length - 1;
     long sizeSoFar = 1;
-    long totalSize = HadoopUtils.calcTotalSize(totalOutputShape);
+    long totalSize = DamascUtils.calcTotalSize(totalOutputShape);
 
     int[] stepSize = new int[totalOutputShape.length];
 
@@ -1462,7 +1473,7 @@ public class HadoopUtils {
     // highest dimension, then it's a single cell's length of data
     for( int i=0; i<totalOutputShape.length; i++) { 
       stepSize[i] = 1;
-      sizeSoFar = HadoopUtils.calcTotalSize(stepSize);
+      sizeSoFar = DamascUtils.calcTotalSize(stepSize);
 
       // make sure that the last step won't vary too much from all early steps
 
@@ -1488,13 +1499,14 @@ public class HadoopUtils {
     int[] totalOutputShape = getTotalOutputSpace(conf);
     if( null == totalOutputShape) { 
     	LOG.warn("getReducerWriteCorner: totalOutputShape is NULL");
+      return null;
     }
     int[] returnCorner = new int[totalOutputShape.length];
 
     int numReducers = getNumberReducers(conf);
     long maxReducerKeyCount = getReducerKeyLimit(conf);
 
-    int recordDim = HadoopUtils.determineRecordDimension(conf);
+    int recordDim = DamascUtils.determineRecordDimension(conf);
 
     LOG.debug("In getReducerWriteCorner, recordDim: " + recordDim);
 
@@ -1527,7 +1539,7 @@ public class HadoopUtils {
     int numReducers = getNumberReducers(conf);
     long maxReducerKeyCount = getReducerKeyLimit(conf);
 
-    int recordDim = HadoopUtils.determineRecordDimension(conf);
+    int recordDim = DamascUtils.determineRecordDimension(conf);
 
 
     LOG.debug("In getReducerWriteShape, recordDim: " + recordDim);
@@ -1634,7 +1646,7 @@ public class HadoopUtils {
     //returnCorner = roundArrayShape(returnCorner, totalOutputShape);
 
     int[] fakeArray = Arrays.copyOf(shape, shape.length);
-    fakeArray = HadoopUtils.roundArrayShape(fakeArray, totalShape);
+    fakeArray = DamascUtils.roundArrayShape(fakeArray, totalShape);
     LOG.info("fakeArray: " + Arrays.toString(fakeArray) + " total shape: " + Arrays.toString(totalShape));
     LOG.info("pre-correct: " + 
       "\tcorner: " + Arrays.toString(corner) + 
@@ -1644,9 +1656,9 @@ public class HadoopUtils {
     // the difference to the shape
     long shapeL = 0;
     try { 
-      long cornerL = HadoopUtils.flatten(totalShape, corner);
-      shapeL = HadoopUtils.flatten(totalShape, shape);
-      long totalShapeL = HadoopUtils.flatten(totalShape, totalShape);
+      long cornerL = DamascUtils.flatten(totalShape, corner);
+      shapeL = DamascUtils.flatten(totalShape, shape);
+      long totalShapeL = DamascUtils.flatten(totalShape, totalShape);
       long[] strides = computeStrides(totalShape);
       /*
       if( (cornerL + shapeL ) > totalShapeL) { 
@@ -1662,7 +1674,7 @@ public class HadoopUtils {
       // test
       shapeL = totalShapeL - cornerL - 1; // subtract 1 to get the actual last element, not the next one
 
-      shape = HadoopUtils.inflate(totalShape, shapeL);
+      shape = DamascUtils.inflate(totalShape, shapeL);
     } catch( IOException e ) { 
       e.printStackTrace();
     }
@@ -1728,8 +1740,8 @@ public class HadoopUtils {
     recordDim = determineRecordDimensionWeighted( outputWriteShape, numReducers,
                                                   weight, maxReducerKeyCount);
 
-    LOG.debug("total output shape: " + HadoopUtils.arrayToString(totalOutputSpace) + 
-                       " outputWriteShape: " + HadoopUtils.arrayToString(outputWriteShape) + 
+    LOG.debug("total output shape: " + DamascUtils.arrayToString(totalOutputSpace) + 
+                       " outputWriteShape: " + DamascUtils.arrayToString(outputWriteShape) + 
                        " record dim: " + recordDim );
 
     int[] retArray = new int[outputWriteShape.length];
