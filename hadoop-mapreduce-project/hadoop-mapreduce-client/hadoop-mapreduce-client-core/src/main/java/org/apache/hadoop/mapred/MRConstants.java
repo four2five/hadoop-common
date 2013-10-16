@@ -48,6 +48,10 @@ public interface MRConstants {
    */
   public static final String RAW_MAP_OUTPUT_LENGTH = "Raw-Map-Output-Length";
 
+  public static final String MAP_OUTPUT_NUM_RECORDS = "Map-Output-Num-Records";
+
+  public static final String MAP_OUTPUT_NUM_RECORDS_REPRESENTED = "Map-Output-Num-Records-Represented"
+
   /**
    * The map task from which the map output data is being transferred
    */
