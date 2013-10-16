@@ -64,6 +64,9 @@ public interface TaskInputOutputContext<KEYIN,VALUEIN,KEYOUT,VALUEOUT>
   public void write(KEYOUT key, VALUEOUT value) 
       throws IOException, InterruptedException;
 
+  public void write(KEYOUT key, VALUEOUT value, long recordsRepresented) 
+      throws IOException, InterruptedException;
+
   /**
    * Get the {@link OutputCommitter} for the task-attempt.
    * @return the <code>OutputCommitter</code> for the task-attempt

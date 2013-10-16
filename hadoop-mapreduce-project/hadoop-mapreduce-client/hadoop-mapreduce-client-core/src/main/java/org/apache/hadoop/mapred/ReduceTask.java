@@ -570,10 +570,14 @@ public class ReduceTask extends Task {
       fileOutputByteCounter.increment(bytesOutCurr - bytesOutPrev);
     }
 
-    @Override
     public void write(K key, V value) throws IOException, InterruptedException {
+      write(key, value, (long)1);
+    }
+
+    @Override
+    public void write(K key, V value, long recordsRepresented) throws IOException, InterruptedException {
       long bytesOutPrev = getOutputBytes(fsStats);
-      real.write(key,value);
+      real.write(key,value, recordsRepresented);
       long bytesOutCurr = getOutputBytes(fsStats);
       fileOutputByteCounter.increment(bytesOutCurr - bytesOutPrev);
       outputRecordCounter.increment(1);

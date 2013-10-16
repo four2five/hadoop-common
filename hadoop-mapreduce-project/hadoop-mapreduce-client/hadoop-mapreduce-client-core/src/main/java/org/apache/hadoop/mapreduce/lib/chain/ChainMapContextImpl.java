@@ -104,10 +104,15 @@ class ChainMapContextImpl<KEYIN, VALUEIN, KEYOUT, VALUEOUT> implements
     return base.getOutputCommitter();
   }
 
-  @Override
   public void write(KEYOUT key, VALUEOUT value) throws IOException,
       InterruptedException {
-    output.write(key, value);
+    write(key, value, (long)1);
+  }
+
+  @Override
+  public void write(KEYOUT key, VALUEOUT value, long recordsRepresented) throws IOException,
+      InterruptedException {
+    output.write(key, value, recordsRepresented);
   }
 
   @Override

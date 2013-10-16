@@ -1303,8 +1303,13 @@ abstract public class Task implements Writable, Configurable {
 
     public synchronized void collect(K key, V value)
         throws IOException {
+      collect(key, value, (long)1);
+    }
+
+    public synchronized void collect(K key, V value, long recordsRepresented)
+        throws IOException {
       outCounter.increment(1);
-      writer.append(key, value);
+      writer.append(key, value, recordsRepresented);
       if ((outCounter.getValue() % progressBar) == 0) {
         progressable.progress();
       }
@@ -1617,10 +1622,15 @@ abstract public class Task implements Writable, Configurable {
       public void close(org.apache.hadoop.mapreduce.TaskAttemptContext context){
       }
 
-      @Override
       public void write(K key, V value
                         ) throws IOException, InterruptedException {
-        output.collect(key,value);
+        write(key, value, (long)1);
+      }
+
+      @Override
+      public void write(K key, V value, long recordsRepresented
+                        ) throws IOException, InterruptedException {
+        output.collect(key,value, recordsRepresented);
       }
     }
 
