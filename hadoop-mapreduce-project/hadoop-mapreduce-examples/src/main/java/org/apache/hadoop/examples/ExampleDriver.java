@@ -38,6 +38,8 @@ public class ExampleDriver {
     try {
       pgd.addClass("wordcount", WordCount.class, 
                    "A map/reduce program that counts the words in the input files.");
+      pgd.addClass("damascwordcount", DamascWordCount.class, 
+                   "A map/reduce program that counts the words in the input files.");
       pgd.addClass("wordmean", WordMean.class,
                    "A map/reduce program that counts the average length of the words in the input files.");
       pgd.addClass("wordmedian", WordMedian.class,

@@ -419,7 +419,9 @@ public class YARNRunner implements ClientProtocol {
         MRJobConfig.MR_AM_COMMAND_OPTS, MRJobConfig.MR_AM_ENV);
     vargs.add(mrAppMasterUserOptions);
     
-    vargs.add(MRJobConfig.APPLICATION_MASTER_CLASS);
+    String mrAppMasterClass = conf.get(MRJobConfig.APPLICATION_MASTER_CLASS,
+        MRJobConfig.DEFAULT_APPLICATION_MASTER_CLASS);
+    vargs.add(mrAppMasterClass);
     vargs.add("1>" + ApplicationConstants.LOG_DIR_EXPANSION_VAR +
         Path.SEPARATOR + ApplicationConstants.STDOUT);
     vargs.add("2>" + ApplicationConstants.LOG_DIR_EXPANSION_VAR +
