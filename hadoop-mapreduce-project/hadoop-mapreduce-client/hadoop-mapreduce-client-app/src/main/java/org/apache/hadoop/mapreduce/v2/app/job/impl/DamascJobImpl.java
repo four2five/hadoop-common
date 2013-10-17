@@ -1,20 +1,20 @@
-/**
-* Licensed to the Apache Software Foundation (ASF) under one
-* or more contributor license agreements.  See the NOTICE file
-* distributed with this work for additional information
-* regarding copyright ownership.  The ASF licenses this file
-* to you under the Apache License, Version 2.0 (the
-* "License"); you may not use this file except in compliance
-* with the License.  You may obtain a copy of the License at
-*
-*     http://www.apache.org/licenses/LICENSE-2.0
-*
-* Unless required by applicable law or agreed to in writing, software
-* distributed under the License is distributed on an "AS IS" BASIS,
-* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific language governing permissions and
-* limitations under the License.
-*/
+/////
+// Licensed to the Apache Software Foundation (ASF) under one
+// or more contributor license agreements.  See the NOTICE file
+// distributed with this work for additional information
+// regarding copyright ownership.  The ASF licenses this file
+// to you under the Apache License, Version 2.0 (the
+// "License"); you may not use this file except in compliance
+// with the License.  You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+///
 
 package org.apache.hadoop.mapreduce.v2.app.job.impl;
 
@@ -128,21 +128,23 @@ import org.apache.hadoop.yarn.state.StateMachine;
 import org.apache.hadoop.yarn.state.StateMachineFactory;
 import org.apache.hadoop.yarn.util.Clock;
 
-/** Implementation of Job interface. Maintains the state machines of Job.
- * The read and write calls use ReadWriteLock for concurrency.
- */
+///// Implementation of Job interface. Maintains the state machines of Job.
+ // The read and write calls use ReadWriteLock for concurrency.
+ ///
 @SuppressWarnings({ "rawtypes", "unchecked" })
 public class DamascJobImpl 
   extends org.apache.hadoop.mapreduce.v2.app.job.impl.JobImpl 
   implements org.apache.hadoop.mapreduce.v2.app.job.Job, EventHandler<JobEvent> {
 
+  private static final Log LOG = LogFactory.getLog(DamascJobImpl.class);
+
+  /*
   private static final TaskAttemptCompletionEvent[]
     EMPTY_TASK_ATTEMPT_COMPLETION_EVENTS = new TaskAttemptCompletionEvent[0];
 
   private static final TaskCompletionEvent[]
     EMPTY_TASK_COMPLETION_EVENTS = new TaskCompletionEvent[0];
 
-  private static final Log LOG = LogFactory.getLog(DamascJobImpl.class);
 
   //The maximum fraction of fetch failures allowed for a map
   private static final double MAX_ALLOWED_FETCH_FAILURES_FRACTION = 0.5;
@@ -173,9 +175,9 @@ public class DamascJobImpl
   private final Object tasksSyncHandle = new Object();
   private final Set<TaskId> mapTasks = new LinkedHashSet<TaskId>();
   private final Set<TaskId> reduceTasks = new LinkedHashSet<TaskId>();
-  /**
-   * maps nodes to tasks that have run on those nodes
-   */
+  /////
+   // maps nodes to tasks that have run on those nodes
+   ///
   private final HashMap<NodeId, List<TaskAttemptId>> 
     nodesToSucceededTaskAttempts = new HashMap<NodeId, List<TaskAttemptId>>();
 
@@ -643,6 +645,7 @@ public class DamascJobImpl
   private ScheduledFuture failWaitTriggerScheduledFuture;
 
   private JobState lastNonFinalState = JobState.NEW;
+  */
 
   public DamascJobImpl(JobId jobId, ApplicationAttemptId applicationAttemptId,
       Configuration conf, EventHandler eventHandler,
@@ -653,6 +656,21 @@ public class DamascJobImpl
       OutputCommitter committer, boolean newApiCommitter, String userName,
       long appSubmitTime, List<AMInfo> amInfos, AppContext appContext,
       JobStateInternal forcedState, String forcedDiagnostic) {
+
+    super(jobId, applicationAttemptId,
+      conf, eventHandler,
+      taskAttemptListener,
+      jobTokenSecretManager,
+      jobCredentials, clock,
+       completedTasksFromPreviousRun, metrics,
+      committer, newApiCommitter, userName,
+      appSubmitTime,  amInfos, appContext,
+      forcedState, forcedDiagnostic);
+
+      LOG.info("Running DamascJobImpl");
+  }
+
+  /*
     this.applicationAttemptId = applicationAttemptId;
     this.jobId = jobId;
     this.jobName = conf.get(JobContext.JOB_NAME, "<missing job name>");
@@ -689,8 +707,6 @@ public class DamascJobImpl
       this.diagnostics.add(forcedDiagnostic);
     }
 
-    LOG.info("Running DamascJobImpl");
-  }
 
   protected StateMachine<JobStateInternal, JobEventType, JobEvent> getStateMachine() {
     return stateMachine;
@@ -868,9 +884,9 @@ public class DamascJobImpl
     this.readLock.lock();
     try {
       computeProgress();
-      return (this.setupProgress * this.setupWeight + this.cleanupProgress
-          * this.cleanupWeight + this.mapProgress * this.mapWeight + this.reduceProgress
-          * this.reduceWeight);
+      return (this.setupProgress // this.setupWeight + this.cleanupProgress
+          // this.cleanupWeight + this.mapProgress // this.mapWeight + this.reduceProgress
+          // this.reduceWeight);
     } finally {
       this.readLock.unlock();
     }
@@ -960,9 +976,9 @@ public class DamascJobImpl
   }
 
   @Override
-  /**
-   * The only entry point to change the Job.
-   */
+  /////
+   // The only entry point to change the Job.
+   ///
   public void handle(JobEvent event) {
     if (LOG.isDebugEnabled()) {
       LOG.debug("Processing " + event.getJobId() + " of type "
@@ -1070,12 +1086,12 @@ public class DamascJobImpl
     this.getEventHandler().handle(new JobHistoryEvent(this.jobId, jfe));    
   }
   
-  /**
-   * Create the default file System for this job.
-   * @param conf the conf object
-   * @return the default filesystem for this job
-   * @throws IOException
-   */
+  /////
+   // Create the default file System for this job.
+   // @param conf the conf object
+   // @return the default filesystem for this job
+   // @throws IOException
+   ///
   protected FileSystem getFileSystem(Configuration conf) throws IOException {
     return FileSystem.get(conf);
   }
@@ -1126,10 +1142,10 @@ public class DamascJobImpl
     return queueName;
   }
   
-  /*
-   * (non-Javadoc)
-   * @see org.apache.hadoop.mapreduce.v2.app.job.Job#getConfFile()
-   */
+  ///
+   // (non-Javadoc)
+   // @see org.apache.hadoop.mapreduce.v2.app.job.Job#getConfFile()
+   ///
   @Override
   public Path getConfFile() {
     return remoteJobConfFile;
@@ -1151,10 +1167,10 @@ public class DamascJobImpl
     return reduceTasks.size();  //FIXME: why indirection? return numReduceTasks
   }
   
-  /*
-   * (non-Javadoc)
-   * @see org.apache.hadoop.mapreduce.v2.app.job.Job#getJobACLs()
-   */
+  ///
+   // (non-Javadoc)
+   // @see org.apache.hadoop.mapreduce.v2.app.job.Job#getJobACLs()
+   ///
   @Override
   public Map<JobACL, AccessControlList> getJobACLs() {
     return Collections.unmodifiableMap(jobACLs);
@@ -1165,10 +1181,10 @@ public class DamascJobImpl
     return amInfos;
   }
 
-  /**
-   * Decide whether job can be run in uber mode based on various criteria.
-   * @param dataInputLength Total length for all splits
-   */
+  /////
+   // Decide whether job can be run in uber mode based on various criteria.
+   // @param dataInputLength Total length for all splits
+   ///
   private void makeUberDecision(long dataInputLength) {
     //FIXME:  need new memory criterion for uber-decision (oops, too late here;
     // until AM-resizing supported,
@@ -1268,10 +1284,10 @@ public class DamascJobImpl
     }
   }
   
-  /**
-   * ChainMapper and ChainReducer must execute in parallel, so they're not
-   * compatible with uberization/LocalContainerLauncher (100% sequential).
-   */
+  /////
+   // ChainMapper and ChainReducer must execute in parallel, so they're not
+   // compatible with uberization/LocalContainerLauncher (100% sequential).
+   ///
   private boolean isChainJob(Configuration conf) {
     boolean isChainJob = false;
     try {
@@ -1315,19 +1331,9 @@ public class DamascJobImpl
     // RMContainerAllocator
   }
 
-  /*
-  private int getBlockSize() {
-    String inputClassName = conf.get(MRJobConfig.INPUT_FORMAT_CLASS_ATTR);
-    if (inputClassName != null) {
-      Class<?> inputClass - Class.forName(inputClassName);
-      if (FileInputFormat<K, V>)
-    }
-  }
-  */
-  /**
-    * Get the workflow adjacencies from the job conf
-    * The string returned is of the form "key"="value" "key"="value" ...
-    */
+    // Get the workflow adjacencies from the job conf
+    // The string returned is of the form "key"="value" "key"="value" ...
+    
   private static String getWorkflowAdjacencies(Configuration conf) {
     int prefixLen = MRJobConfig.WORKFLOW_ADJACENCY_PREFIX_STRING.length();
     Map<String,String> adjacencies = 
@@ -1361,13 +1367,12 @@ public class DamascJobImpl
   public static class InitTransition 
       implements MultipleArcTransition<DamascJobImpl, JobEvent, JobStateInternal> {
 
-    /**
-     * Note that this transition method is called directly (and synchronously)
-     * by MRAppMaster's init() method (i.e., no RPC, no thread-switching;
-     * just plain sequential call within AM context), so we can trigger
-     * modifications in AM state from here (at least, if AM is written that
-     * way; MR version is).
-     */
+     // Note that this transition method is called directly (and synchronously)
+     // by MRAppMaster's init() method (i.e., no RPC, no thread-switching;
+     // just plain sequential call within AM context), so we can trigger
+     // modifications in AM state from here (at least, if AM is written that
+     // way; MR version is).
+     
     @Override
     public JobStateInternal transition(DamascJobImpl job, JobEvent event) {
       job.metrics.submittedJob(job);
@@ -1541,10 +1546,9 @@ public class DamascJobImpl
       return allTaskSplitMetaInfo;
     }
 
-    /**
-     * If the number of tasks are greater than the configured value
-     * throw an exception that will fail job initialization
-     */
+     // If the number of tasks are greater than the configured value
+     // throw an exception that will fail job initialization
+     
     private void checkTaskLimits() {
       // no code, for now
     }
@@ -1581,10 +1585,9 @@ public class DamascJobImpl
 
   public static class StartTransition
   implements SingleArcTransition<DamascJobImpl, JobEvent> {
-    /**
-     * This transition executes in the event-dispatcher thread, though it's
-     * triggered in MRAppMaster's startJobs() method.
-     */
+     // This transition executes in the event-dispatcher thread, though it's
+     // triggered in MRAppMaster's startJobs() method.
+     
     @Override
     public void transition(DamascJobImpl job, JobEvent event) {
       JobStartEvent jse = (JobStartEvent) event;
@@ -1921,10 +1924,10 @@ public class DamascJobImpl
 
     protected JobStateInternal checkJobAfterTaskCompletion(DamascJobImpl job) {
       //check for Job failure
-      if (job.failedMapTaskCount*100 > 
-        job.allowedMapFailuresPercent*job.numMapTasks ||
-        job.failedReduceTaskCount*100 > 
-        job.allowedReduceFailuresPercent*job.numReduceTasks) {
+      if (job.failedMapTaskCount//100 > 
+        job.allowedMapFailuresPercent//job.numMapTasks ||
+        job.failedReduceTaskCount//100 > 
+        job.allowedReduceFailuresPercent//job.numReduceTasks) {
         job.setFinishTime();
 
         String diagnosticMsg = "Job failed as tasks failed. " +
@@ -2154,4 +2157,5 @@ public class DamascJobImpl
     jobConf.addResource(fc.open(confPath), confPath.toString());
     return jobConf;
   }
+  */
 }
