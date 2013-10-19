@@ -1264,6 +1264,11 @@ public class JobImpl implements org.apache.hadoop.mapreduce.v2.app.job.Job,
       LOG.info(msg.toString());
     }
   }
+
+  // Determine whether this job should use dependency scheduling
+  public static boolean useDependencyScheduling(Configuration conf) { 
+    return conf.getBoolean(MRJobConfig.DEPENDENCY_SCHEDULING, false); 
+  } 
   
   /**
    * ChainMapper and ChainReducer must execute in parallel, so they're not
@@ -1491,6 +1496,8 @@ public class JobImpl implements org.apache.hadoop.mapreduce.v2.app.job.Job,
 
     private void createMapTasks(JobImpl job, long inputLength,
                                 TaskSplitMetaInfo[] splits) {
+      LOG.info("In createMapTasks(), useDeps: " + useDependencyScheduling(job.conf));
+
       for (int i=0; i < job.numMapTasks; ++i) {
         TaskImpl task =
             new MapTaskImpl(job.jobId, i,
