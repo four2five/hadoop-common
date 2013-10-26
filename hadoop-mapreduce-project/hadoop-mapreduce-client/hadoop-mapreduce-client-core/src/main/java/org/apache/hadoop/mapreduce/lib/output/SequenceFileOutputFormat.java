@@ -79,8 +79,13 @@ public class SequenceFileOutputFormat <K,V> extends FileOutputFormat<K, V> {
 
         public void write(K key, V value)
           throws IOException {
+          write(key, value, (long)1);
+        }
 
-          out.append(key, value);
+        public void write(K key, V value, long recordsRepresented)
+          throws IOException {
+
+          out.append(key, value, recordsRepresented);
         }
 
         public void close(TaskAttemptContext context) throws IOException { 

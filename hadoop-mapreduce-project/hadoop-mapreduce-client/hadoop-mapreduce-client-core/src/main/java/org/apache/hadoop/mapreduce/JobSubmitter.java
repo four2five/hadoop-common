@@ -80,6 +80,7 @@ class JobSubmitter {
   throws IOException {
     this.submitClient = submitClient;
     this.jtFs = submitFs;
+    LOG.info("This is the JobSubmitter logging here");
   }
   /*
    * see if two file systems are the same or not.
@@ -484,16 +485,61 @@ class JobSubmitter {
   private <T extends InputSplit>
   int writeNewSplits(JobContext job, Path jobSubmitDir) throws IOException,
       InterruptedException, ClassNotFoundException {
+    LOG.info("in writeNewSplits()");
     Configuration conf = job.getConfiguration();
     InputFormat<?, ?> input =
       ReflectionUtils.newInstance(job.getInputFormatClass(), conf);
-
+    JobConf jobConf = new JobConf(conf);
+    
     List<InputSplit> splits = input.getSplits(job);
     T[] array = (T[]) splits.toArray(new InputSplit[splits.size()]);
+    // get the reducer dependencies for each Map task
+    int[][] inputSplitDependencyInfo = null;
+    long totalConnectionCount = 0;
+    if( input.supportsReducerDependency() && jobConf.useDependencyScheduling() ) {
+      long timingLong = System.currentTimeMillis();
+      LOG.info( input.getClass().getName() + " supports Reducer dependency functions");
+      try{ 
+        inputSplitDependencyInfo = 
+          input.getInputSplitDependencyInfo(array, job.getNumReduceTasks(), 
+                                            job.getConfiguration());
+        // now attach the dependency info to the splits
+        if( inputSplitDependencyInfo.length != array.length) { 
+          LOG.error("there are " + array.length + " input splits but dependency info for " + 
+                    inputSplitDependencyInfo.length + ". This is bad");
+        } else { 
+          for( int i=0; i<array.length; i++) { 
+            LOG.info("split[" + i + "]: " + inputSplitDependencyInfo[i].length + 
+                     " dependencies: " + Arrays.toString(inputSplitDependencyInfo[i]));
+            array[i].setReducerDependencyInfo(inputSplitDependencyInfo[i]);
+            totalConnectionCount += inputSplitDependencyInfo[i].length;
+          }
+        }
+      } catch( Exception e) { 
+        e.printStackTrace();
+      }
+      timingLong = System.currentTimeMillis() - timingLong;
 
-    // sort the splits into order based on size, so that the biggest
-    // go first
-    Arrays.sort(array, new SplitComparator());
+      if( null != inputSplitDependencyInfo ) {
+        LOG.info("isDI length: " + inputSplitDependencyInfo.length + 
+                 " total connections: " + totalConnectionCount + 
+                 " took " + timingLong + " to generate locality information");
+      } else { 
+        LOG.info("???? isDI is NULL: ");
+      }
+    } else if( input.supportsReducerDependency() ){ 
+      LOG.info( input.getClass().getName() + " DOES support Reducer dependency functions " + 
+        " but it is NOT configured for the cluster");
+    } else if( jobConf.useDependencyScheduling() ) { 
+      LOG.info("The cluster IS configured to use dependency scheduling but " + input.getClass().getName() + 
+      " does not support it");
+    }
+
+    // only sort if dependency info is NOT being used. Sorting breaks the mapping from Reducers to Mappers
+    if( null == inputSplitDependencyInfo) {
+      Arrays.sort(array, new SplitComparator());
+    }
+
     JobSplitWriter.createSplitFiles(jobSubmitDir, conf, 
         jobSubmitDir.getFileSystem(conf), array);
     return array.length;
@@ -515,6 +561,7 @@ class JobSubmitter {
   //method to write splits for old api mapper.
   private int writeOldSplits(JobConf job, Path jobSubmitDir) 
   throws IOException {
+    LOG.info("in writeOldSplits() ");
     org.apache.hadoop.mapred.InputSplit[] splits =
     job.getInputFormat().getSplits(job, job.getNumMapTasks());
     // sort the splits into order based on size, so that the biggest

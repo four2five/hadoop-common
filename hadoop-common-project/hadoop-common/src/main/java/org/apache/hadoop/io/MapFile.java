@@ -302,9 +302,14 @@ public class MapFile {
       index.close();
     }
 
+    public synchronized void append(WritableComparable key, Writable val)
+      throws IOException {
+      append(key, val, (long)1);
+    }
+
     /** Append a key/value pair to the map.  The key must be greater or equal
      * to the previous key added to the map. */
-    public synchronized void append(WritableComparable key, Writable val)
+    public synchronized void append(WritableComparable key, Writable val, long recordsRepresented)
       throws IOException {
 
       checkKey(key);

@@ -437,7 +437,12 @@ public class ReduceTask extends Task {
       new OutputCollector<OUTKEY,OUTVALUE>() {
         public void collect(OUTKEY key, OUTVALUE value)
           throws IOException {
-          finalOut.write(key, value);
+          collect(key, value, (long)1);
+        }
+
+        public void collect(OUTKEY key, OUTVALUE value, long recordsRepresented)
+          throws IOException {
+          finalOut.write(key, value, recordsRepresented);
           // indicate that progress update needs to be sent
           reporter.progress();
         }
@@ -505,10 +510,14 @@ public class ReduceTask extends Task {
       fileOutputByteCounter.increment(bytesOutCurr - bytesOutPrev);
     }
 
-    @Override
     public void write(K key, V value) throws IOException {
+      write(key, value, (long)1);
+    }
+
+    @Override
+    public void write(K key, V value, long recordsRepresented) throws IOException {
       long bytesOutPrev = getOutputBytes(fsStats);
-      real.write(key, value);
+      real.write(key, value, recordsRepresented);
       long bytesOutCurr = getOutputBytes(fsStats);
       fileOutputByteCounter.increment(bytesOutCurr - bytesOutPrev);
       reduceOutputCounter.increment(1);
@@ -570,10 +579,14 @@ public class ReduceTask extends Task {
       fileOutputByteCounter.increment(bytesOutCurr - bytesOutPrev);
     }
 
-    @Override
     public void write(K key, V value) throws IOException, InterruptedException {
+      write(key, value, (long)1);
+    }
+
+    @Override
+    public void write(K key, V value, long recordsRepresented) throws IOException, InterruptedException {
       long bytesOutPrev = getOutputBytes(fsStats);
-      real.write(key,value);
+      real.write(key,value, recordsRepresented);
       long bytesOutCurr = getOutputBytes(fsStats);
       fileOutputByteCounter.increment(bytesOutCurr - bytesOutPrev);
       outputRecordCounter.increment(1);

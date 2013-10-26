@@ -221,6 +221,12 @@ public class TestBadRecords extends ClusterMapReduceTestCase {
     public void map(LongWritable key, Text val,
         OutputCollector<LongWritable, Text> output, Reporter reporter)
         throws IOException {
+      map(key, val, (long)1, output, reporter);
+    }
+
+    public void map(LongWritable key, Text val, long recordsRepresented,
+        OutputCollector<LongWritable, Text> output, Reporter reporter)
+        throws IOException {
       String str = val.toString();
       LOG.debug("MAP key:" +key +"  value:" + str);
       if(MAPPER_BAD_RECORDS.get(0).equals(str)) {

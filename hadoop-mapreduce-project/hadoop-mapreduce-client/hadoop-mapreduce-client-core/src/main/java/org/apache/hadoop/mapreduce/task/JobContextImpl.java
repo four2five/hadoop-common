@@ -442,5 +442,9 @@ public class JobContextImpl implements JobContext {
   public Credentials getCredentials() {
     return credentials;
   }
-  
+
+  // Determine whether this job should use dependency scheduling
+  public boolean useDependencyScheduling(Configuration conf) { 
+    return conf.getBoolean(MRJobConfig.DEPENDENCY_SCHEDULING, false); 
+  } 
 }

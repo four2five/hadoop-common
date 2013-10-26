@@ -57,4 +57,14 @@ public abstract class InputSplit {
    */
   public abstract 
     String[] getLocations() throws IOException, InterruptedException;
+  
+  public boolean hasReducerDependencyInfo() { return false; }
+
+  public void setReducerDependencyInfo(int[] reducersThatDependOnThisSplit) { 
+    return;
+  }
+
+  public int[] getReducerDependencyInfo() { 
+    return null;
+  }
 }

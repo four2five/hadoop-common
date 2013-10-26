@@ -360,11 +360,16 @@ public class MultipleOutputs<KEYOUT, VALUEOUT> {
       this.context = context;
     }
 
-    @SuppressWarnings({"unchecked"})
     public void write(Object key, Object value) 
         throws IOException, InterruptedException {
+      write(key, value, (long)1);
+    }
+
+    @SuppressWarnings({"unchecked"})
+    public void write(Object key, Object value, long recordsRepresented) 
+        throws IOException, InterruptedException {
       context.getCounter(COUNTERS_GROUP, counterName).increment(1);
-      writer.write(key, value);
+      writer.write(key, value, recordsRepresented);
     }
 
     public void close(TaskAttemptContext context) 

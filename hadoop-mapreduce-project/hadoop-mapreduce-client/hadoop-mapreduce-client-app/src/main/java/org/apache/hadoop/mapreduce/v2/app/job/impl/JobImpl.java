@@ -49,6 +49,7 @@ import org.apache.hadoop.mapred.JobACLsManager;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.TaskCompletionEvent;
 import org.apache.hadoop.mapreduce.Counters;
+import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.JobACL;
 import org.apache.hadoop.mapreduce.JobContext;
 import org.apache.hadoop.mapreduce.MRJobConfig;
@@ -1265,11 +1266,6 @@ public class JobImpl implements org.apache.hadoop.mapreduce.v2.app.job.Job,
     }
   }
 
-  // Determine whether this job should use dependency scheduling
-  public static boolean useDependencyScheduling(Configuration conf) { 
-    return conf.getBoolean(MRJobConfig.DEPENDENCY_SCHEDULING, false); 
-  } 
-  
   /**
    * ChainMapper and ChainReducer must execute in parallel, so they're not
    * compatible with uberization/LocalContainerLauncher (100% sequential).
@@ -1393,6 +1389,7 @@ public class JobImpl implements org.apache.hadoop.mapreduce.v2.app.job.Job,
         job.eventHandler.handle(new JobHistoryEvent(job.jobId, jse));
         //TODO JH Verify jobACLs, UserName via UGI?
 
+        // -jbuck
         TaskSplitMetaInfo[] taskSplitMetaInfo = createSplits(job, job.jobId);
         job.numMapTasks = taskSplitMetaInfo.length;
         job.numReduceTasks = job.conf.getInt(MRJobConfig.NUM_REDUCES, 0);
@@ -1496,19 +1493,42 @@ public class JobImpl implements org.apache.hadoop.mapreduce.v2.app.job.Job,
 
     private void createMapTasks(JobImpl job, long inputLength,
                                 TaskSplitMetaInfo[] splits) {
-      LOG.info("In createMapTasks(), useDeps: " + useDependencyScheduling(job.conf));
+
+      Job justJob = null;
+      try {
+        justJob = new Job(job.conf);
+      } catch (IOException ioe) {
+        LOG.error("Caught an IOE in JobImpl.createMapTasks()\n" + ioe.toString());
+        return;
+      }
+
+      LOG.info("In createMapTasks(), useDeps: " + justJob.useDependencyScheduling(job.conf));
 
       for (int i=0; i < job.numMapTasks; ++i) {
-        TaskImpl task =
-            new MapTaskImpl(job.jobId, i,
-                job.eventHandler, 
-                job.remoteJobConfFile, 
-                job.conf, splits[i], 
-                job.taskAttemptListener, 
-                job.jobToken, job.jobCredentials,
-                job.clock,
-                job.applicationAttemptId.getAttemptId(),
-                job.metrics, job.appContext);
+        TaskImpl task;
+        if (justJob.useDependencyScheduling(job.conf)) { 
+          task =
+              new CountingMapTaskImpl(job.jobId, i,
+                  job.eventHandler, 
+                  job.remoteJobConfFile, 
+                  job.conf, splits[i], 
+                  job.taskAttemptListener, 
+                  job.jobToken, job.jobCredentials,
+                  job.clock,
+                  job.applicationAttemptId.getAttemptId(),
+                  job.metrics, job.appContext);
+        } else { 
+          task =
+              new MapTaskImpl(job.jobId, i,
+                  job.eventHandler, 
+                  job.remoteJobConfFile, 
+                  job.conf, splits[i], 
+                  job.taskAttemptListener, 
+                  job.jobToken, job.jobCredentials,
+                  job.clock,
+                  job.applicationAttemptId.getAttemptId(),
+                  job.metrics, job.appContext);
+        }
         job.addTask(task);
       }
       LOG.info("Input size for job " + job.jobId + " = " + inputLength
@@ -1559,8 +1579,23 @@ public class JobImpl implements org.apache.hadoop.mapreduce.v2.app.job.Job,
     @Override
     public void transition(JobImpl job, JobEvent event) {
       job.setupProgress = 1.0f;
-      job.scheduleTasks(job.mapTasks, job.numReduceTasks == 0);
-      job.scheduleTasks(job.reduceTasks, true);
+      Job justJob = null;
+      
+      try { 
+        justJob = new Job(job.conf);
+      } catch (IOException ioe) {
+        LOG.error("Caught an IOE in JobImpl.SetupCompletedTransition.transition()\n" + ioe.toString());
+        return;
+      }
+
+      //-jbuck
+      if (justJob.useDependencyScheduling(job.conf)) { 
+        job.scheduleTasks(job.reduceTasks, true);
+        job.scheduleTasks(job.mapTasks, job.numReduceTasks == 0);
+      } else { 
+        job.scheduleTasks(job.mapTasks, job.numReduceTasks == 0);
+        job.scheduleTasks(job.reduceTasks, true);
+      }
 
       // If we have no tasks, just transition to job completed
       if (job.numReduceTasks == 0 && job.numMapTasks == 0) {

@@ -554,6 +554,7 @@ abstract public class Task implements Writable, Configurable {
       setState(TaskStatus.State.RUNNING);
     }
     if (useNewApi) {
+      LOG.info("using new api for output committer");
       if (LOG.isDebugEnabled()) {
         LOG.debug("using new api for output committer");
       }
@@ -561,6 +562,7 @@ abstract public class Task implements Writable, Configurable {
         ReflectionUtils.newInstance(taskContext.getOutputFormatClass(), job);
       committer = outputFormat.getOutputCommitter(taskContext);
     } else {
+      LOG.info("using old api for output committer");
       committer = conf.getOutputCommitter();
     }
     Path outputPath = FileOutputFormat.getOutputPath(conf);
@@ -1303,8 +1305,13 @@ abstract public class Task implements Writable, Configurable {
 
     public synchronized void collect(K key, V value)
         throws IOException {
+      collect(key, value, (long)1);
+    }
+
+    public synchronized void collect(K key, V value, long recordsRepresented)
+        throws IOException {
       outCounter.increment(1);
-      writer.append(key, value);
+      writer.append(key, value, recordsRepresented);
       if ((outCounter.getValue() % progressBar) == 0) {
         progressable.progress();
       }
@@ -1609,6 +1616,7 @@ abstract public class Task implements Writable, Configurable {
     private static class OutputConverter<K,V>
             extends org.apache.hadoop.mapreduce.RecordWriter<K,V> {
       OutputCollector<K,V> output;
+
       OutputConverter(OutputCollector<K,V> output) {
         this.output = output;
       }
@@ -1620,7 +1628,13 @@ abstract public class Task implements Writable, Configurable {
       @Override
       public void write(K key, V value
                         ) throws IOException, InterruptedException {
-        output.collect(key,value);
+        write(key, value, (long)1);
+      }
+
+      @Override
+      public void write(K key, V value, long recordsRepresented
+                        ) throws IOException, InterruptedException {
+        output.collect(key, value, recordsRepresented);
       }
     }
 

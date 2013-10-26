@@ -40,6 +40,7 @@ public class NullOutputFormat<K, V> extends OutputFormat<K, V> {
          getRecordWriter(TaskAttemptContext context) {
     return new RecordWriter<K, V>(){
         public void write(K key, V value) { }
+        public void write(K key, V value, long recordsRepresented) { }
         public void close(TaskAttemptContext context) { }
       };
   }

@@ -142,6 +142,11 @@ public class SequenceFileAsBinaryOutputFormat
 
       public void write(BytesWritable bkey, BytesWritable bvalue)
         throws IOException {
+        write(bkey, bvalue, (long)1);
+      }
+
+      public void write(BytesWritable bkey, BytesWritable bvalue, long recordsRepresented)
+        throws IOException {
         wvaluebytes.reset(bvalue);
         out.appendRaw(bkey.getBytes(), 0, bkey.getLength(), wvaluebytes);
         wvaluebytes.reset(null);

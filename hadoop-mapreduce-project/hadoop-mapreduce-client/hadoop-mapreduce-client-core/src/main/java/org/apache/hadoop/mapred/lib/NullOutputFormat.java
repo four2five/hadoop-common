@@ -38,6 +38,7 @@ public class NullOutputFormat<K, V> implements OutputFormat<K, V> {
                                       String name, Progressable progress) {
     return new RecordWriter<K, V>(){
         public void write(K key, V value) { }
+        public void write(K key, V value, long recordsRepresented) { }
         public void close(Reporter reporter) { }
       };
   }

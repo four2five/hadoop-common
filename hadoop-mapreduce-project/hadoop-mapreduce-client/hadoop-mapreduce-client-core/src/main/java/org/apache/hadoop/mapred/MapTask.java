@@ -580,10 +580,14 @@ public class MapTask extends Task {
       this.collector = collector;
     }
 
-    @Override
     public void collect(K key, V value) throws IOException {
+      collect(key, value, (long)1);
+    }
+
+    @Override
+    public void collect(K key, V value, long recordsRepresented) throws IOException {
       try {
-        collector.collect(key, value,
+        collector.collect(key, value, recordsRepresented,
                           partitioner.getPartition(key, value, numPartitions));
       } catch (InterruptedException ie) {
         Thread.currentThread().interrupt();
@@ -625,13 +629,18 @@ public class MapTask extends Task {
       fileOutputByteCounter.increment(bytesOutCurr - bytesOutPrev);
     }
 
+    public void write(K key, V value) 
+    throws IOException, InterruptedException {
+      write(key, value, (long)1);
+    }
+
     @Override
     @SuppressWarnings("unchecked")
-    public void write(K key, V value) 
+    public void write(K key, V value, long recordsRepresented) 
     throws IOException, InterruptedException {
       reporter.progress();
       long bytesOutPrev = getOutputBytes(fsStats);
-      out.write(key, value);
+      out.write(key, value, recordsRepresented);
       long bytesOutCurr = getOutputBytes(fsStats);
       fileOutputByteCounter.increment(bytesOutCurr - bytesOutPrev);
       mapOutputRecordCounter.increment(1);
@@ -686,9 +695,13 @@ public class MapTask extends Task {
       }
     }
 
-    @Override
     public void write(K key, V value) throws IOException, InterruptedException {
-      collector.collect(key, value,
+      write(key, value, (long)1);
+    }
+
+    @Override
+    public void write(K key, V value, long recordsRepresented) throws IOException, InterruptedException {
+      collector.collect(key, value, recordsRepresented,
                         partitioner.getPartition(key, value, partitions));
     }
 
@@ -829,9 +842,13 @@ public class MapTask extends Task {
     }
 
     public void collect(K key, V value, int partition) throws IOException {
+      collect(key, value, (long)1, partition);
+    }
+
+    public void collect(K key, V value, long recordsRepresented, int partition) throws IOException {
       reporter.progress();
       long bytesOutPrev = getOutputBytes(fsStats);
-      out.write(key, value);
+      out.write(key, value, recordsRepresented);
       long bytesOutCurr = getOutputBytes(fsStats);
       fileOutputByteCounter.increment(bytesOutCurr - bytesOutPrev);
       mapOutputRecordCounter.increment(1);
@@ -1038,12 +1055,17 @@ public class MapTask extends Task {
       }
     }
 
+    public synchronized void collect(K key, V value, final int partition
+                                     ) throws IOException {
+      collect(key, value, (long)1, partition);
+    }
+
     /**
      * Serialize the key, value to intermediate storage.
      * When this method returns, kvindex must refer to sufficient unused
      * storage to store one METADATA.
      */
-    public synchronized void collect(K key, V value, final int partition
+    public synchronized void collect(K key, V value, long recordsRepresented, final int partition
                                      ) throws IOException {
       reporter.progress();
       if (key.getClass() != keyClass) {

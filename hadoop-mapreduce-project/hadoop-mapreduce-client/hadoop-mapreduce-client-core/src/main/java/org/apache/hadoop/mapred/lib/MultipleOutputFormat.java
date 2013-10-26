@@ -85,6 +85,10 @@ extends FileOutputFormat<K, V> {
       TreeMap<String, RecordWriter<K, V>> recordWriters = new TreeMap<String, RecordWriter<K, V>>();
 
       public void write(K key, V value) throws IOException {
+        write(key, value, (long)1);
+      }
+
+      public void write(K key, V value, long recordsRepresented) throws IOException {
 
         // get the file name based on the key
         String keyBasedPath = generateFileNameForKeyValue(key, value, myName);
@@ -104,7 +108,7 @@ extends FileOutputFormat<K, V> {
           rw = getBaseRecordWriter(myFS, myJob, finalPath, myProgressable);
           this.recordWriters.put(finalPath, rw);
         }
-        rw.write(actualKey, actualValue);
+        rw.write(actualKey, actualValue, recordsRepresented);
       };
 
       public void close(Reporter reporter) throws IOException {

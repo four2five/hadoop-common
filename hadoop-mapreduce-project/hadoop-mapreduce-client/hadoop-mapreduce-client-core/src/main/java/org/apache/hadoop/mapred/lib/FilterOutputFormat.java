@@ -89,7 +89,11 @@ public class FilterOutputFormat<K, V> implements OutputFormat<K, V> {
     }
 
     public void write(K key, V value) throws IOException {
-      getRawWriter().write(key, value);
+      write(key, value, (long)1);
+    }
+
+    public void write(K key, V value, long recordsRepresented) throws IOException {
+      getRawWriter().write(key, value, recordsRepresented);
     }
     
     private RecordWriter<K,V> getRawWriter() throws IOException {

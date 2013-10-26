@@ -513,9 +513,15 @@ abstract class GridmixJob implements Callable<Job>, Delayed {
         @Override
         public void write(K ignored, GridmixRecord value)
             throws IOException {
+          write(ignored, value, (long)1);
+        }
+
+        public void write(K ignored, GridmixRecord value, long recordsRepresented)
+            throws IOException {
           // Let the Gridmix record fill itself.
           value.write(fileOut);
         }
+
         @Override
         public void close(TaskAttemptContext ctxt) throws IOException {
           fileOut.close();

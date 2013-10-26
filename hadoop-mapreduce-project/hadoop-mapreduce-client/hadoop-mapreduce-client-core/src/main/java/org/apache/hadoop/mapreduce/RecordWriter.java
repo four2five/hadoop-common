@@ -46,6 +46,9 @@ public abstract class RecordWriter<K, V> {
   public abstract void write(K key, V value
                              ) throws IOException, InterruptedException;
 
+  public abstract void write(K key, V value, long recordsWritten
+                             ) throws IOException, InterruptedException;
+
   /** 
    * Close this <code>RecordWriter</code> to future operations.
    * 

@@ -1291,15 +1291,25 @@ public class SequenceFile {
       }
     }
 
-    /** Append a key/value pair. */
     public void append(Writable key, Writable val)
       throws IOException {
-      append((Object) key, (Object) val);
+      append(key, val, (long)1);
+    }
+
+    /** Append a key/value pair. */
+    public void append(Writable key, Writable val, long recordsRepresented)
+      throws IOException {
+      append((Object) key, (Object) val, recordsRepresented);
+    }
+
+    public synchronized void append(Object key, Object val)
+      throws IOException {
+      append(key, val, (long)1);
     }
 
     /** Append a key/value pair. */
     @SuppressWarnings("unchecked")
-    public synchronized void append(Object key, Object val)
+    public synchronized void append(Object key, Object val, long recordsRepresented)
       throws IOException {
       if (key.getClass() != keyClass)
         throw new IOException("wrong key class: "+key.getClass().getName()

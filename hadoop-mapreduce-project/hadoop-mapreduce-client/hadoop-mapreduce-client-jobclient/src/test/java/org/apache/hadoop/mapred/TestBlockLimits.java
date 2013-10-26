@@ -156,6 +156,10 @@ public class TestBlockLimits extends TestCase {
       }
 
       public void write(Object key, Object value) throws IOException {
+        write(key, value, (long)1);
+      }
+
+      public void write(Object key, Object value, long recordsRepresented) throws IOException {
         return;
       }
 

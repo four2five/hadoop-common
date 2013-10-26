@@ -35,11 +35,16 @@ import org.apache.hadoop.mapred.Reporter;
 public class InverseMapper<K, V>
     extends MapReduceBase implements Mapper<K, V, V, K> {
 
-  /** The inverse function.  Input keys and values are swapped.*/
   public void map(K key, V value,
                   OutputCollector<V, K> output, Reporter reporter)
     throws IOException {
-    output.collect(value, key);
+    map(key, value, (long)1, output, reporter);
+  }
+  /** The inverse function.  Input keys and values are swapped.*/
+  public void map(K key, V value, long recordsRepresented,
+                  OutputCollector<V, K> output, Reporter reporter)
+    throws IOException {
+    output.collect(value, key, recordsRepresented);
   }
   
 }

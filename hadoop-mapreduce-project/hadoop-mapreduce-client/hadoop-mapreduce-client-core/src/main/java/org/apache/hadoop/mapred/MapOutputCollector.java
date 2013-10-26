@@ -32,6 +32,8 @@ public interface MapOutputCollector<K, V> {
                   ) throws IOException, ClassNotFoundException;
   public void collect(K key, V value, int partition
                      ) throws IOException, InterruptedException;
+  public void collect(K key, V value, long recordsRepresented, int partition 
+                     ) throws IOException, InterruptedException;
   public void close() throws IOException, InterruptedException;
     
   public void flush() throws IOException, InterruptedException, 

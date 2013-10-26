@@ -44,6 +44,7 @@ public interface RecordWriter<K, V> {
    * @throws IOException
    */      
   void write(K key, V value) throws IOException;
+  void write(K key, V value, long recordsRepresented) throws IOException;
 
   /** 
    * Close this <code>RecordWriter</code> to future operations.

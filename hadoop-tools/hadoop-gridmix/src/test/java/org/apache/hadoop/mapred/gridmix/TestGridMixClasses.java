@@ -317,6 +317,11 @@ public class TestGridMixClasses {
     @Override
     public void write(GridmixKey key, GridmixRecord value) throws IOException,
             InterruptedException {
+      write(key, value, (long)1);
+    }
+
+    public void write(GridmixKey key, GridmixRecord value, long recordsRepresented) throws IOException,
+            InterruptedException {
       data.put(key, value);
     }
 
@@ -338,6 +343,11 @@ public class TestGridMixClasses {
     @Override
     public void write(GridmixKey key, NullWritable value) throws IOException,
             InterruptedException {
+      write(key, value, (long)1);
+    }
+
+    public void write(GridmixKey key, NullWritable value, long recordsRepresented) throws IOException,
+            InterruptedException {
       data.put(key, value);
     }
 
@@ -358,6 +368,11 @@ public class TestGridMixClasses {
 
     @Override
     public void write(NullWritable key, GridmixRecord value)
+            throws IOException, InterruptedException {
+      write(key, value, (long)1);
+    }
+
+    public void write(NullWritable key, GridmixRecord value, long recordsRepresented)
             throws IOException, InterruptedException {
       data.put(key, value);
     }
@@ -927,6 +942,11 @@ public class TestGridMixClasses {
 
     @Override
     public void write(NullWritable key, NullWritable value) throws IOException,
+            InterruptedException {
+      write(key, value, (long)1);
+    }
+
+    public void write(NullWritable key, NullWritable value, long recordsRepresented) throws IOException,
             InterruptedException {
     }
 

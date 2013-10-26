@@ -115,6 +115,10 @@ public class StubContext {
 
     @Override
     public void write(Text key, Text value) throws IOException, InterruptedException {
+      write(key, value, (long)1);
+    }
+
+    public void write(Text key, Text value, long recordsRepresented) throws IOException, InterruptedException {
       keys.add(key);
       values.add(value);
     }

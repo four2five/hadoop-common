@@ -43,8 +43,13 @@ public class DelegatingMapper<K1, V1, K2, V2> implements Mapper<K1, V1, K2, V2> 
 
   private Mapper<K1, V1, K2, V2> mapper;
 
-  @SuppressWarnings("unchecked")
   public void map(K1 key, V1 value, OutputCollector<K2, V2> outputCollector,
+      Reporter reporter) throws IOException {
+    map(key, value, (long)1, outputCollector, reporter);
+  }
+
+  @SuppressWarnings("unchecked")
+  public void map(K1 key, V1 value, long recordsRepresented, OutputCollector<K2, V2> outputCollector,
       Reporter reporter) throws IOException {
 
     if (mapper == null) {
@@ -53,6 +58,8 @@ public class DelegatingMapper<K1, V1, K2, V2> implements Mapper<K1, V1, K2, V2> 
       mapper = (Mapper<K1, V1, K2, V2>) ReflectionUtils.newInstance(inputSplit
          .getMapperClass(), conf);
     }
+    //mapper.map(key, value, recordsRepresented, outputCollector, reporter);
+    // TODO: this doesn't work for counting recordsRepresented 
     mapper.map(key, value, outputCollector, reporter);
   }
 

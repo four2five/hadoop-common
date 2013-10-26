@@ -23,6 +23,7 @@ import java.util.List;
 
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 
@@ -103,5 +104,17 @@ public abstract class InputFormat<K, V> {
                                         ) throws IOException, 
                                                  InterruptedException;
 
+  /**
+   * by default, FileInputFormats do not support this
+   */
+  public boolean supportsReducerDependency() {
+    return false;
+  }
+  
+  public <T extends InputSplit> 
+  int[][] getInputSplitDependencyInfo(T[] splits, int numReducers, Configuration conf)
+  throws Exception { 
+    return null;
+  }
 }
 

@@ -337,8 +337,12 @@ class Chain extends org.apache.hadoop.mapreduce.lib.chain.Chain {
       this.reporter = reporter;
     }
 
-    @SuppressWarnings({"unchecked"})
     public void collect(K key, V value) throws IOException {
+      collect(key, value, (long)1);
+    }
+
+    @SuppressWarnings({"unchecked"})
+    public void collect(K key, V value, long recordsRepresented) throws IOException {
       if (nextMapperIndex < mappers.size()) {
         // there is a next mapper in chain
 
@@ -356,7 +360,8 @@ class Chain extends org.apache.hadoop.mapreduce.lib.chain.Chain {
         Mapper nextMapper = mappers.get(nextMapperIndex);
 
         // invokes next mapper in chain
-        nextMapper.map(key, value,
+        // TODO: this doesn't work for counting recordsRepresented in a chained setup
+        nextMapper.map(key, value, //recordsRepresented,
                        new ChainOutputCollector(nextMapperIndex,
                                                 nextKeySerialization,
                                                 nextValueSerialization,
@@ -364,7 +369,7 @@ class Chain extends org.apache.hadoop.mapreduce.lib.chain.Chain {
                        reporter);
       } else {
         // end of chain, user real output collector
-        output.collect(key, value);
+        output.collect(key, value, recordsRepresented);
       }
     }
 

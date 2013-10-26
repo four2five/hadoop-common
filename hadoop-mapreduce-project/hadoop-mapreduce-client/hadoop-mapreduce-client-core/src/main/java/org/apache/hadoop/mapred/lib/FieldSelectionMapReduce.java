@@ -135,10 +135,16 @@ public class FieldSelectionMapReduce<K, V>
     return sb.toString();
   }
 
+  public void map(K key, V val,
+      OutputCollector<Text, Text> output, Reporter reporter) 
+      throws IOException {
+    map(key, val, (long)1, output, reporter);
+  }
+
   /**
    * The identify function. Input key/value pair is written directly to output.
    */
-  public void map(K key, V val,
+  public void map(K key, V val, long recordsRepresented,
       OutputCollector<Text, Text> output, Reporter reporter) 
       throws IOException {
     FieldSelectionHelper helper = new FieldSelectionHelper(
@@ -146,7 +152,7 @@ public class FieldSelectionMapReduce<K, V>
     helper.extractOutputKeyValue(key.toString(), val.toString(),
       fieldSeparator, mapOutputKeyFieldList, mapOutputValueFieldList,
       allMapValueFieldsFrom, ignoreInputKey, true);
-    output.collect(helper.getKey(), helper.getValue());
+    output.collect(helper.getKey(), helper.getValue(), recordsRepresented);
   }
 
   private void parseOutputKeyValueSpec() {

@@ -156,14 +156,22 @@ public class ChainMapper implements Mapper {
     chain.configure(job);
   }
 
+  public void map(Object key, Object value, OutputCollector output,
+                  Reporter reporter) throws IOException {
+    map(key, value, (long)1, output, reporter);
+  }
+
   /**
    * Chains the <code>map(...)</code> methods of the Mappers in the chain.
    */
   @SuppressWarnings({"unchecked"})
-  public void map(Object key, Object value, OutputCollector output,
+  public void map(Object key, Object value, long recordsRepresented, OutputCollector output,
                   Reporter reporter) throws IOException {
     Mapper mapper = chain.getFirstMap();
     if (mapper != null) {
+      //mapper.map(key, value, recordsRepresented, chain.getMapperCollector(0, output, reporter),
+      //           reporter);
+      // TODO: this doesn't work for recordsRepresented
       mapper.map(key, value, chain.getMapperCollector(0, output, reporter),
                  reporter);
     }

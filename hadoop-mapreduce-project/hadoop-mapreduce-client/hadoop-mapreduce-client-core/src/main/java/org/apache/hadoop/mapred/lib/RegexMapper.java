@@ -55,10 +55,17 @@ public class RegexMapper<K> extends MapReduceBase
                   OutputCollector<Text, LongWritable> output,
                   Reporter reporter)
     throws IOException {
+    map(key, value, (long)1, output, reporter);
+  }
+
+  public void map(K key, Text value, long recordsRepresented,
+                  OutputCollector<Text, LongWritable> output,
+                  Reporter reporter)
+    throws IOException {
     String text = value.toString();
     Matcher matcher = pattern.matcher(text);
     while (matcher.find()) {
-      output.collect(new Text(matcher.group(group)), new LongWritable(1));
+      output.collect(new Text(matcher.group(group)), new LongWritable(1), recordsRepresented);
     }
   }
 

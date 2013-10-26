@@ -87,6 +87,11 @@ public class ValueAggregatorCombiner<K1 extends WritableComparable,
    *
    */
   public void map(K1 arg0, V1 arg1, OutputCollector<Text, Text> arg2,
+                  Reporter arg3) throws IOException { 
+    map(arg0, arg1, (long)1, arg2, arg3);
+  }
+
+  public void map(K1 arg0, V1 arg1, long recordsRepresented, OutputCollector<Text, Text> arg2,
                   Reporter arg3) throws IOException {
     throw new IOException ("should not be called\n");
   }

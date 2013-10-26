@@ -97,10 +97,15 @@ class ChainReduceContextImpl<KEYIN, VALUEIN, KEYOUT, VALUEOUT> implements
     return base.nextKeyValue();
   }
 
-  @Override
   public void write(KEYOUT key, VALUEOUT value) throws IOException,
       InterruptedException {
-    rw.write(key, value);
+    write(key, value, (long)1);
+  }
+
+  @Override
+  public void write(KEYOUT key, VALUEOUT value, long recordsRepresented) throws IOException,
+      InterruptedException {
+    rw.write(key, value, recordsRepresented);
   }
 
   @Override
@@ -313,4 +318,10 @@ class ChainReduceContextImpl<KEYIN, VALUEIN, KEYOUT, VALUEOUT> implements
   public float getProgress() {
     return base.getProgress();
   }
+
+  // Determine whether this job should use dependency scheduling
+  public boolean useDependencyScheduling(Configuration conf) {
+    return base.useDependencyScheduling(conf);
+  }
+
 }

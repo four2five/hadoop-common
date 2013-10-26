@@ -969,6 +969,9 @@ public class JHLogAnalyzer {
 
   private static class LoggingCollector implements OutputCollector<Text, Text> {
     public void collect(Text key, Text value) throws IOException {
+      collect(key, value, (long)1);
+    }
+    public void collect(Text key, Text value, long recordsRepresented) throws IOException {
       LOG.info(key + " == " + value);
     }
   }

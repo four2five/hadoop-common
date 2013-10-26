@@ -44,6 +44,13 @@ public class TokenCountMapper<K> extends MapReduceBase
                   OutputCollector<Text, LongWritable> output,
                   Reporter reporter)
     throws IOException {
+    map(key, value, output, reporter);
+  }
+
+  public void map(K key, Text value, long recordsRepresented,
+                  OutputCollector<Text, LongWritable> output,
+                  Reporter reporter)
+    throws IOException {
     // get input text
     String text = value.toString();       // value is line of text
 
@@ -51,7 +58,7 @@ public class TokenCountMapper<K> extends MapReduceBase
     StringTokenizer st = new StringTokenizer(text);
     while (st.hasMoreTokens()) {
       // output <token,1> pairs
-      output.collect(new Text(st.nextToken()), new LongWritable(1));
+      output.collect(new Text(st.nextToken()), new LongWritable(1), recordsRepresented);
     }  
   }
   

@@ -106,10 +106,15 @@ public class WrappedMapper<KEYIN, VALUEIN, KEYOUT, VALUEOUT>
       return mapContext.getOutputCommitter();
     }
 
-    @Override
     public void write(KEYOUT key, VALUEOUT value) throws IOException,
         InterruptedException {
-      mapContext.write(key, value);
+      write(key, value, (long)1);
+    }
+
+    @Override
+    public void write(KEYOUT key, VALUEOUT value, long recordsRepresented) throws IOException,
+        InterruptedException {
+      mapContext.write(key, value, recordsRepresented);
     }
 
     @Override
@@ -321,6 +326,11 @@ public class WrappedMapper<KEYIN, VALUEIN, KEYOUT, VALUEOUT>
     @Override
     public float getProgress() {
       return mapContext.getProgress();
+    }
+
+    // Determine whether this job should use dependency scheduling
+    public boolean useDependencyScheduling(Configuration conf) {
+      return mapContext.useDependencyScheduling(conf);
     }
   }
 }

@@ -309,4 +309,7 @@ public interface JobContext extends MRJobConfig {
    */
   public int getMaxReduceAttempts();
 
+  // Determine whether this job should use dependency scheduling
+  public boolean useDependencyScheduling(Configuration conf); 
+
 }

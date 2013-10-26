@@ -192,6 +192,10 @@ public class IFile {
     }
 
     public void append(K key, V value) throws IOException {
+      append(key, value, (long)1);
+    }
+
+    public void append(K key, V value, long recordsRepresented) throws IOException {
       if (key.getClass() != keyClass)
         throw new IOException("wrong key class: "+ key.getClass()
                               +" is not "+ keyClass);
@@ -231,6 +235,11 @@ public class IFile {
     }
     
     public void append(DataInputBuffer key, DataInputBuffer value)
+    throws IOException {
+      append(key, value, (long)1);
+    }
+
+    public void append(DataInputBuffer key, DataInputBuffer value, long recordsRepresented)
     throws IOException {
       int keyLength = key.getLength() - key.getPosition();
       if (keyLength < 0) {

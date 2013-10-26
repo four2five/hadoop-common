@@ -75,7 +75,12 @@ public class MapFileOutputFormat
     return new RecordWriter<WritableComparable<?>, Writable>() {
         public void write(WritableComparable<?> key, Writable value)
             throws IOException {
-          out.append(key, value);
+          write(key, value, (long)1);
+        }
+
+        public void write(WritableComparable<?> key, Writable value, long recordsRepresented)
+            throws IOException {
+          out.append(key, value, recordsRepresented);
         }
 
         public void close(TaskAttemptContext context) throws IOException { 

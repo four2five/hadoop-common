@@ -114,14 +114,18 @@ public class Mapper<KEYIN, VALUEIN, KEYOUT, VALUEOUT> {
     // NOTHING
   }
 
+  protected void map(KEYIN key, VALUEIN value, 
+                     Context context) throws IOException, InterruptedException {
+    map(key, value, (long)1, context);
+  }
   /**
    * Called once for each key/value pair in the input split. Most applications
    * should override this, but the default is the identity function.
    */
   @SuppressWarnings("unchecked")
-  protected void map(KEYIN key, VALUEIN value, 
+  protected void map(KEYIN key, VALUEIN value, long recordsRepresented,
                      Context context) throws IOException, InterruptedException {
-    context.write((KEYOUT) key, (VALUEOUT) value);
+    context.write((KEYOUT) key, (VALUEOUT) value, recordsRepresented);
   }
 
   /**

@@ -20,8 +20,11 @@ package org.apache.hadoop.mapreduce.split;
 
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
+import java.util.Arrays;
 import java.util.List;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
@@ -31,13 +34,17 @@ import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.hadoop.io.serializer.SerializationFactory;
 import org.apache.hadoop.io.serializer.Serializer;
+import org.apache.hadoop.mapreduce.InputFormat;
 import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.hadoop.mapreduce.Job;
+//import org.apache.hadoop.mapreduce.JobConf;
 import org.apache.hadoop.mapreduce.JobSubmissionFiles;
 import org.apache.hadoop.mapreduce.MRConfig;
 import org.apache.hadoop.mapreduce.split.JobSplit.SplitMetaInfo;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
+import org.apache.hadoop.util.ReflectionUtils;
+
 
 /**
  * The class that is used by the Job clients to write splits (both the meta
@@ -49,6 +56,8 @@ public class JobSplitWriter {
 
   private static final int splitVersion = JobSplit.META_SPLIT_VERSION;
   private static final byte[] SPLIT_FILE_HEADER;
+
+  private static final Log LOG = LogFactory.getLog(JobSplitWriter.class);
 
   static {
     try {
@@ -111,6 +120,45 @@ public class JobSplitWriter {
   SplitMetaInfo[] writeNewSplits(Configuration conf, 
       T[] array, FSDataOutputStream out)
   throws IOException, InterruptedException {
+
+    Job job = new Job(conf);
+    long totalConnectionCount = 0;
+    // -jbuck
+    InputFormat<?, ?> input = null;
+    try { 
+      input = ReflectionUtils.newInstance(job.getInputFormatClass(), conf);
+    } catch ( ClassNotFoundException cnfe) { 
+      LOG.error("Caught cnfe: " + cnfe.toString());
+      return new SplitMetaInfo[0];
+    }
+
+    //JobConf jobConf = new JobConf(conf);
+    int[][] inputSplitDependencyInfo = null;
+
+    //if( input.supportsReducerDependency() && jobConf.useDependencyScheduling() ) {
+    if( input.supportsReducerDependency() && job.useDependencyScheduling(conf) ) {
+      long timingLong = System.currentTimeMillis();
+      LOG.info( input.getClass().getName() + " supports Reducer dependency functions");
+      try{ 
+        inputSplitDependencyInfo = 
+          input.getInputSplitDependencyInfo(array, job.getNumReduceTasks(), 
+                                            job.getConfiguration());
+        // now attach the dependency info to the splits
+        if( inputSplitDependencyInfo.length != array.length) { 
+          LOG.error("there are " + array.length + " input splits but dependency info for " + 
+                    inputSplitDependencyInfo.length + ". This is bad");
+        } else { 
+          for( int i=0; i<array.length; i++) { 
+            LOG.info("split[" + i + "]: " + inputSplitDependencyInfo[i].length + 
+                     " dependencies: " + Arrays.toString(inputSplitDependencyInfo[i]));
+            array[i].setReducerDependencyInfo(inputSplitDependencyInfo[i]);
+            totalConnectionCount += inputSplitDependencyInfo[i].length;
+          }
+        }
+      } catch( Exception e) { 
+        e.printStackTrace();
+      }
+    }
 
     SplitMetaInfo[] info = new SplitMetaInfo[array.length];
     if (array.length != 0) {

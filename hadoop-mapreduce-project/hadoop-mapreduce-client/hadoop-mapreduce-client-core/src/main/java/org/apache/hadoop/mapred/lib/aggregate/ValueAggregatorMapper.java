@@ -39,11 +39,16 @@ public class ValueAggregatorMapper<K1 extends WritableComparable,
                                    V1 extends Writable>
   extends ValueAggregatorJobBase<K1, V1> {
 
+  public void map(K1 key, V1 value,
+                  OutputCollector<Text, Text> output, Reporter reporter) throws IOException {
+    map(key, value, (long)1, output, reporter);
+  }
+
   /**
    *  the map function. It iterates through the value aggregator descriptor 
    *  list to generate aggregation id/value pairs and emit them.
    */
-  public void map(K1 key, V1 value,
+  public void map(K1 key, V1 value, long recordsRepresented,
                   OutputCollector<Text, Text> output, Reporter reporter) throws IOException {
 
     Iterator iter = this.aggregatorDescriptorList.iterator();
@@ -53,7 +58,7 @@ public class ValueAggregatorMapper<K1 extends WritableComparable,
         ad.generateKeyValPairs(key, value).iterator();
       while (ens.hasNext()) {
         Entry<Text, Text> en = ens.next();
-        output.collect(en.getKey(), en.getValue());
+        output.collect(en.getKey(), en.getValue(), recordsRepresented);
       }
     }
   }

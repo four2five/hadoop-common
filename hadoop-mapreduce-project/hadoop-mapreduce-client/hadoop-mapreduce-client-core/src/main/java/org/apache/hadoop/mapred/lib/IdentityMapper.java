@@ -35,11 +35,17 @@ import org.apache.hadoop.mapred.MapReduceBase;
 public class IdentityMapper<K, V>
     extends MapReduceBase implements Mapper<K, V, K, V> {
 
-  /** The identify function.  Input key/value pair is written directly to
-   * output.*/
   public void map(K key, V val,
                   OutputCollector<K, V> output, Reporter reporter)
     throws IOException {
-    output.collect(key, val);
+    map(key, val, (long)1, output, reporter);
+  }
+
+  /** The identify function.  Input key/value pair is written directly to
+   * output.*/
+  public void map(K key, V val, long recordsRepresented,
+                  OutputCollector<K, V> output, Reporter reporter)
+    throws IOException {
+    output.collect(key, val, recordsRepresented);
   }
 }

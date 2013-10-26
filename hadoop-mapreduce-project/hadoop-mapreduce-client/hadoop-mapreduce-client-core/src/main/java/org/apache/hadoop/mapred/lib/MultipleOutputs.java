@@ -452,10 +452,14 @@ public class MultipleOutputs {
       this.reporter = reporter;
     }
 
-    @SuppressWarnings({"unchecked"})
     public void write(Object key, Object value) throws IOException {
+      write(key, value, (long)1);
+    }
+
+    @SuppressWarnings({"unchecked"})
+    public void write(Object key, Object value, long recordsRepresented) throws IOException {
       reporter.incrCounter(COUNTERS_GROUP, counterName, 1);
-      writer.write(key, value);
+      writer.write(key, value, recordsRepresented);
     }
 
     public void close(Reporter reporter) throws IOException {
@@ -515,9 +519,13 @@ public class MultipleOutputs {
 
     return new OutputCollector() {
 
-      @SuppressWarnings({"unchecked"})
       public void collect(Object key, Object value) throws IOException {
-        writer.write(key, value);
+        collect(key, value, (long)1);
+      }
+
+      @SuppressWarnings({"unchecked"})
+      public void collect(Object key, Object value, long recordsRepresented) throws IOException {
+        writer.write(key, value, recordsRepresented);
       }
 
     };

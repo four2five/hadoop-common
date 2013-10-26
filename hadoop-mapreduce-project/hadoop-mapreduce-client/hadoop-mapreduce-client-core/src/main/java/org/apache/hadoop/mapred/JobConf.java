@@ -2032,7 +2032,11 @@ public class JobConf extends Configuration {
       LOG.warn(JobConf.deprecatedString(JobConf.MAPRED_REDUCE_TASK_ULIMIT));
     }
   }
-  
 
+  public void setDependencyScheduling(boolean dependencyScheduling) { 
+    setBoolean(MRJobConfig.DEPENDENCY_SCHEDULING, dependencyScheduling); 
+  }
+
+  public boolean useDependencyScheduling() { return getBoolean(MRJobConfig.DEPENDENCY_SCHEDULING, false); }
 }
 

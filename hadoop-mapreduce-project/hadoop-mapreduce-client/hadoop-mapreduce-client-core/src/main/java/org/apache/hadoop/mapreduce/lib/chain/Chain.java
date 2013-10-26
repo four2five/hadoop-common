@@ -100,18 +100,28 @@ public class Chain {
   static class KeyValuePair<K, V> {
     K key;
     V value;
+    long recordsRepresented;
     boolean endOfInput;
 
     KeyValuePair(K key, V value) {
       this.key = key;
       this.value = value;
       this.endOfInput = false;
+      this.recordsRepresented = 1;
+    }
+
+    KeyValuePair(K key, V value, long recordsRepresented) {
+      this.key = key;
+      this.value = value;
+      this.endOfInput = false;
+      this.recordsRepresented = recordsRepresented;
     }
 
     KeyValuePair(boolean eof) {
       this.key = null;
       this.value = null;
       this.endOfInput = eof;
+      this.recordsRepresented = 1;
     }
   }
 
@@ -248,15 +258,25 @@ public class Chain {
      */
     public void write(KEYOUT key, VALUEOUT value) throws IOException,
         InterruptedException {
+      write(key, value, (long)1);
+    }
+
+    public void write(KEYOUT key, VALUEOUT value, long recordsRepresented) throws IOException,
+        InterruptedException {
       if (outputQueue != null) {
-        writeToQueue(key, value);
+        writeToQueue(key, value, recordsRepresented);
       } else {
-        outputContext.write(key, value);
+        outputContext.write(key, value, recordsRepresented);
       }
     }
 
-    @SuppressWarnings("unchecked")
     private void writeToQueue(KEYOUT key, VALUEOUT value) throws IOException,
+        InterruptedException {
+      writeToQueue(key, value, (long)1);
+    }
+
+    @SuppressWarnings("unchecked")
+    private void writeToQueue(KEYOUT key, VALUEOUT value, long recordsRepresented) throws IOException,
         InterruptedException {
       this.keyout = (KEYOUT) ReflectionUtils.newInstance(keyClass, conf);
       this.valueout = (VALUEOUT) ReflectionUtils.newInstance(valueClass, conf);
@@ -264,7 +284,7 @@ public class Chain {
       ReflectionUtils.copy(conf, value, this.valueout);
 
       // wait to write output to queuue
-      outputQueue.enqueue(new KeyValuePair<KEYOUT, VALUEOUT>(keyout, valueout));
+      outputQueue.enqueue(new KeyValuePair<KEYOUT, VALUEOUT>(keyout, valueout, recordsRepresented));
     }
 
     /**

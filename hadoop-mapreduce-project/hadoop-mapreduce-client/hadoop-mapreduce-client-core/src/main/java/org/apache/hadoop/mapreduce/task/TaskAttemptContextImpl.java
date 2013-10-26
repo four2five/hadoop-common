@@ -24,6 +24,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.mapred.Task;
 import org.apache.hadoop.mapreduce.Counter;
 import org.apache.hadoop.mapreduce.Counters;
+import org.apache.hadoop.mapreduce.MRJobConfig;
 import org.apache.hadoop.mapreduce.StatusReporter;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.hadoop.mapreduce.TaskAttemptID;
@@ -118,4 +119,10 @@ public class TaskAttemptContextImpl extends JobContextImpl
   public float getProgress() {
     return reporter.getProgress();
   }
+
+  // Determine whether this job should use dependency scheduling
+  public boolean useDependencyScheduling(Configuration conf) {
+    return conf.getBoolean(MRJobConfig.DEPENDENCY_SCHEDULING, false);
+  }
+
 }

@@ -99,10 +99,15 @@ public class WrappedReducer<KEYIN, VALUEIN, KEYOUT, VALUEOUT>
       return reduceContext.getOutputCommitter();
     }
 
-    @Override
     public void write(KEYOUT key, VALUEOUT value) throws IOException,
         InterruptedException {
-      reduceContext.write(key, value);
+      write(key, value, (long)1);
+    }
+
+    @Override
+    public void write(KEYOUT key, VALUEOUT value, long recordsRepresented) throws IOException,
+        InterruptedException {
+      reduceContext.write(key, value, recordsRepresented);
     }
 
     @Override
@@ -326,5 +331,10 @@ public class WrappedReducer<KEYIN, VALUEIN, KEYOUT, VALUEOUT>
     public float getProgress() {
       return reduceContext.getProgress();
     }
+
+    // Determine whether this job should use dependency scheduling
+    public boolean useDependencyScheduling(Configuration conf) {
+      return reduceContext.useDependencyScheduling(conf);
+    }   
   }
 }

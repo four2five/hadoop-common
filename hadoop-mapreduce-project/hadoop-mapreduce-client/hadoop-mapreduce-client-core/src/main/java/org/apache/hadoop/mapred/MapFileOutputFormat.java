@@ -73,8 +73,12 @@ extends FileOutputFormat<WritableComparable, Writable> {
 
         public void write(WritableComparable key, Writable value)
           throws IOException {
+          write(key, value, (long)1);
+        }
 
-          out.append(key, value);
+        public void write(WritableComparable key, Writable value, long recordsRepresented)
+          throws IOException {
+          out.append(key, value, recordsRepresented);
         }
 
         public void close(Reporter reporter) throws IOException { out.close();}

@@ -20,6 +20,7 @@ package org.apache.hadoop.mapreduce;
 
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.util.Progressable;
 
 /**
@@ -67,5 +68,7 @@ public interface TaskAttemptContext extends JobContext, Progressable {
    *         <code>counterName</code>
    */
   public Counter getCounter(String groupName, String counterName);
+
+  public boolean useDependencyScheduling(Configuration conf);
 
 }

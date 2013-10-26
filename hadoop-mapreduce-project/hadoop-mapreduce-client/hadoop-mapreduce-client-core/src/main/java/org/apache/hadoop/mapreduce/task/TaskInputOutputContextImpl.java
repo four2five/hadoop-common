@@ -81,12 +81,16 @@ public abstract class TaskInputOutputContextImpl<KEYIN,VALUEIN,KEYOUT,VALUEOUT>
   public abstract VALUEIN getCurrentValue() throws IOException, 
                                                    InterruptedException;
 
+  public void write(KEYOUT key, VALUEOUT value
+                    ) throws IOException, InterruptedException {
+    write(key, value, (long)1);
+  }
   /**
    * Generate an output key/value pair.
    */
-  public void write(KEYOUT key, VALUEOUT value
+  public void write(KEYOUT key, VALUEOUT value, long recordsRepresented
                     ) throws IOException, InterruptedException {
-    output.write(key, value);
+    output.write(key, value, recordsRepresented);
   }
 
   public OutputCommitter getOutputCommitter() {
