@@ -24,6 +24,8 @@ import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
 
+import java.lang.Thread;
+
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
 import org.apache.hadoop.conf.Configuration;
@@ -79,6 +81,7 @@ public class IFile {
 
     // Count records written to disk
     private long numRecordsWritten = 0;
+    private long numRecordsRepresented = 0;
     private final Counters.Counter writtenRecordsCounter;
 
     IFileOutputStream checksumOut;
@@ -110,6 +113,9 @@ public class IFile {
       this.writtenRecordsCounter = writesCounter;
       this.checksumOut = new IFileOutputStream(out);
       this.rawOut = out;
+      if (null == out) { 
+        LOG.info(" IFile.Writer(), the passed in out is NULL");
+      }
       this.start = this.rawOut.getPos();
       if (codec != null) {
         this.compressor = CodecPool.getCompressor(codec);
@@ -118,12 +124,21 @@ public class IFile {
           this.compressedOut = codec.createOutputStream(checksumOut, compressor);
           this.out = new FSDataOutputStream(this.compressedOut,  null);
           this.compressOutput = true;
+          if (null == this.out) { 
+            LOG.info("IFile.Writer() 2, compressed output out is NULL");
+          }
         } else {
           LOG.warn("Could not obtain compressor from CodecPool");
           this.out = new FSDataOutputStream(checksumOut,null);
+          if (null == this.out) { 
+            LOG.info("IFile.Writer() 3, noncompressed output out is NULL");
+          }
         }
       } else {
         this.out = new FSDataOutputStream(checksumOut,null);
+          if (null == this.out) { 
+            LOG.info("IFile.Writer() 4, non-codec output out is NULL");
+          }
       }
       
       this.keyClass = keyClass;
@@ -152,6 +167,14 @@ public class IFile {
       if (keyClass != null) {
         keySerializer.close();
         valueSerializer.close();
+      }
+
+      if (null == out) { 
+        LOG.info(" in IFile.close(), out is NULL");
+        
+        for (StackTraceElement element : Thread.currentThread().getStackTrace()) { 
+          LOG.info("    " + element.toString());
+        }
       }
 
       // Write EOF_MARKER for key/value length
@@ -186,6 +209,7 @@ public class IFile {
       }
 
       out = null;
+      LOG.info("IFile.close(), setting out to NULL");
       if(writtenRecordsCounter != null) {
         writtenRecordsCounter.increment(numRecordsWritten);
       }
@@ -232,6 +256,8 @@ public class IFile {
                                   WritableUtils.getVIntSize(keyLength) + 
                                   WritableUtils.getVIntSize(valueLength);
       ++numRecordsWritten;
+      numRecordsRepresented += recordsRepresented;
+      //LOG.info("k: " + key.toString() + " recrep: " + recordsRepresented + " : " + numRecordsRepresented);
     }
     
     public void append(DataInputBuffer key, DataInputBuffer value)
@@ -263,6 +289,7 @@ public class IFile {
                       WritableUtils.getVIntSize(keyLength) + 
                       WritableUtils.getVIntSize(valueLength);
       ++numRecordsWritten;
+      numRecordsRepresented += recordsRepresented;
     }
     
     // Required for mark/reset
@@ -283,6 +310,19 @@ public class IFile {
     public long getCompressedLength() {
       return compressedBytesWritten;
     }
+
+    public long getRecordsWritten() {
+      return numRecordsWritten;
+    }
+    
+    public long getRecordsRepresented() {
+      return numRecordsRepresented;
+    }
+
+    public void incrementRecordsRepresented( long inRecs ) {
+      this.numRecordsRepresented += inRecs;
+    }
+
   }
 
   /**

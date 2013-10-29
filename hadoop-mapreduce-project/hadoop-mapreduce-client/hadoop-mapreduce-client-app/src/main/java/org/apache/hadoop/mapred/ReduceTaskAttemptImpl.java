@@ -35,10 +35,13 @@ import org.apache.hadoop.yarn.util.Clock;
 public class ReduceTaskAttemptImpl extends TaskAttemptImpl {
 
   private final int numMapTasks;
+  private final int[] mapTaskDependencies;
 
   public ReduceTaskAttemptImpl(TaskId id, int attempt,
       EventHandler eventHandler, Path jobFile, int partition,
-      int numMapTasks, JobConf conf,
+      int numMapTasks, 
+      int[] mapTaskDependencies,
+      JobConf conf,
       TaskAttemptListener taskAttemptListener,
       Token<JobTokenIdentifier> jobToken,
       Credentials credentials, Clock clock,
@@ -47,6 +50,7 @@ public class ReduceTaskAttemptImpl extends TaskAttemptImpl {
         conf, new String[] {}, jobToken, credentials, clock,
         appContext);
     this.numMapTasks = numMapTasks;
+    this.mapTaskDependencies = mapTaskDependencies;
   }
 
   @Override
@@ -57,6 +61,7 @@ public class ReduceTaskAttemptImpl extends TaskAttemptImpl {
           numMapTasks, 1); // YARN doesn't have the concept of slots per task, set it as 1.
   reduceTask.setUser(conf.get(MRJobConfig.USER_NAME));
   reduceTask.setConf(conf);
+  reduceTask.setMapTaskDependencies(this.mapTaskDependencies);
     return reduceTask;
   }
 

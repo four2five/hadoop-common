@@ -197,7 +197,7 @@ public class Merger {
         10000);
     long recordCtr = 0;
     while(records.next()) {
-      writer.append(records.getKey(), records.getValue());
+      writer.append(records.getKey(), records.getValue(), 0);
       
       if (((recordCtr++) % progressBar) == 0) {
         progressable.progress();
@@ -219,20 +219,31 @@ public class Merger {
     long segmentOffset = 0;
     long segmentLength = -1;
     long rawDataLength = -1;
+    long numRecords = -4;
+    long numRecordsRepresented = -4;
     
     Counters.Counter mapOutputsCounter = null;
 
     public Segment(Configuration conf, FileSystem fs, Path file,
                    CompressionCodec codec, boolean preserve)
     throws IOException {
-      this(conf, fs, file, codec, preserve, null);
+      this(conf, fs, file, -4, -4,  codec, preserve, null);
     }
 
     public Segment(Configuration conf, FileSystem fs, Path file,
                    CompressionCodec codec, boolean preserve,
                    Counters.Counter mergedMapOutputsCounter)
   throws IOException {
-      this(conf, fs, file, 0, fs.getFileStatus(file).getLen(), codec, preserve, 
+      this(conf, fs, file, 0, fs.getFileStatus(file).getLen(), -4, -4, codec, preserve, 
+           mergedMapOutputsCounter);
+    }
+    
+    public Segment(Configuration conf, FileSystem fs, Path file,
+                   long numRecords, long numRecordsRepresented,
+                   CompressionCodec codec, boolean preserve,
+                   Counters.Counter mergedMapOutputsCounter)
+  throws IOException {
+      this(conf, fs, file, 0, fs.getFileStatus(file).getLen(), numRecords, numRecordsRepresented, codec, preserve, 
            mergedMapOutputsCounter);
     }
     
@@ -240,20 +251,32 @@ public class Merger {
         CompressionCodec codec, boolean preserve,
         Counters.Counter mergedMapOutputsCounter, long rawDataLength)
             throws IOException {
-      this(conf, fs, file, 0, fs.getFileStatus(file).getLen(), codec, preserve, 
+      this(conf, fs, file, 0, fs.getFileStatus(file).getLen(), -4, -4, codec, preserve, 
+          mergedMapOutputsCounter);
+      this.rawDataLength = rawDataLength;
+    }
+
+    public Segment(Configuration conf, FileSystem fs, Path file,
+        long numRecords, long numRecordsRepresented,
+        CompressionCodec codec, boolean preserve,
+        Counters.Counter mergedMapOutputsCounter, long rawDataLength)
+            throws IOException {
+      this(conf, fs, file, 0, fs.getFileStatus(file).getLen(), numRecords, numRecordsRepresented, codec, preserve, 
           mergedMapOutputsCounter);
       this.rawDataLength = rawDataLength;
     }
 
     public Segment(Configuration conf, FileSystem fs, Path file,
                    long segmentOffset, long segmentLength,
+                   long numRecords, long numRecordsRepresented,
                    CompressionCodec codec,
                    boolean preserve) throws IOException {
-      this(conf, fs, file, segmentOffset, segmentLength, codec, preserve, null);
+      this(conf, fs, file, segmentOffset, segmentLength, numRecords, numRecordsRepresented, codec, preserve, null);
     }
 
     public Segment(Configuration conf, FileSystem fs, Path file,
-        long segmentOffset, long segmentLength, CompressionCodec codec,
+        long segmentOffset, long segmentLength, 
+        long numRecords, long numRecordsRepresented, CompressionCodec codec,
         boolean preserve, Counters.Counter mergedMapOutputsCounter)
     throws IOException {
       this.conf = conf;
@@ -264,6 +287,8 @@ public class Merger {
 
       this.segmentOffset = segmentOffset;
       this.segmentLength = segmentLength;
+      this.numRecords = numRecords;
+      this.numRecordsRepresented = numRecordsRepresented;
       
       this.mapOutputsCounter = mergedMapOutputsCounter;
     }
@@ -309,6 +334,9 @@ public class Merger {
       nextRawValue(value);
       return value;
     }
+
+    long getNumRecords() { return this.numRecords; }
+    long getNumRecordsRepresented() { return this.numRecordsRepresented; }
 
     public long getLength() { 
       return (reader == null) ?
@@ -400,6 +428,7 @@ public class Merger {
     DataInputBuffer key;
     final DataInputBuffer value = new DataInputBuffer();
     final DataInputBuffer diskIFileValue = new DataInputBuffer();
+    long numRecordsRepresented;
     
     Segment<K, V> minSegment;
     Comparator<Segment<K, V>> segmentComparator =   
@@ -487,6 +516,9 @@ public class Merger {
       return value;
     }
 
+    //long getNumRecords() { return this.numRecords; }
+    long getNumRecordsRepresented() { return this.numRecordsRepresented; }
+
     private void adjustPriorityQueue(Segment<K, V> reader) throws IOException{
       long startPos = reader.getPosition();
       boolean hasNext = reader.nextRawKey();
@@ -531,6 +563,7 @@ public class Merger {
       long startPos = minSegment.getPosition();
       key = minSegment.getKey();
       minSegment.getValue(value);
+      numRecordsRepresented = minSegment.getNumRecordsRepresented();
       long endPos = minSegment.getPosition();
       totalBytesProcessed += endPos - startPos;
       mergeProgress.set(totalBytesProcessed * progPerByte);

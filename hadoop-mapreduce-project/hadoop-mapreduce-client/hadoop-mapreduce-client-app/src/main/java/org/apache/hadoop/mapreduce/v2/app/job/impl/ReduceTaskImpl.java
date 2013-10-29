@@ -37,6 +37,7 @@ import org.apache.hadoop.yarn.util.Clock;
 public class ReduceTaskImpl extends TaskImpl {
   
   private final int numMapTasks;
+  private final int[] mapTaskDependencies;
 
   public ReduceTaskImpl(JobId jobId, int partition,
       EventHandler eventHandler, Path jobFile, JobConf conf,
@@ -48,6 +49,7 @@ public class ReduceTaskImpl extends TaskImpl {
         taskAttemptListener, jobToken, credentials, clock,
         appAttemptId, metrics, appContext);
     this.numMapTasks = numMapTasks;
+    this.mapTaskDependencies = new int[0];
   }
 
   @Override
@@ -59,7 +61,9 @@ public class ReduceTaskImpl extends TaskImpl {
   protected TaskAttemptImpl createAttempt() {
     return new ReduceTaskAttemptImpl(getID(), nextAttemptNumber,
         eventHandler, jobFile,
-        partition, numMapTasks, conf, taskAttemptListener,
+        partition, numMapTasks, 
+        mapTaskDependencies,
+        conf, taskAttemptListener,
         jobToken, credentials, clock, appContext);
   }
 

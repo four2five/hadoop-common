@@ -80,7 +80,9 @@ public class MapTask extends Task {
   /**
    * The size of each record in the index file for the map-outputs.
    */
-  public static final int MAP_OUTPUT_INDEX_RECORD_LENGTH = 24;
+  //public static final int MAP_OUTPUT_INDEX_RECORD_LENGTH = 24;
+  // we added 2 ints, so 16 more bytes
+  public static final int MAP_OUTPUT_INDEX_RECORD_LENGTH = 40;
 
   private TaskSplitIndex splitMetaInfo = new TaskSplitIndex();
   private final static int APPROX_HEADER_LENGTH = 150;
@@ -904,7 +906,8 @@ public class MapTask extends Task {
     private static final int KEYSTART = 1;         // key offset in acct
     private static final int PARTITION = 2;        // partition offset in acct
     private static final int VALLEN = 3;           // length of value
-    private static final int NMETA = 4;            // num meta ints
+    private static final int RECREP = 4;           // number of records represented by this value
+    private static final int NMETA = 5;            // num meta ints
     private static final int METASIZE = NMETA * 4; // size in bytes
 
     // spill accounting
@@ -1176,11 +1179,12 @@ public class MapTask extends Task {
         kvmeta.put(kvindex + KEYSTART, keystart);
         kvmeta.put(kvindex + VALSTART, valstart);
         kvmeta.put(kvindex + VALLEN, distanceTo(valstart, valend));
+        kvmeta.put(kvindex + RECREP, (int)recordsRepresented);
         // advance kvindex
         kvindex = (kvindex - NMETA + kvmeta.capacity()) % kvmeta.capacity();
       } catch (MapBufferTooSmallException e) {
         LOG.info("Record too large for in-memory buffer: " + e.getMessage());
-        spillSingleRecord(key, value, partition);
+        spillSingleRecord(key, value, recordsRepresented, partition);
         mapOutputRecordCounter.increment(1);
         return;
       }
@@ -1605,13 +1609,21 @@ public class MapTask extends Task {
         int spindex = mstart;
         final IndexRecord rec = new IndexRecord();
         final InMemValBytes value = new InMemValBytes();
+
+        int[] tempCounts = new int[partitions];
+        for (int i=0; i<partitions; i++) { 
+          tempCounts[i] = 0;
+        }
+
         for (int i = 0; i < partitions; ++i) {
+          LOG.info("Writing output for partition " + i);
           IFile.Writer<K, V> writer = null;
           try {
             long segmentStart = out.getPos();
             writer = new Writer<K, V>(job, out, keyClass, valClass, codec,
                                       spilledRecordsCounter);
             if (combinerRunner == null) {
+              LOG.info("spilling directly");
               // spill directly
               DataInputBuffer key = new DataInputBuffer();
               while (spindex < mend &&
@@ -1619,12 +1631,15 @@ public class MapTask extends Task {
                 final int kvoff = offsetFor(spindex % maxRec);
                 int keystart = kvmeta.get(kvoff + KEYSTART);
                 int valstart = kvmeta.get(kvoff + VALSTART);
+                int recrep = kvmeta.get(kvoff + RECREP);
                 key.reset(kvbuffer, keystart, valstart - keystart);
                 getVBytesForOffset(kvoff, value);
-                writer.append(key, value);
+                tempCounts[i] += recrep;
+                writer.append(key, value, recrep);
                 ++spindex;
               }
             } else {
+              LOG.info("Using a combiner runner");
               int spstart = spindex;
               while (spindex < mend &&
                   kvmeta.get(offsetFor(spindex % maxRec)
@@ -1648,6 +1663,8 @@ public class MapTask extends Task {
             rec.startOffset = segmentStart;
             rec.rawLength = writer.getRawLength();
             rec.partLength = writer.getCompressedLength();
+            rec.numRecords = writer.getRecordsWritten();
+            rec.numRecordsRepresented = writer.getRecordsRepresented();
             spillRec.putIndex(rec, i);
 
             writer = null;
@@ -1679,7 +1696,7 @@ public class MapTask extends Task {
      * the in-memory buffer, so we must spill the record from collect
      * directly to a spill file. Consider this "losing".
      */
-    private void spillSingleRecord(final K key, final V value,
+    private void spillSingleRecord(final K key, final V value, long recordsRepresented,
                                    int partition) throws IOException {
       long size = kvbuffer.length + partitions * APPROX_HEADER_LENGTH;
       FSDataOutputStream out = null;
@@ -1702,7 +1719,7 @@ public class MapTask extends Task {
 
             if (i == partition) {
               final long recordStart = out.getPos();
-              writer.append(key, value);
+              writer.append(key, value, recordsRepresented);
               // Note that our map byte count will not be accurate with
               // compression
               mapOutputByteCounter.increment(out.getPos() - recordStart);
@@ -1713,6 +1730,8 @@ public class MapTask extends Task {
             rec.startOffset = segmentStart;
             rec.rawLength = writer.getRawLength();
             rec.partLength = writer.getCompressedLength();
+            rec.numRecords = writer.getRecordsWritten();
+            rec.numRecordsRepresented = writer.getRecordsRepresented();
             spillRec.putIndex(rec, i);
 
             writer = null;
@@ -1797,6 +1816,14 @@ public class MapTask extends Task {
         getVBytesForOffset(offsetFor(current % maxRec), vbytes);
         return vbytes;
       }
+
+      // -jbuck
+      public int getNumRecordsRepresented() throws IOException { 
+        final int kvoff = offsetFor(current % maxRec);
+        LOG.info("getNumRecordsRepresented: " + kvmeta.get(kvoff + RECREP));
+        return kvmeta.get(kvoff + RECREP);
+      }
+
       public Progress getProgress() {
         return null;
       }
@@ -1816,6 +1843,7 @@ public class MapTask extends Task {
         finalOutFileSize += rfs.getFileStatus(filename[i]).getLen();
       }
       if (numSpills == 1) { //the spill is the final output
+        LOG.info("1 spill, writing it out");
         sameVolRename(filename[0],
             mapOutputFile.getOutputFileForWriteInVolume(filename[0]));
         if (indexCacheList.size() == 0) {
@@ -1848,6 +1876,7 @@ public class MapTask extends Task {
       FSDataOutputStream finalOut = rfs.create(finalOutputFile, true, 4096);
 
       if (numSpills == 0) {
+        LOG.info("Zero spill files, creating a dummy one");
         //create dummy files
         IndexRecord rec = new IndexRecord();
         SpillRecord sr = new SpillRecord(partitions);
@@ -1860,6 +1889,8 @@ public class MapTask extends Task {
             rec.startOffset = segmentStart;
             rec.rawLength = writer.getRawLength();
             rec.partLength = writer.getCompressedLength();
+            rec.numRecords = writer.getRecordsWritten();
+            rec.numRecordsRepresented = writer.getRecordsRepresented();
             sr.putIndex(rec, i);
           }
           sr.writeToFile(finalIndexFile, job);
@@ -1873,18 +1904,22 @@ public class MapTask extends Task {
         sortPhase.addPhases(partitions); // Divide sort phase into sub-phases
         Merger.considerFinalMergeForProgress();
         
+        
         IndexRecord rec = new IndexRecord();
         final SpillRecord spillRec = new SpillRecord(partitions);
         for (int parts = 0; parts < partitions; parts++) {
           //create the segments to be merged
           List<Segment<K,V>> segmentList =
             new ArrayList<Segment<K, V>>(numSpills);
+        
+          long recRepForPartition = 0;
           for(int i = 0; i < numSpills; i++) {
             IndexRecord indexRecord = indexCacheList.get(i).getIndex(parts);
 
             Segment<K,V> s =
               new Segment<K,V>(job, rfs, filename[i], indexRecord.startOffset,
-                               indexRecord.partLength, codec, true);
+                               indexRecord.partLength, indexRecord.numRecords,
+                               indexRecord.numRecordsRepresented, codec, true);
             segmentList.add(i, s);
 
             if (LOG.isDebugEnabled()) {
@@ -1892,7 +1927,10 @@ public class MapTask extends Task {
                   "Spill =" + i + "(" + indexRecord.startOffset + "," +
                   indexRecord.rawLength + ", " + indexRecord.partLength + ")");
             }
+            recRepForPartition += indexRecord.numRecordsRepresented;
           }
+
+          int segmentListSize = segmentList.size();
 
           int mergeFactor = job.getInt(JobContext.IO_SORT_FACTOR, 100);
           // sort the segments only if there are intermediate merges
@@ -1927,7 +1965,10 @@ public class MapTask extends Task {
           rec.startOffset = segmentStart;
           rec.rawLength = writer.getRawLength();
           rec.partLength = writer.getCompressedLength();
+          rec.numRecords = writer.getRecordsWritten();
+          rec.numRecordsRepresented = writer.getRecordsRepresented();
           spillRec.putIndex(rec, parts);
+          LOG.info("wrote " + rec.numRecordsRepresented + " for partition " + parts);
         }
         spillRec.writeToFile(finalIndexFile, job);
         finalOut.close();

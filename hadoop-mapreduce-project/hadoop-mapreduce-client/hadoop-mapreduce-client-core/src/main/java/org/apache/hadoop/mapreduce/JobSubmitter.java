@@ -507,14 +507,19 @@ class JobSubmitter {
         if( inputSplitDependencyInfo.length != array.length) { 
           LOG.error("there are " + array.length + " input splits but dependency info for " + 
                     inputSplitDependencyInfo.length + ". This is bad");
-        } else { 
-          for( int i=0; i<array.length; i++) { 
-            LOG.info("split[" + i + "]: " + inputSplitDependencyInfo[i].length + 
-                     " dependencies: " + Arrays.toString(inputSplitDependencyInfo[i]));
-            array[i].setReducerDependencyInfo(inputSplitDependencyInfo[i]);
-            totalConnectionCount += inputSplitDependencyInfo[i].length;
-          }
+        } else if (null == inputSplitDependencyInfo) { 
+          // this should init to all zeroes. Seems like a reasonable error handling case
+          inputSplitDependencyInfo = new int[array.length][0];
         }
+
+        // generate empty dependencies if there is an error 
+        for( int i=0; i<array.length; i++) { 
+          LOG.info("split[" + i + "]: " + inputSplitDependencyInfo[i].length + 
+                   " dependencies: " + Arrays.toString(inputSplitDependencyInfo[i]));
+          array[i].setReducerDependencyInfo(inputSplitDependencyInfo[i]);
+          totalConnectionCount += inputSplitDependencyInfo[i].length;
+        }
+        
       } catch( Exception e) { 
         e.printStackTrace();
       }

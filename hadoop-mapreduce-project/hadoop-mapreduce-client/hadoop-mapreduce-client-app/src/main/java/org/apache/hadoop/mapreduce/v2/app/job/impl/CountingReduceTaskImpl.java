@@ -44,10 +44,13 @@ public class CountingReduceTaskImpl extends TaskImpl {
   
   private static final Log LOG = LogFactory.getLog(CountingReduceTaskImpl.class);
   private final int numMapTasks;
+  private final int[] mapTaskDependencies;
 
   public CountingReduceTaskImpl(JobId jobId, int partition,
       EventHandler eventHandler, Path jobFile, JobConf conf,
-      int numMapTasks, TaskAttemptListener taskAttemptListener,
+      int numMapTasks, 
+      int[] mapTaskDependencies,
+      TaskAttemptListener taskAttemptListener,
       Token<JobTokenIdentifier> jobToken,
       Credentials credentials, Clock clock,
       int appAttemptId, MRAppMetrics metrics, AppContext appContext) {
@@ -55,7 +58,9 @@ public class CountingReduceTaskImpl extends TaskImpl {
         taskAttemptListener, jobToken, credentials, clock,
         appAttemptId, metrics, appContext);
     this.numMapTasks = numMapTasks;
+    this.mapTaskDependencies = mapTaskDependencies;
     LOG.info("Creating a CountingReduceTaskImpl");
+    LOG.info("Reduce task " + partition + " depends on map tasks: " + Arrays.toString(this.mapTaskDependencies));
   }
 
   @Override
@@ -67,7 +72,8 @@ public class CountingReduceTaskImpl extends TaskImpl {
   protected TaskAttemptImpl createAttempt() {
     return new ReduceTaskAttemptImpl(getID(), nextAttemptNumber,
         eventHandler, jobFile,
-        partition, numMapTasks, conf, taskAttemptListener,
+        partition, numMapTasks, mapTaskDependencies, 
+        conf, taskAttemptListener,
         jobToken, credentials, clock, appContext);
   }
 

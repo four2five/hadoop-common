@@ -181,10 +181,12 @@ public class JobSplitWriter {
               + split + " splitsize: " + locations.length +
               " maxsize: " + maxBlockLocations);
         }
-        info[i++] = 
+        info[i] = 
           new JobSplit.SplitMetaInfo( 
               locations, offset,
-              split.getLength());
+              split.getLength(),
+              inputSplitDependencyInfo[i]);
+        i++;
         offset += currCount - prevCount;
       }
     }

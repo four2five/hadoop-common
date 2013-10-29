@@ -18,10 +18,13 @@
 
 package org.apache.hadoop.mapred;
 
+import edu.ucsc.srl.damasc.hadoop.HadoopUtils;
+
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 import java.util.SortedSet;
@@ -65,12 +68,16 @@ public class ReduceTask extends Task {
     WritableFactories.setFactory
       (ReduceTask.class,
        new WritableFactory() {
-         public Writable newInstance() { return new ReduceTask(); }
+         public Writable newInstance() { 
+            System.out.println("in WritableFactory, newInstance for ReduceTask()");
+            return new ReduceTask(); 
+         }
        });
   }
   
   private static final Log LOG = LogFactory.getLog(ReduceTask.class.getName());
   private int numMaps;
+  private int[] mapTaskDependencies;
 
   private CompressionCodec codec;
 
@@ -125,12 +132,26 @@ public class ReduceTask extends Task {
 
   public ReduceTask() {
     super();
+    mapTaskDependencies = new int[0]; // this is set via setMapDependencies();
+    LOG.info("In ReduceTask constructor 1");
   }
 
   public ReduceTask(String jobFile, TaskAttemptID taskId,
                     int partition, int numMaps, int numSlotsRequired) {
     super(jobFile, taskId, partition, numSlotsRequired);
     this.numMaps = numMaps;
+    mapTaskDependencies = new int[0]; // this is set via setMapDependencies();
+    LOG.info("In ReduceTask constructor 2");
+  }
+
+  public void setMapTaskDependencies( int[] dependencies) { 
+    LOG.info("Setting a dependency of length: " + dependencies.length);
+    mapTaskDependencies = dependencies; 
+  }
+
+  public int[] getMapTaskDependencies() { 
+    LOG.info("getting a dependency of length: " + mapTaskDependencies.length);
+    return mapTaskDependencies; 
   }
   
   private CompressionCodec initCodec() {
@@ -158,6 +179,7 @@ public class ReduceTask extends Task {
   public void localizeConfiguration(JobConf conf) throws IOException {
     super.localizeConfiguration(conf);
     conf.setNumMapTasks(numMaps);
+    LOG.info("in localizeConfiguration()");
   }
 
   @Override
@@ -165,6 +187,12 @@ public class ReduceTask extends Task {
     super.write(out);
 
     out.writeInt(numMaps);                        // write the number of maps
+
+    // write out the map tasks that this reducer dpeneds on
+    out.writeInt(mapTaskDependencies.length);
+    for( int i=0; i<mapTaskDependencies.length; i++) { 
+      out.writeInt(mapTaskDependencies[i]); 
+    }
   }
 
   @Override
@@ -172,6 +200,11 @@ public class ReduceTask extends Task {
     super.readFields(in);
 
     numMaps = in.readInt();
+
+    mapTaskDependencies = new int[in.readInt()];
+    for( int i=0; i<mapTaskDependencies.length; i++) { 
+      mapTaskDependencies[i] = in.readInt();
+    }
   }
   
   // Get the input files for the reducer.
@@ -377,8 +410,15 @@ public class ReduceTask extends Task {
                     taskStatus, copyPhase, sortPhase, this,
                     mapOutputFile);
       shuffleConsumerPlugin.init(shuffleContext);
+      // -jbuck setMapTaskDependencies if necessary here
+      /*
+      if (job.useDependencyScheduling()) { 
+        shuffleConsumerPlugin.setMapTaskDependencies();
+      }
+      */
       rIter = shuffleConsumerPlugin.run();
     } else {
+      LOG.info("Using local job runner");
       // local job runner doesn't have a copy phase
       copyPhase.complete();
       final FileSystem rfs = FileSystem.getLocal(job).getRaw();
@@ -391,20 +431,26 @@ public class ReduceTask extends Task {
                            job.getOutputKeyComparator(),
                            reporter, spilledRecordsCounter, null, null);
     }
+    LOG.info("about to run mapOutputFilesOnDisk.clear()");
     // free up the data structures
     mapOutputFilesOnDisk.clear();
     
+    LOG.info("about to run mapOutputFilesOnDisk.clear()");
     sortPhase.complete();                         // sort is complete
+    LOG.info("about to sortPhase.complete()");
     setPhase(TaskStatus.Phase.REDUCE); 
     statusUpdate(umbilical);
+    LOG.info("just did a status update()");
     Class keyClass = job.getMapOutputKeyClass();
     Class valueClass = job.getMapOutputValueClass();
     RawComparator comparator = job.getOutputValueGroupingComparator();
 
     if (useNewApi) {
+      LOG.info("Using new Reducer API");
       runNewReducer(job, umbilical, reporter, rIter, comparator, 
                     keyClass, valueClass);
     } else {
+      LOG.info("Using old Reducer API");
       runOldReducer(job, umbilical, reporter, rIter, comparator, 
                     keyClass, valueClass);
     }

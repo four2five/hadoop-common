@@ -20,6 +20,7 @@ package org.apache.hadoop.mapreduce.v2.app.job.impl;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.EnumSet;
@@ -1394,6 +1395,12 @@ public class JobImpl implements org.apache.hadoop.mapreduce.v2.app.job.Job,
         job.numMapTasks = taskSplitMetaInfo.length;
         job.numReduceTasks = job.conf.getInt(MRJobConfig.NUM_REDUCES, 0);
 
+        // debug logging here
+        LOG.info("TaskSplitMetaInfo: " );
+        for (int i=0; i<taskSplitMetaInfo.length; i++) { 
+          LOG.info("  " + taskSplitMetaInfo[i].toString());
+        }
+
         if (job.numMapTasks == 0 && job.numReduceTasks == 0) {
           job.addDiagnostic("No of maps and reduces are 0 " + job.jobId);
         } else if (job.numMapTasks == 0) {
@@ -1436,7 +1443,7 @@ public class JobImpl implements org.apache.hadoop.mapreduce.v2.app.job.Job,
 
         // create the Tasks but don't start them yet
         createMapTasks(job, inputLength, taskSplitMetaInfo);
-        createReduceTasks(job);
+        createReduceTasks(job, taskSplitMetaInfo);
 
         job.metrics.endPreparingJob(job);
         return JobStateInternal.INITED;
@@ -1502,11 +1509,11 @@ public class JobImpl implements org.apache.hadoop.mapreduce.v2.app.job.Job,
         return;
       }
 
-      LOG.info("In createMapTasks(), useDeps: " + justJob.useDependencyScheduling(job.conf));
+      LOG.info("In createMapTasks(), useDeps: " + job.conf.useDependencyScheduling());
 
       for (int i=0; i < job.numMapTasks; ++i) {
         TaskImpl task;
-        if (justJob.useDependencyScheduling(job.conf)) { 
+        if (job.conf.useDependencyScheduling()) { 
           task =
               new CountingMapTaskImpl(job.jobId, i,
                   job.eventHandler, 
@@ -1535,9 +1542,72 @@ public class JobImpl implements org.apache.hadoop.mapreduce.v2.app.job.Job,
           + ". Number of splits = " + splits.length);
     }
 
-    private void createReduceTasks(JobImpl job) {
+    private void createReduceTasks(JobImpl job, 
+                                   TaskSplitMetaInfo[] splits) {
+      Job justJob = null;
+      
+      try { 
+        justJob = new Job(job.conf);
+      } catch (IOException ioe) {
+        LOG.error("Caught an IOE in JobImpl.SetupCompletedTransition.transition()\n" + ioe.toString());
+        return;
+      }
+
+      if (job.conf.useDependencyScheduling()) {
+        LOG.info("in JobImpl.createReduceTasks. Here are the dependencies");
+        for (int i=0; i<splits.length; i++) { 
+          LOG.info("  m[" + i + "] -> " + Arrays.toString(splits[i].getReducerDependencyInfo()));
+        }
+      }
+
+      // invert the Map -> Reduce task dependencies
+      HashMap<Integer, ArrayList<Integer>> reducersToMappersHM = new HashMap<Integer, ArrayList<Integer>>();
+      ArrayList<Integer> tempAL = new ArrayList<Integer>();
+
+      // add entries for each Reduce task
+      for (int i=0; i<job.numReduceTasks; i++) { 
+        reducersToMappersHM.put(new Integer(i), new ArrayList<Integer>());
+      }
+
+      // now flip the dependencies for each Map task
+      for (int i=0; i<splits.length; i++) { 
+        int[] tempArray = splits[i].getReducerDependencyInfo();
+        for (int j=0; j<tempArray.length; j++) {
+          ((ArrayList<Integer>)(reducersToMappersHM.get(new Integer(tempArray[j])))).add(new Integer(i));
+        }
+      }
+
+      int[][] reducersToMappers = new int[job.numReduceTasks][0];
+      // now turn the HashMap into an int[][]
+      // The Map.Entry keys are Integers representing Reducer task numbers. 
+      // The Map.Entry Value is an ArrayList<Integer> with the list of Map tasks that the Reduce task depends on
+      for (Map.Entry<Integer, ArrayList<Integer>> entry : reducersToMappersHM.entrySet()) { 
+        reducersToMappers[entry.getKey().intValue()] = new int[entry.getValue().size()];
+        for (int i=0; i<entry.getValue().size(); i++) { 
+          reducersToMappers[entry.getKey().intValue()][i] = entry.getValue().get(i);   
+        }
+      }
+
+      LOG.info("JB, dumping Reducer -> Mapper dependencies");
+      for (int i=0; i<reducersToMappers.length; i++) { 
+        LOG.info("  r[" + i + "] -> " + Arrays.toString(reducersToMappers[i]));
+      }
+
       for (int i = 0; i < job.numReduceTasks; i++) {
-        TaskImpl task =
+        TaskImpl task;
+        if (job.conf.useDependencyScheduling()) { 
+          task =
+            new CountingReduceTaskImpl(job.jobId, i,
+                job.eventHandler, 
+                job.remoteJobConfFile, 
+                job.conf, job.numMapTasks, 
+                reducersToMappers[i], // placeholder for now. fix later -jbuck
+                job.taskAttemptListener, job.jobToken,
+                job.jobCredentials, job.clock,
+                job.applicationAttemptId.getAttemptId(),
+                job.metrics, job.appContext);
+        } else { 
+          task =
             new ReduceTaskImpl(job.jobId, i,
                 job.eventHandler, 
                 job.remoteJobConfFile, 
@@ -1546,6 +1616,7 @@ public class JobImpl implements org.apache.hadoop.mapreduce.v2.app.job.Job,
                 job.jobCredentials, job.clock,
                 job.applicationAttemptId.getAttemptId(),
                 job.metrics, job.appContext);
+        }
         job.addTask(task);
       }
       LOG.info("Number of reduces for job " + job.jobId + " = "
@@ -1588,14 +1659,19 @@ public class JobImpl implements org.apache.hadoop.mapreduce.v2.app.job.Job,
         return;
       }
 
-      //-jbuck
-      if (justJob.useDependencyScheduling(job.conf)) { 
+      //-jbuck scheduling happens here
+      /*
+      if (job.conf.useDependencyScheduling()) { 
         job.scheduleTasks(job.reduceTasks, true);
         job.scheduleTasks(job.mapTasks, job.numReduceTasks == 0);
       } else { 
         job.scheduleTasks(job.mapTasks, job.numReduceTasks == 0);
         job.scheduleTasks(job.reduceTasks, true);
       }
+      */
+
+      job.scheduleTasks(job.mapTasks, job.numReduceTasks == 0);
+      job.scheduleTasks(job.reduceTasks, true);
 
       // If we have no tasks, just transition to job completed
       if (job.numReduceTasks == 0 && job.numMapTasks == 0) {

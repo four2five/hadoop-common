@@ -27,6 +27,8 @@ import java.util.zip.CheckedInputStream;
 import java.util.zip.CheckedOutputStream;
 import java.util.zip.Checksum;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
 import org.apache.hadoop.fs.ChecksumException;
@@ -41,6 +43,8 @@ import org.apache.hadoop.util.PureJavaCrc32;
 @InterfaceAudience.LimitedPrivate({"MapReduce"})
 @InterfaceStability.Unstable
 public class SpillRecord {
+
+  private static final Log LOG = LogFactory.getLog(SpillRecord.class);
 
   /** Backing store */
   private final ByteBuffer buf;
@@ -106,7 +110,8 @@ public class SpillRecord {
   public IndexRecord getIndex(int partition) {
     final int pos = partition * MapTask.MAP_OUTPUT_INDEX_RECORD_LENGTH / 8;
     return new IndexRecord(entries.get(pos), entries.get(pos + 1),
-                           entries.get(pos + 2));
+                           entries.get(pos + 2), entries.get(pos + 3),
+                           entries.get(pos + 4));
   }
 
   /**
@@ -117,6 +122,8 @@ public class SpillRecord {
     entries.put(pos, rec.startOffset);
     entries.put(pos + 1, rec.rawLength);
     entries.put(pos + 2, rec.partLength);
+    entries.put(pos + 3, rec.numRecords);
+    entries.put(pos + 4, rec.numRecordsRepresented);
   }
 
   /**

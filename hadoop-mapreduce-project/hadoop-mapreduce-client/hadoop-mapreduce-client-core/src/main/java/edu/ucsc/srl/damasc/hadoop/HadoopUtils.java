@@ -166,7 +166,7 @@ public class HadoopUtils {
         dimString = dimString.replaceAll("\\s+", "");
       }
 
-      System.out.println("JB, here's that string" + dimString);
+      LOG.info("getVariableShape(): " + dimString);
       String[] dimStrings = dimString.split(",");
       variableShape = new int[dimStrings.length];
 
