@@ -18,6 +18,7 @@
 package org.apache.hadoop.mapreduce.task.reduce;
 
 import java.io.IOException;
+import java.util.Arrays;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -57,6 +58,7 @@ class DamascEventFetcher<K,V> extends Thread {
     exceptionReporter = reporter;
     this.maxEventsToFetch = maxEventsToFetch;
     this.mapTaskDependencies = mapTaskDependencies;
+    LOG.info("In DamascEventFetcher() mapTaskDependencies: " + Arrays.toString(mapTaskDependencies));
   }
 
   @Override
@@ -143,10 +145,12 @@ class DamascEventFetcher<K,V> extends Thread {
       // 3. Remove TIPFAILED maps from neededOutputs since we don't need their
       //    outputs at all.
       for (TaskCompletionEvent event : events) {
+        LOG.info("top of for loop mapTaskDependencies: " + Arrays.toString(mapTaskDependencies));
         // skip events for Map tasks that this Reduce task does not care about (due to dependencies)
-        if (!reducerCaresAboutThisMapTask(event.getTaskAttemptId().getTaskID())) { 
-          continue;
+        if (!reducerCaresAboutThisMapTask(event.getTaskAttemptId().getTaskID())) {  //-jbuck
+          LOG.info("Reducer: " + this.reduce + " does NOT care about map " + event.getTaskAttemptId().getTaskID()); 
         } else { 
+          LOG.info("Reducer: " + this.reduce + " DOES care about map " + event.getTaskAttemptId().getTaskID()); 
           scheduler.resolve(event);
           if (TaskCompletionEvent.Status.SUCCEEDED == event.getTaskStatus()) {
             ++numNewMaps;
@@ -162,6 +166,7 @@ class DamascEventFetcher<K,V> extends Thread {
     boolean retBool = false;
 
     for( int i=0; i<mapTaskDependencies.length; i++) { 
+      LOG.info("    id: " + task.getId() + " mtd: " + mapTaskDependencies[i]);
       if( task.getId() == mapTaskDependencies[i]) { 
         retBool = true;
         break;
@@ -170,5 +175,4 @@ class DamascEventFetcher<K,V> extends Thread {
 
     return retBool;
   }
-
 }

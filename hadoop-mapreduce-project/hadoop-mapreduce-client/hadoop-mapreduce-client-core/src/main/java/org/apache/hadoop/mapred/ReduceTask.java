@@ -51,10 +51,12 @@ import org.apache.hadoop.io.compress.CompressionCodec;
 import org.apache.hadoop.io.compress.DefaultCodec;
 import org.apache.hadoop.mapred.SortedRanges.SkipRangeIterator;
 import org.apache.hadoop.mapreduce.MRConfig;
+import org.apache.hadoop.mapreduce.MRJobConfig;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.hadoop.mapreduce.TaskCounter;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormatCounter;
 import org.apache.hadoop.mapreduce.task.reduce.Shuffle;
+import org.apache.hadoop.mapreduce.task.reduce.DamascShuffle;
 import org.apache.hadoop.util.Progress;
 import org.apache.hadoop.util.Progressable;
 import org.apache.hadoop.util.ReflectionUtils;
@@ -409,13 +411,16 @@ public class ReduceTask extends Task {
                     mergedMapOutputsCounter,
                     taskStatus, copyPhase, sortPhase, this,
                     mapOutputFile);
+
       shuffleConsumerPlugin.init(shuffleContext);
-      // -jbuck setMapTaskDependencies if necessary here
-      /*
-      if (job.useDependencyScheduling()) { 
-        shuffleConsumerPlugin.setMapTaskDependencies();
+
+      if (shuffleConsumerPlugin.getClass().getCanonicalName().equals(MRJobConfig.DAMASC_SHUFFLE)) { 
+        LOG.info("This is a DamascShuffle, setting MapTaskDependencies");
+        ((DamascShuffle)shuffleConsumerPlugin).setMapTaskDependencies(this.mapTaskDependencies);
+      } else { 
+        LOG.info("NOT DamascShuffle"); // -jbuck
       }
-      */
+
       rIter = shuffleConsumerPlugin.run();
     } else {
       LOG.info("Using local job runner");
@@ -474,6 +479,7 @@ public class ReduceTask extends Task {
       ReflectionUtils.newInstance(job.getReducerClass(), job);
     // make output collector
     String finalName = getOutputName(getPartition());
+    LOG.info("In runOldReducer()");
 
     RecordWriter<OUTKEY, OUTVALUE> out = new OldTrackingRecordWriter<OUTKEY, OUTVALUE>(
         this, job, reporter, finalName);
@@ -659,6 +665,7 @@ public class ReduceTask extends Task {
                      Class<INVALUE> valueClass
                      ) throws IOException,InterruptedException, 
                               ClassNotFoundException {
+    LOG.info("In runNewReducer()");
     // wrap value iterator to report progress.
     final RawKeyValueIterator rawIter = rIter;
     rIter = new RawKeyValueIterator() {

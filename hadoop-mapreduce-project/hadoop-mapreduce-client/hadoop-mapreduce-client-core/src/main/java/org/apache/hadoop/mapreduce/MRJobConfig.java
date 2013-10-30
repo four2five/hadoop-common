@@ -34,8 +34,6 @@ public interface MRJobConfig {
   public static final String MAP_OUTPUT_COLLECTOR_CLASS_ATTR
                                   = "mapreduce.job.map.output.collector.class";
 
-  public static final String DEPENDENCY_SCHEDULING = "mapreduce.dependency_scheduling";
-
   public static final String COMBINE_CLASS_ATTR = "mapreduce.job.combine.class";
 
   public static final String REDUCE_CLASS_ATTR = "mapreduce.job.reduce.class";
@@ -681,5 +679,8 @@ public interface MRJobConfig {
   public static final int DEFAULT_MR_AM_MAX_ATTEMPTS = 2;
   
   public static final String MR_APPLICATION_TYPE = "MAPREDUCE";
-  
+
+  public static final String DEPENDENCY_SCHEDULING = "mapreduce.dependency_scheduling";
+
+  public static final String DAMASC_SHUFFLE = "org.apache.hadoop.mapreduce.task.reduce.DamascShuffle";
 }

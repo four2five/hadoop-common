@@ -18,7 +18,10 @@
 package org.apache.hadoop.mapreduce.task.reduce;
 
 import java.io.IOException;
+import java.util.Arrays;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
 import org.apache.hadoop.mapred.JobConf;
@@ -36,6 +39,9 @@ import org.apache.hadoop.util.Progress;
 @InterfaceStability.Unstable
 @SuppressWarnings({"unchecked", "rawtypes"})
 public class DamascShuffle<K, V> implements ShuffleConsumerPlugin<K, V>, ExceptionReporter {
+
+  private static final Log LOG = LogFactory.getLog(DamascShuffle.class);
+
   private static final int PROGRESS_FREQUENCY = 2000;
   private static final int MAX_EVENTS_TO_FETCH = 10000;
   private static final int MIN_EVENTS_TO_FETCH = 100;
@@ -98,10 +104,15 @@ public class DamascShuffle<K, V> implements ShuffleConsumerPlugin<K, V>, Excepti
         MAX_RPC_OUTSTANDING_EVENTS / jobConf.getNumReduceTasks());
     int maxEventsToFetch = Math.min(MAX_EVENTS_TO_FETCH, eventsPerReducer);
 
+    LOG.info("About to create DamascEventFetcher, mapTaskDeps are : " + 
+             Arrays.toString(mapTaskDependencies));
     // Start the map-completion events fetcher thread
     final DamascEventFetcher<K,V> eventFetcher = 
       new DamascEventFetcher<K,V>(reduceId, umbilical, scheduler, this,
-          maxEventsToFetch, this.mapTaskDependencies);
+         maxEventsToFetch, mapTaskDependencies);
+    //final EventFetcher<K,V> eventFetcher = 
+     // new EventFetcher<K,V>(reduceId, umbilical, scheduler, this,
+     //     maxEventsToFetch);
     eventFetcher.start();
     
     // Start the map-output fetcher threads
@@ -164,10 +175,11 @@ public class DamascShuffle<K, V> implements ShuffleConsumerPlugin<K, V>, Excepti
   public void close(){
   }
 
-  public void setMapTaskDependencies( int[] mapTasksThisShuffleDependsOn ) { 
+  public void setMapTaskDependencies( int[] mapTaskDependencies) { 
     // if we're using DamascShuffle, we assume that the ReduceTaskImpl
     // is a CountingReduceTaskImpl
-    mapTaskDependencies = mapTasksThisShuffleDependsOn;
+    this.mapTaskDependencies = mapTaskDependencies;
+    LOG.info("set mapTaskDependencies to " + Arrays.toString(this.mapTaskDependencies));
   }
 
   public synchronized void reportException(Throwable t) {
