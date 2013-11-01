@@ -136,9 +136,10 @@ public class ShuffleSchedulerImpl<K,V> implements ShuffleScheduler<K,V> {
 
   @Override
   public void resolve(TaskCompletionEvent event) {
+    URI u = getBaseURI(reduceId, event.getTaskTrackerHttp());
     switch (event.getTaskStatus()) {
     case SUCCEEDED:
-      URI u = getBaseURI(reduceId, event.getTaskTrackerHttp());
+      //URI u = getBaseURI(reduceId, event.getTaskTrackerHttp());
       addKnownMapOutput(u.getHost() + ":" + u.getPort(),
           u.toString(),
           event.getTaskAttemptId());
@@ -150,6 +151,9 @@ public class ShuffleSchedulerImpl<K,V> implements ShuffleScheduler<K,V> {
       obsoleteMapOutput(event.getTaskAttemptId());
       LOG.info("Ignoring obsolete output of " + event.getTaskStatus() +
           " map-task: '" + event.getTaskAttemptId() + "'");
+      break;
+    case IGNORE:
+      ignoreMapTask(event.getTaskAttemptId(), u.getHost() + ":" + u.getPort(), u.toString());
       break;
     case TIPFAILED:
       tipFailed(event.getTaskAttemptId().getTaskID());
@@ -171,6 +175,31 @@ public class ShuffleSchedulerImpl<K,V> implements ShuffleScheduler<K,V> {
     baseUrl.append("&map=");
     URI u = URI.create(baseUrl.toString());
     return u;
+  }
+
+  public synchronized void ignoreMapTask(TaskAttemptID mapId,
+                                         String hostName,
+                                         String hostUrl) {
+    MapHost host = mapLocations.get(hostName);
+    if (host == null) {
+      host = new MapHost(hostName, hostUrl);
+      mapLocations.put(hostName, host);
+    }
+
+    failureCounts.remove(mapId);
+    hostFailures.remove(host.getHostName());
+    int mapIndex = mapId.getTaskID().getId();
+
+    if (!finishedMaps[mapIndex]) {
+      finishedMaps[mapIndex] = true;
+      shuffledMapsCounter.increment(1);
+      if (--remainingMaps == 0) {
+        notifyAll();
+      }
+
+      lastProgressTime = System.currentTimeMillis();
+      LOG.debug("map " + mapId + " done " + status.getStateString());
+    }
   }
 
   public synchronized void copySucceeded(TaskAttemptID mapId,

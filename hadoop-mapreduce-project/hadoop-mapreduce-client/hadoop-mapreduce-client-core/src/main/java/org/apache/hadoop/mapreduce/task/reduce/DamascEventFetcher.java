@@ -120,6 +120,7 @@ class DamascEventFetcher<K,V> extends Thread {
       throws IOException, InterruptedException {
     
     int numNewMaps = 0;
+    int realNumNewMaps = 0;
     TaskCompletionEvent events[] = null;
 
     do {
@@ -148,17 +149,27 @@ class DamascEventFetcher<K,V> extends Thread {
         LOG.info("top of for loop mapTaskDependencies: " + Arrays.toString(mapTaskDependencies));
         // skip events for Map tasks that this Reduce task does not care about (due to dependencies)
         if (!reducerCaresAboutThisMapTask(event.getTaskAttemptId().getTaskID())) {  //-jbuck
-          LOG.info("Reducer: " + this.reduce + " does NOT care about map " + event.getTaskAttemptId().getTaskID()); 
+          LOG.info("Reducer: " + this.reduce + " does NOT care about map " + event.getTaskAttemptId().getTaskID() + ". Ignoring it"); 
+          event.setTaskStatus(TaskCompletionEvent.Status.IGNORE);
         } else { 
           LOG.info("Reducer: " + this.reduce + " DOES care about map " + event.getTaskAttemptId().getTaskID()); 
+        /*
           scheduler.resolve(event);
           if (TaskCompletionEvent.Status.SUCCEEDED == event.getTaskStatus()) {
             ++numNewMaps;
           }
+          ++realNumNewMaps;
+        */
+        }
+        scheduler.resolve(event);
+        if (TaskCompletionEvent.Status.SUCCEEDED == event.getTaskStatus()) {
+          ++numNewMaps;
+          ++realNumNewMaps;
         }
       }
     } while (events.length == maxEventsToFetch);
 
+    LOG.info("numNewMaps: " + numNewMaps + " realNumNewMaps: " + realNumNewMaps);
     return numNewMaps;
   }
 

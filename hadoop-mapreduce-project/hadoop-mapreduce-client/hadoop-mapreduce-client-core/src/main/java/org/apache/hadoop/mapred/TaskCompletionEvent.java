@@ -32,7 +32,7 @@ public class TaskCompletionEvent
     extends org.apache.hadoop.mapreduce.TaskCompletionEvent {
   @InterfaceAudience.Public
   @InterfaceStability.Stable
-  static public enum Status {FAILED, KILLED, SUCCEEDED, OBSOLETE, TIPFAILED};
+  static public enum Status {FAILED, KILLED, SUCCEEDED, OBSOLETE, TIPFAILED, IGNORE};
   
   public static final TaskCompletionEvent[] EMPTY_ARRAY = 
 	    new TaskCompletionEvent[0];
@@ -96,7 +96,7 @@ public class TaskCompletionEvent
   public Status getTaskStatus() {
     return Status.valueOf(super.getStatus().name());
   }
-  
+
   /**
    * Sets task id. 
    * @param taskId
