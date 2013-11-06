@@ -42,6 +42,8 @@ import org.codehaus.jackson.annotate.JsonAnySetter;
 public class LoggedTask implements DeepCompare {
   long inputBytes = -1L;
   long inputRecords = -1L;
+  long shuffleRecords = -1L;
+  long shuffleRecordsRepresented = -1L;
   long outputBytes = -1L;
   long outputRecords = -1L;
   TaskID taskID;
@@ -90,8 +92,24 @@ public class LoggedTask implements DeepCompare {
     return inputRecords;
   }
 
+  public long getShuffleRecords() {
+    return shuffleRecords;
+  }
+
+  public long getShuffleRecordsRepresented() {
+    return shuffleRecordsRepresented;
+  }
+
   void setInputRecords(long inputRecords) {
     this.inputRecords = inputRecords;
+  }
+
+  void setShuffleRecords(long shuffleRecords) {
+    this.shuffleRecords = shuffleRecords;
+  }
+
+  void setShuffleRecordsRepresented(long shuffleRecordsRepresented) {
+    this.shuffleRecordsRepresented = shuffleRecordsRepresented;
   }
 
   public long getOutputBytes() {
@@ -208,6 +226,18 @@ public class LoggedTask implements DeepCompare {
         task.inputBytes = val;
       }
     }, counters, "REDUCE_SHUFFLE_BYTES");
+    incorporateCounter(new SetField(this) {
+      @Override
+      void set(long val) {
+        task.shuffleRecords = val;
+      }
+    }, counters, "REDUCE_SHUFFLE_RECORDS");
+    incorporateCounter(new SetField(this) {
+      @Override
+      void set(long val) {
+        task.shuffleRecordsRepresented = val;
+      }
+    }, counters, "REDUCE_SHUFFLE_RECORDS_REPRESENTED");
     incorporateCounter(new SetField(this) {
       @Override
       void set(long val) {
@@ -353,6 +383,8 @@ public class LoggedTask implements DeepCompare {
 
     compare1(inputBytes, other.inputBytes, loc, "inputBytes");
     compare1(inputRecords, other.inputRecords, loc, "inputRecords");
+    compare1(shuffleRecords, other.shuffleRecords, loc, "shuffleRecords");
+    compare1(shuffleRecordsRepresented, other.shuffleRecordsRepresented, loc, "shuffleRecordsRepresented");
     compare1(outputBytes, other.outputBytes, loc, "outputBytes");
     compare1(outputRecords, other.outputRecords, loc, "outputRecords");
 

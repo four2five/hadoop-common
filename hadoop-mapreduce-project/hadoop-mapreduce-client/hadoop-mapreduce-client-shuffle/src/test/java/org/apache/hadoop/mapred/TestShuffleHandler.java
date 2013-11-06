@@ -142,7 +142,7 @@ public class TestShuffleHandler {
             // send a shuffle header and a lot of data down the channel
             // to trigger a broken pipe
             ShuffleHeader header =
-                new ShuffleHeader("attempt_12345_1_m_1_0", 5678, 5678, 1);
+                new ShuffleHeader("attempt_12345_1_m_1_0", (long)5678, (long)5678, 1, (long)1, (long)1);
             DataOutputBuffer dob = new DataOutputBuffer();
             header.write(dob);
             ch.write(wrappedBuffer(dob.getData(), 0, dob.getLength()));
@@ -248,7 +248,7 @@ public class TestShuffleHandler {
             // send a shuffle header and a lot of data down the channel
             // to trigger a broken pipe
             ShuffleHeader header =
-                new ShuffleHeader("dummy_header", 5678, 5678, 1);
+                new ShuffleHeader("dummy_header", (long)5678, (long)5678, 1, (long)1, (long)1);
             DataOutputBuffer dob = new DataOutputBuffer();
             header.write(dob);
             ch.write(wrappedBuffer(dob.getData(), 0, dob.getLength()));

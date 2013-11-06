@@ -72,7 +72,9 @@ public class Shuffle<K, V> implements ShuffleConsumerPlugin<K, V>, ExceptionRepo
     
     scheduler = new ShuffleSchedulerImpl<K, V>(jobConf, taskStatus, reduceId,
         this, copyPhase, context.getShuffledMapsCounter(),
-        context.getReduceShuffleBytes(), context.getFailedShuffleCounter());
+        context.getReduceShuffleBytes(), 
+        context.getReduceShuffleRecords(), context.getReduceShuffleRecordsRepresented(),
+        context.getFailedShuffleCounter());
     merger = createMergeManager(context);
   }
 

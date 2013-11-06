@@ -60,6 +60,8 @@ public interface ShuffleConsumerPlugin<K, V> {
     private final Counters.Counter reduceShuffleBytes;
     private final Counters.Counter failedShuffleCounter;
     private final Counters.Counter mergedMapOutputsCounter;
+    private final Counters.Counter reduceShuffleRecords;
+    private final Counters.Counter reduceShuffleRecordsRepresented;
     private final TaskStatus status;
     private final Progress copyPhase;
     private final Progress mergePhase;
@@ -77,6 +79,8 @@ public interface ShuffleConsumerPlugin<K, V> {
                    Counters.Counter reduceCombineInputCounter,
                    Counters.Counter shuffledMapsCounter,
                    Counters.Counter reduceShuffleBytes,
+                   Counters.Counter reduceShuffleRecords,
+                   Counters.Counter reduceShuffleRecordsRepresented,
                    Counters.Counter failedShuffleCounter,
                    Counters.Counter mergedMapOutputsCounter,
                    TaskStatus status, Progress copyPhase, Progress mergePhase,
@@ -94,6 +98,8 @@ public interface ShuffleConsumerPlugin<K, V> {
       this.reduceCombineInputCounter = reduceCombineInputCounter;
       this.shuffledMapsCounter = shuffledMapsCounter;
       this.reduceShuffleBytes = reduceShuffleBytes;
+      this.reduceShuffleRecords = reduceShuffleRecords;
+      this.reduceShuffleRecordsRepresented = reduceShuffleRecordsRepresented;
       this.failedShuffleCounter = failedShuffleCounter;
       this.mergedMapOutputsCounter = mergedMapOutputsCounter;
       this.status = status;
@@ -141,6 +147,12 @@ public interface ShuffleConsumerPlugin<K, V> {
     }
     public Counters.Counter getReduceShuffleBytes() {
       return reduceShuffleBytes;
+    }
+    public Counters.Counter getReduceShuffleRecords() {
+      return reduceShuffleRecords;
+    }
+    public Counters.Counter getReduceShuffleRecordsRepresented() {
+      return reduceShuffleRecordsRepresented;
     }
     public Counters.Counter getFailedShuffleCounter() {
       return failedShuffleCounter;

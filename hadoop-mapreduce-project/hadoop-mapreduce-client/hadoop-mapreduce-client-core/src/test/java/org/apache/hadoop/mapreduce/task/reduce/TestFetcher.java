@@ -123,7 +123,7 @@ public class TestFetcher {
         r, metrics, except, key, connection);
 
     String replyHash = SecureShuffleUtils.generateHash(encHash.getBytes(), key);
-    ShuffleHeader header = new ShuffleHeader(map1ID.toString(), 10, 10, 1);
+    ShuffleHeader header = new ShuffleHeader(map1ID.toString(), 10, 10, 1,(long)1, (long)1);
     ByteArrayOutputStream bout = new ByteArrayOutputStream();
     header.write(new DataOutputStream(bout));
 
@@ -238,7 +238,7 @@ public class TestFetcher {
     when(connection.getResponseCode()).thenReturn(200);
     when(connection.getHeaderField(SecureShuffleUtils.HTTP_HEADER_REPLY_URL_HASH))
         .thenReturn(replyHash);
-    ShuffleHeader header = new ShuffleHeader(map1ID.toString(), 10, 10, 1);
+    ShuffleHeader header = new ShuffleHeader(map1ID.toString(), 10, 10, 1, (long)1, (long)1);
     ByteArrayOutputStream bout = new ByteArrayOutputStream();
     header.write(new DataOutputStream(bout));
     ByteArrayInputStream in = new ByteArrayInputStream(bout.toByteArray());
@@ -277,7 +277,7 @@ public class TestFetcher {
     when(connection.getResponseCode()).thenReturn(200);
     when(connection.getHeaderField(SecureShuffleUtils.HTTP_HEADER_REPLY_URL_HASH))
         .thenReturn(replyHash);
-    ShuffleHeader header = new ShuffleHeader(map1ID.toString(), 10, 10, 1);
+    ShuffleHeader header = new ShuffleHeader(map1ID.toString(), 10, 10, 1, (long)1, (long)1);
     ByteArrayOutputStream bout = new ByteArrayOutputStream();
     header.write(new DataOutputStream(bout));
     ByteArrayInputStream in = new ByteArrayInputStream(bout.toByteArray());
@@ -319,7 +319,7 @@ public class TestFetcher {
         .thenReturn(ShuffleHeader.DEFAULT_HTTP_HEADER_VERSION);
     when(connection.getHeaderField(SecureShuffleUtils.HTTP_HEADER_REPLY_URL_HASH))
         .thenReturn(replyHash);
-    ShuffleHeader header = new ShuffleHeader(map1ID.toString(), 10, 10, 1);
+    ShuffleHeader header = new ShuffleHeader(map1ID.toString(), 10, 10, 1, (long)1, (long)1);
     ByteArrayOutputStream bout = new ByteArrayOutputStream();
     header.write(new DataOutputStream(bout));
     final StuckInputStream in =
@@ -363,7 +363,7 @@ public class TestFetcher {
     when(connection.getResponseCode()).thenReturn(200);
     when(connection.getHeaderField(
         SecureShuffleUtils.HTTP_HEADER_REPLY_URL_HASH)).thenReturn(replyHash);
-    ShuffleHeader header = new ShuffleHeader(map1ID.toString(), 10, 10, 1);
+    ShuffleHeader header = new ShuffleHeader(map1ID.toString(), 10, 10, 1, (long)1, (long)1);
     ByteArrayOutputStream bout = new ByteArrayOutputStream();
     header.write(new DataOutputStream(bout));
     final StuckInputStream in =

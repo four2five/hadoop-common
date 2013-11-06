@@ -592,7 +592,7 @@ public class ShuffleHandler extends AuxiliaryService {
       final IndexRecord info = 
         indexCache.getIndexInformation(mapId, reduce, indexFileName, user);
       final ShuffleHeader header =
-        new ShuffleHeader(mapId, info.partLength, info.rawLength, reduce);
+        new ShuffleHeader(mapId, info.partLength, info.rawLength, reduce, info.numRecords, info.numRecordsRepresented);
       final DataOutputBuffer dob = new DataOutputBuffer();
       header.write(dob);
       ch.write(wrappedBuffer(dob.getData(), 0, dob.getLength()));

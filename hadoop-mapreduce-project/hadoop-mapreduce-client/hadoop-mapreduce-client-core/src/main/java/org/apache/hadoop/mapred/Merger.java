@@ -517,7 +517,7 @@ public class Merger {
     }
 
     //long getNumRecords() { return this.numRecords; }
-    long getNumRecordsRepresented() { return this.numRecordsRepresented; }
+    public int getNumRecordsRepresented() { return (int)this.numRecordsRepresented; }
 
     private void adjustPriorityQueue(Segment<K, V> reader) throws IOException{
       long startPos = reader.getPosition();

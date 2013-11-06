@@ -324,7 +324,7 @@ public class MapFile {
         lastIndexKeyCount = size;
       }
 
-      data.append(key, val);                      // append key/value to data
+      data.append(key, val, recordsRepresented);                      // append key/value to data
       size++;
     }
 

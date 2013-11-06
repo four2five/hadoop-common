@@ -29,7 +29,8 @@ public class IndexRecord {
   public long numRecords;
   public long numRecordsRepresented;
 
-  public IndexRecord() { }
+  public IndexRecord() { 
+  }
 
   public IndexRecord(long startOffset, long rawLength, long partLength, long numRecords, long numRecordsRepresented) {
     this.startOffset = startOffset;

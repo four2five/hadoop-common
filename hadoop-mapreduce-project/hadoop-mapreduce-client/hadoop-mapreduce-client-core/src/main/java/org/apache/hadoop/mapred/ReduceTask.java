@@ -96,6 +96,10 @@ public class ReduceTask extends Task {
     getCounters().findCounter(TaskCounter.SHUFFLED_MAPS);
   private Counters.Counter reduceShuffleBytes = 
     getCounters().findCounter(TaskCounter.REDUCE_SHUFFLE_BYTES);
+  private Counters.Counter reduceShuffleRecords = 
+    getCounters().findCounter(TaskCounter.REDUCE_SHUFFLE_RECORDS);
+  private Counters.Counter reduceShuffleRecordsRepresented = 
+    getCounters().findCounter(TaskCounter.REDUCE_SHUFFLE_RECORDS_REPRESENTED);
   private Counters.Counter reduceInputKeyCounter = 
     getCounters().findCounter(TaskCounter.REDUCE_INPUT_GROUPS);
   private Counters.Counter reduceInputValueCounter = 
@@ -407,7 +411,10 @@ public class ReduceTask extends Task {
                     combinerClass, combineCollector, 
                     spilledRecordsCounter, reduceCombineInputCounter,
                     shuffledMapsCounter,
-                    reduceShuffleBytes, failedShuffleCounter,
+                    reduceShuffleBytes, 
+                    reduceShuffleRecords, 
+                    reduceShuffleRecordsRepresented, 
+                    failedShuffleCounter,
                     mergedMapOutputsCounter,
                     taskStatus, copyPhase, sortPhase, this,
                     mapOutputFile);
@@ -680,6 +687,9 @@ public class ReduceTask extends Task {
       }
       public DataInputBuffer getValue() throws IOException {
         return rawIter.getValue();
+      }
+      public int getNumRecordsRepresented() throws IOException { 
+        return rawIter.getNumRecordsRepresented();
       }
       public boolean next() throws IOException {
         boolean ret = rawIter.next();

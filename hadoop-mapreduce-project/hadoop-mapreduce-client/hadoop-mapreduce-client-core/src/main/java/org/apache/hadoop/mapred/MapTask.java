@@ -627,6 +627,7 @@ public class MapTask extends Task {
 
       long bytesOutPrev = getOutputBytes(fsStats);
       out = outputFormat.getRecordWriter(taskContext);
+      LOG.info("outputFormat is : " + out.getClass().getName());
       long bytesOutCurr = getOutputBytes(fsStats);
       fileOutputByteCounter.increment(bytesOutCurr - bytesOutPrev);
     }
@@ -642,6 +643,7 @@ public class MapTask extends Task {
     throws IOException, InterruptedException {
       reporter.progress();
       long bytesOutPrev = getOutputBytes(fsStats);
+      LOG.info("in MT, recRep: " + recordsRepresented);
       out.write(key, value, recordsRepresented);
       long bytesOutCurr = getOutputBytes(fsStats);
       fileOutputByteCounter.increment(bytesOutCurr - bytesOutPrev);
@@ -1070,6 +1072,7 @@ public class MapTask extends Task {
      */
     public synchronized void collect(K key, V value, long recordsRepresented, final int partition
                                      ) throws IOException {
+      LOG.info("collect(), recrep: " + recordsRepresented);
       reporter.progress();
       if (key.getClass() != keyClass) {
         throw new IOException("Type mismatch in key from map: expected "
@@ -1635,11 +1638,12 @@ public class MapTask extends Task {
                 key.reset(kvbuffer, keystart, valstart - keystart);
                 getVBytesForOffset(kvoff, value);
                 tempCounts[i] += recrep;
+                LOG.info("in sortAndSpill(), recrep: " + recrep);
                 writer.append(key, value, recrep);
                 ++spindex;
               }
             } else {
-              LOG.info("Using a combiner runner");
+              LOG.info("Using a combiner runner in class " + MapTask.class.getName());
               int spstart = spindex;
               while (spindex < mend &&
                   kvmeta.get(offsetFor(spindex % maxRec)
@@ -1652,7 +1656,7 @@ public class MapTask extends Task {
                 combineCollector.setWriter(writer);
                 RawKeyValueIterator kvIter =
                   new MRResultIterator(spstart, spindex);
-                combinerRunner.combine(kvIter, combineCollector);
+                combinerRunner.combine(kvIter, combineCollector); //-jbuck here
               }
             }
 
@@ -1666,6 +1670,9 @@ public class MapTask extends Task {
             rec.numRecords = writer.getRecordsWritten();
             rec.numRecordsRepresented = writer.getRecordsRepresented();
             spillRec.putIndex(rec, i);
+            LOG.info("called spillRec.putIndex(" + i + "): numRecs: " + 
+                     rec.numRecords + " numRecsRep: " + rec.numRecordsRepresented);
+            LOG.info("writer class is : " + writer.getClass().getName());
 
             writer = null;
           } finally {

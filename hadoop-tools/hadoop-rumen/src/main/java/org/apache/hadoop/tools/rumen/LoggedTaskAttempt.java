@@ -64,6 +64,8 @@ public class LoggedTaskAttempt implements DeepCompare {
   long reduceInputGroups = -1L;
   long reduceInputRecords = -1L;
   long reduceShuffleBytes = -1L;
+  long reduceShuffleRecords = -1L;
+  long reduceShuffleRecordsRepresented = -1L;
   long reduceOutputRecords = -1L;
   long spilledRecords = -1L;
 
@@ -448,6 +450,22 @@ public class LoggedTaskAttempt implements DeepCompare {
     this.reduceShuffleBytes = reduceShuffleBytes;
   }
 
+  public long getReduceShuffleRecords() {
+    return reduceShuffleRecords;
+  }
+
+  void setReduceShuffleRecords(long reduceShuffleRecords) {
+    this.reduceShuffleRecords = reduceShuffleRecords;
+  }
+
+  public long getReduceShuffleRecordsRepresented() {
+    return reduceShuffleRecordsRepresented;
+  }
+
+  void setReduceShuffleRecordsRepresented(long reduceShuffleRecordsRepresented) {
+    this.reduceShuffleRecordsRepresented = reduceShuffleRecordsRepresented;
+  }
+
   public long getReduceOutputRecords() {
     return reduceOutputRecords;
   }
@@ -554,6 +572,18 @@ public class LoggedTaskAttempt implements DeepCompare {
         attempt.reduceShuffleBytes = val;
       }
     }, counters, "REDUCE_SHUFFLE_BYTES");
+    incorporateCounter(new SetField(this) {
+      @Override
+      void set(long val) {
+        attempt.reduceShuffleRecords = val;
+      }
+    }, counters, "REDUCE_SHUFFLE_RECORDS");
+    incorporateCounter(new SetField(this) {
+      @Override
+      void set(long val) {
+        attempt.reduceShuffleRecordsRepresented = val;
+      }
+    }, counters, "REDUCE_SHUFFLE_RECORDS_REPRESENTED");
     incorporateCounter(new SetField(this) {
       @Override
       void set(long val) {
@@ -754,6 +784,10 @@ public class LoggedTaskAttempt implements DeepCompare {
         "reduceInputRecords");
     compare1(reduceShuffleBytes, other.reduceShuffleBytes, loc,
         "reduceShuffleBytes");
+    compare1(reduceShuffleRecords, other.reduceShuffleRecords, loc,
+        "reduceShuffleRecords");
+    compare1(reduceShuffleRecordsRepresented, other.reduceShuffleRecordsRepresented, loc,
+        "reduceShuffleRecordsRepresented");
     compare1(reduceOutputRecords, other.reduceOutputRecords, loc,
         "reduceOutputRecords");
     compare1(spilledRecords, other.spilledRecords, loc, "spilledRecords");

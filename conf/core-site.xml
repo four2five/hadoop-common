@@ -19,6 +19,6 @@
 <configuration>
 <property>
    <name>fs.default.name</name>
-   <value>hdfs://hadoopv3:9000</value>
+   <value>hdfs://hadoopv5:9000</value>
 </property>
 </configuration>

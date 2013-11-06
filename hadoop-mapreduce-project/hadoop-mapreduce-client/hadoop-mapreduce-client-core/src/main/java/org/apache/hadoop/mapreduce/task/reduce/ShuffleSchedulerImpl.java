@@ -88,6 +88,8 @@ public class ShuffleSchedulerImpl<K,V> implements ShuffleScheduler<K,V> {
   private final Counters.Counter shuffledMapsCounter;
   private final Counters.Counter reduceShuffleBytes;
   private final Counters.Counter failedShuffleCounter;
+  private final Counters.Counter reduceShuffleRecords;
+  private final Counters.Counter reduceShuffleRecordsRepresented;
 
   private final long startTime;
   private long lastProgressTime;
@@ -108,6 +110,8 @@ public class ShuffleSchedulerImpl<K,V> implements ShuffleScheduler<K,V> {
                           Progress progress,
                           Counters.Counter shuffledMapsCounter,
                           Counters.Counter reduceShuffleBytes,
+                          Counters.Counter reduceShuffleRecords,
+                          Counters.Counter reduceShuffleRecordsRepresented,
                           Counters.Counter failedShuffleCounter) {
     totalMaps = job.getNumMapTasks();
     abortFailureLimit = Math.max(30, totalMaps / 10);
@@ -121,6 +125,8 @@ public class ShuffleSchedulerImpl<K,V> implements ShuffleScheduler<K,V> {
     this.shuffledMapsCounter = shuffledMapsCounter;
     this.reduceShuffleBytes = reduceShuffleBytes;
     this.failedShuffleCounter = failedShuffleCounter;
+    this.reduceShuffleRecords = reduceShuffleRecords;
+    this.reduceShuffleRecordsRepresented = reduceShuffleRecordsRepresented;
     this.startTime = System.currentTimeMillis();
     lastProgressTime = startTime;
     referee.start();
@@ -205,6 +211,8 @@ public class ShuffleSchedulerImpl<K,V> implements ShuffleScheduler<K,V> {
   public synchronized void copySucceeded(TaskAttemptID mapId,
                                          MapHost host,
                                          long bytes,
+                                         long numRecords,
+                                         long numRecordsRepresented,
                                          long millis,
                                          MapOutput<K,V> output
                                          ) throws IOException {
@@ -224,8 +232,10 @@ public class ShuffleSchedulerImpl<K,V> implements ShuffleScheduler<K,V> {
       totalBytesShuffledTillNow += bytes;
       updateStatus();
       reduceShuffleBytes.increment(bytes);
+      reduceShuffleRecords.increment(numRecords);
+      reduceShuffleRecordsRepresented.increment(numRecordsRepresented);
       lastProgressTime = System.currentTimeMillis();
-      LOG.debug("map " + mapId + " done " + status.getStateString());
+      LOG.debug("map " + mapId + " done " + status.getStateString() + " numRecs: " + numRecords + " numRecsRep: " + numRecordsRepresented);
     }
   }
 
