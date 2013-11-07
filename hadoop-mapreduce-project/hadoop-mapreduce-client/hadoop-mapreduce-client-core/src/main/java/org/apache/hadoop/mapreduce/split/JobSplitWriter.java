@@ -158,6 +158,8 @@ public class JobSplitWriter {
       } catch( Exception e) { 
         e.printStackTrace();
       }
+    } else { 
+      inputSplitDependencyInfo = new int[array.length][0];
     }
 
     SplitMetaInfo[] info = new SplitMetaInfo[array.length];
