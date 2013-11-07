@@ -96,6 +96,8 @@ abstract public class Task implements Writable, Configurable {
     COMBINE_OUTPUT_RECORDS,
     REDUCE_INPUT_GROUPS,
     REDUCE_SHUFFLE_BYTES,
+    REDUCE_SHUFFLE_RECORDS,
+    REDUCE_SHUFFLE_RECORDS_REPRESENTED,
     REDUCE_INPUT_RECORDS,
     REDUCE_OUTPUT_RECORDS,
     REDUCE_SKIPPED_GROUPS,
@@ -1525,6 +1527,7 @@ abstract public class Task implements Writable, Configurable {
         (Class<? extends Reducer<K,V,K,V>>) job.getCombinerClass();
 
       if (cls != null) {
+        LOG.info("Using OldCombinerRunner");
         return new OldCombinerRunner(cls, job, inputCounter, reporter);
       }
       // make a task context so we can get the classes
@@ -1535,6 +1538,7 @@ abstract public class Task implements Writable, Configurable {
         (Class<? extends org.apache.hadoop.mapreduce.Reducer<K,V,K,V>>)
            taskContext.getCombinerClass();
       if (newcls != null) {
+        LOG.info("Using NewCombinerRunner");
         return new NewCombinerRunner<K,V>(newcls, job, taskId, taskContext, 
                                           inputCounter, reporter, committer);
       }
@@ -1567,6 +1571,7 @@ abstract public class Task implements Writable, Configurable {
     public void combine(RawKeyValueIterator kvIter,
                            OutputCollector<K,V> combineCollector
                            ) throws IOException {
+      LOG.info("in OldCombinerRunner.combine(), reducer class is: " + combinerClass.getName());
       Reducer<K,V,K,V> combiner = 
         ReflectionUtils.newInstance(combinerClass, job);
       try {
@@ -1644,6 +1649,7 @@ abstract public class Task implements Writable, Configurable {
                  OutputCollector<K,V> collector
                  ) throws IOException, InterruptedException,
                           ClassNotFoundException {
+      LOG.info("in NewCombinerRunner.combine(), reducer class is: " + reducerClass.getName());
       // make a reducer
       org.apache.hadoop.mapreduce.Reducer<K,V,K,V> reducer =
         (org.apache.hadoop.mapreduce.Reducer<K,V,K,V>)

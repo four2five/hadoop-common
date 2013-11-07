@@ -379,6 +379,8 @@ class Fetcher<K,V> extends Thread {
     try {
       long startTime = System.currentTimeMillis();
       int forReduce = -1;
+      long numRecords = -2;
+      long numRecordsRepresented = -2;
       //Read the shuffle header
       try {
         ShuffleHeader header = new ShuffleHeader();
@@ -387,6 +389,8 @@ class Fetcher<K,V> extends Thread {
         compressedLength = header.compressedLength;
         decompressedLength = header.uncompressedLength;
         forReduce = header.forReduce;
+        numRecords = header.numRecords;
+        numRecordsRepresented = header.numRecordsRepresented;
       } catch (IllegalArgumentException e) {
         badIdErrs.increment(1);
         LOG.warn("Invalid map id ", e);
@@ -403,7 +407,8 @@ class Fetcher<K,V> extends Thread {
       
       if(LOG.isDebugEnabled()) {
         LOG.debug("header: " + mapId + ", len: " + compressedLength + 
-            ", decomp len: " + decompressedLength);
+            ", decomp len: " + decompressedLength + ", numRecords: " + numRecords + 
+            ", numRecordsRepresented: " + numRecordsRepresented);
       }
       
       // Get the location for the map output - either in-memory or on-disk
@@ -441,7 +446,9 @@ class Fetcher<K,V> extends Thread {
       // Inform the shuffle scheduler
       long endTime = System.currentTimeMillis();
       scheduler.copySucceeded(mapId, host, compressedLength, 
-                              endTime - startTime, mapOutput);
+                              numRecords, numRecordsRepresented,
+                              endTime - startTime, 
+                              mapOutput);
       // Note successful shuffle
       remaining.remove(mapId);
       metrics.successFetch();

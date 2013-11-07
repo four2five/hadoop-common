@@ -36,7 +36,7 @@ import org.apache.hadoop.io.WritableUtils;
 public class TaskCompletionEvent implements Writable{
   @InterfaceAudience.Public
   @InterfaceStability.Evolving
-  static public enum Status {FAILED, KILLED, SUCCEEDED, OBSOLETE, TIPFAILED};
+  static public enum Status {FAILED, KILLED, SUCCEEDED, OBSOLETE, TIPFAILED, IGNORE};
     
   private int eventId; 
   private String taskTrackerHttp;
@@ -101,6 +101,7 @@ public class TaskCompletionEvent implements Writable{
   public Status getStatus() {
     return status;
   }
+
   /**
    * http location of the tasktracker where this task ran. 
    * @return http location of tasktracker user logs

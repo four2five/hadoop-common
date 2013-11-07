@@ -154,6 +154,7 @@ public class TestShufflePlugin<K, V> {
                                                 combinerClass, mockCombineOutputCollector,
                                                 mockCounter, mockCounter, mockCounter,
                                                 mockCounter, mockCounter, mockCounter,
+                                                mockCounter, mockCounter,
                                                 mockTaskStatus, mockProgress, mockProgress,
                                                 mockTask, mockMapOutputFile);
       shuffleConsumerPlugin.init(context);

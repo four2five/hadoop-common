@@ -163,6 +163,10 @@ public class JobSplitWriter {
     }
 
     SplitMetaInfo[] info = new SplitMetaInfo[array.length];
+    if (null == inputSplitDependencyInfo) { 
+      inputSplitDependencyInfo = new int[array.length][0];
+    }
+	
     if (array.length != 0) {
       SerializationFactory factory = new SerializationFactory(conf);
       int i = 0;

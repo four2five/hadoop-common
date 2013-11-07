@@ -759,6 +759,10 @@ public class TestGridMixClasses {
       return null;
     }
 
+    public int getNumRecordsRepresented() { 
+      return -5;
+    }
+
   }
 
   private class FakeRawComparator implements RawComparator<GridmixKey> {
@@ -1003,6 +1007,10 @@ public class TestGridMixClasses {
     @Override
     public Progress getProgress() {
       return null;
+    }
+
+    public int getNumRecordsRepresented() { 
+      return -5;
     }
 
   }

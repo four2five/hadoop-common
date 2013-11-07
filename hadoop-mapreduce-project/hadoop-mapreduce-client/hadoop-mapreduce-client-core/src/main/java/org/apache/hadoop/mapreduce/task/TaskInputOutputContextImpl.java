@@ -20,6 +20,8 @@ package org.apache.hadoop.mapreduce.task;
 
 import java.io.IOException;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
 import org.apache.hadoop.conf.Configuration;
@@ -46,6 +48,7 @@ public abstract class TaskInputOutputContextImpl<KEYIN,VALUEIN,KEYOUT,VALUEOUT>
        implements TaskInputOutputContext<KEYIN, VALUEIN, KEYOUT, VALUEOUT> {
   private RecordWriter<KEYOUT,VALUEOUT> output;
   private OutputCommitter committer;
+  private static final Log LOG = LogFactory.getLog(TaskInputOutputContextImpl.class);
 
   public TaskInputOutputContextImpl(Configuration conf, TaskAttemptID taskid,
                                     RecordWriter<KEYOUT,VALUEOUT> output,
@@ -90,6 +93,7 @@ public abstract class TaskInputOutputContextImpl<KEYIN,VALUEIN,KEYOUT,VALUEOUT>
    */
   public void write(KEYOUT key, VALUEOUT value, long recordsRepresented
                     ) throws IOException, InterruptedException {
+    //LOG.info("TIOCI.write() recrep: " + recordsRepresented);
     output.write(key, value, recordsRepresented);
   }
 

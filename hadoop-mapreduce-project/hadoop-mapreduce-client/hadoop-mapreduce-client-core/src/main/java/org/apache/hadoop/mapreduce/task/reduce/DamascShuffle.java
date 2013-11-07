@@ -80,7 +80,9 @@ public class DamascShuffle<K, V> implements ShuffleConsumerPlugin<K, V>, Excepti
    
     scheduler = new ShuffleSchedulerImpl<K, V>(jobConf, taskStatus, reduceId,
         this, copyPhase, context.getShuffledMapsCounter(),
-        context.getReduceShuffleBytes(), context.getFailedShuffleCounter());
+        context.getReduceShuffleBytes(), 
+        context.getReduceShuffleRecords(), context.getReduceShuffleRecordsRepresented(),
+        context.getFailedShuffleCounter());
     merger = createMergeManager(context);
   }
 
