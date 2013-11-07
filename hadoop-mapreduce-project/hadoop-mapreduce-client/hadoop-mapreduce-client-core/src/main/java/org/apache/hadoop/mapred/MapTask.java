@@ -1072,7 +1072,7 @@ public class MapTask extends Task {
      */
     public synchronized void collect(K key, V value, long recordsRepresented, final int partition
                                      ) throws IOException {
-      LOG.info("collect(), recrep: " + recordsRepresented);
+      //LOG.info("collect(), recrep: " + recordsRepresented);
       reporter.progress();
       if (key.getClass() != keyClass) {
         throw new IOException("Type mismatch in key from map: expected "

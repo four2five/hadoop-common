@@ -405,11 +405,11 @@ class Fetcher<K,V> extends Thread {
         return new TaskAttemptID[] {mapId};
       }
       
-      //if(LOG.isDebugEnabled()) {
+      if(LOG.isDebugEnabled()) {
         LOG.debug("header: " + mapId + ", len: " + compressedLength + 
             ", decomp len: " + decompressedLength + ", numRecords: " + numRecords + 
             ", numRecordsRepresented: " + numRecordsRepresented);
-      //}
+      }
       
       // Get the location for the map output - either in-memory or on-disk
       try {

@@ -93,7 +93,7 @@ public abstract class TaskInputOutputContextImpl<KEYIN,VALUEIN,KEYOUT,VALUEOUT>
    */
   public void write(KEYOUT key, VALUEOUT value, long recordsRepresented
                     ) throws IOException, InterruptedException {
-    LOG.info("TIOCI.write() recrep: " + recordsRepresented);
+    //LOG.info("TIOCI.write() recrep: " + recordsRepresented);
     output.write(key, value, recordsRepresented);
   }
 

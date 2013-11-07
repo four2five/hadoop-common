@@ -218,8 +218,6 @@ public class MergeManagerImpl<K, V> implements MergeManager<K, V> {
     this.inMemoryMerger.start();
     
     this.onDiskMerger = new OnDiskMerger(this);
-    this.onDiskMerger.start();
-    
     this.mergePhase = mergePhase;
   }
   
