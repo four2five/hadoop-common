@@ -77,6 +77,10 @@ public class CountingReduceTaskImpl extends TaskImpl {
         jobToken, credentials, clock, appContext);
   }
 
+  public int[] getMapTaskDependencies() { 
+    return mapTaskDependencies;
+  }
+
   @Override
   public TaskType getType() {
     return TaskType.REDUCE;

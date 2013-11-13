@@ -422,8 +422,13 @@ public class ReduceTask extends Task {
       shuffleConsumerPlugin.init(shuffleContext);
 
       if (shuffleConsumerPlugin.getClass().getCanonicalName().equals(MRJobConfig.DAMASC_SHUFFLE)) { 
-        LOG.info("This is a DamascShuffle, setting MapTaskDependencies");
-        ((DamascShuffle)shuffleConsumerPlugin).setMapTaskDependencies(this.mapTaskDependencies);
+        LOG.info("This is a DamascShuffle");
+        if (job.useDependencyScheduling()) {  
+          LOG.info("This is a DamascShuffle, setting MapTaskDependencies at " + this.mapTaskDependencies.length);
+          ((DamascShuffle)shuffleConsumerPlugin).setMapTaskDependencies(this.mapTaskDependencies);
+        } else { 
+          LOG.info("This is a DamascShuffle, but NOT setting MapTaskDependencies");
+        }
       } else { 
         LOG.info("NOT DamascShuffle"); // -jbuck
       }

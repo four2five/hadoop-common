@@ -57,8 +57,12 @@ class DamascEventFetcher<K,V> extends Thread {
     this.scheduler = scheduler;
     exceptionReporter = reporter;
     this.maxEventsToFetch = maxEventsToFetch;
-    this.mapTaskDependencies = mapTaskDependencies;
-    LOG.info("In DamascEventFetcher() mapTaskDependencies: " + Arrays.toString(mapTaskDependencies));
+    this.mapTaskDependencies = mapTaskDependencies; // if this is null, that's a signal to fetch all map task outputs
+    if (mapTaskDependencies != null) { 
+      LOG.info("In DamascEventFetcher() mapTaskDependencies: " + Arrays.toString(mapTaskDependencies));
+    } else { 
+      LOG.info("In DamascEventFetcher() mapTaskDependencies: NULL");
+    }
   }
 
   @Override
@@ -147,11 +151,9 @@ class DamascEventFetcher<K,V> extends Thread {
       //    outputs at all.
       for (TaskCompletionEvent event : events) {
         LOG.info("top of for loop mapTaskDependencies: " + Arrays.toString(mapTaskDependencies));
-        // skip events for Map tasks that this Reduce task does not care about (due to dependencies)
-        if (!reducerCaresAboutThisMapTask(event.getTaskAttemptId().getTaskID())) {  //-jbuck
-          LOG.info("Reducer: " + this.reduce + " does NOT care about map " + event.getTaskAttemptId().getTaskID() + ". Ignoring it"); 
-          event.setTaskStatus(TaskCompletionEvent.Status.IGNORE);
-        } else { 
+        // skip events for Map tasks that this Reduce task does not care about (due to dependencies) 
+        // but only if there is a list of mapTaskDependencies (e.g. it is not null)
+        if (mapTaskDependencies == null || reducerCaresAboutThisMapTask(event.getTaskAttemptId().getTaskID())) {  //-jbuck
           LOG.info("Reducer: " + this.reduce + " DOES care about map " + event.getTaskAttemptId().getTaskID()); 
         /*
           scheduler.resolve(event);
@@ -160,6 +162,9 @@ class DamascEventFetcher<K,V> extends Thread {
           }
           ++realNumNewMaps;
         */
+        } else { 
+          LOG.info("Reducer: " + this.reduce + " does NOT care about map " + event.getTaskAttemptId().getTaskID() + ". Ignoring it"); 
+          event.setTaskStatus(TaskCompletionEvent.Status.IGNORE);
         }
         scheduler.resolve(event);
         if (TaskCompletionEvent.Status.SUCCEEDED == event.getTaskStatus()) {

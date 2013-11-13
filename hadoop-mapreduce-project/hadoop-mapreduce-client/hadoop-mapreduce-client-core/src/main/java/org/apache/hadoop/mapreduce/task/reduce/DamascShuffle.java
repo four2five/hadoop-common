@@ -106,12 +106,21 @@ public class DamascShuffle<K, V> implements ShuffleConsumerPlugin<K, V>, Excepti
         MAX_RPC_OUTSTANDING_EVENTS / jobConf.getNumReduceTasks());
     int maxEventsToFetch = Math.min(MAX_EVENTS_TO_FETCH, eventsPerReducer);
 
-    LOG.info("About to create DamascEventFetcher, mapTaskDeps are : " + 
+    // Start the map-completion events fetcher thread //-jbuck
+    DamascEventFetcher<K,V> eventFetcher = null;
+    if (jobConf.useDependencyScheduling() ) { 
+      LOG.info("About to create DamascEventFetcher, mapTaskDeps are : " + 
              Arrays.toString(mapTaskDependencies));
-    // Start the map-completion events fetcher thread
-    final DamascEventFetcher<K,V> eventFetcher = 
-      new DamascEventFetcher<K,V>(reduceId, umbilical, scheduler, this,
-         maxEventsToFetch, mapTaskDependencies);
+      eventFetcher = 
+        new DamascEventFetcher<K,V>(reduceId, umbilical, scheduler, this,
+            maxEventsToFetch, mapTaskDependencies);
+    } else { 
+      LOG.info("About to create DamascEventFetcher, mapTaskDeps are null"); 
+      // pass in a null mapTaskDependencies if we are not useing dependency scheduling
+      eventFetcher = 
+        new DamascEventFetcher<K,V>(reduceId, umbilical, scheduler, this,
+            maxEventsToFetch, null);
+    }
     //final EventFetcher<K,V> eventFetcher = 
      // new EventFetcher<K,V>(reduceId, umbilical, scheduler, this,
      //     maxEventsToFetch);

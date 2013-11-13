@@ -2038,5 +2038,7 @@ public class JobConf extends Configuration {
   }
 
   public boolean useDependencyScheduling() { return getBoolean(MRJobConfig.DEPENDENCY_SCHEDULING, false); }
+
+  public boolean isCountingJob() { return getBoolean(MRJobConfig.COUNTING_JOB, false); }
 }
 

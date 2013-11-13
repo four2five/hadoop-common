@@ -1510,6 +1510,8 @@ public abstract class TaskAttemptImpl implements
         .handle(new ContainerRemoteLaunchEvent(taskAttempt.attemptId,
           launchContext, container, taskAttempt.remoteTask));
 
+      LOG.error("jbuck, just launched a container for task: " + taskAttempt.attemptId.toString());
+
       // send event to speculator that our container needs are satisfied
       taskAttempt.eventHandler.handle
           (new SpeculatorEvent(taskAttempt.getID().getTaskId(), -1));

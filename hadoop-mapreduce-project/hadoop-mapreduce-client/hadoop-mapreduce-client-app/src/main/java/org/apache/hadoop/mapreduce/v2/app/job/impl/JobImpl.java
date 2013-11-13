@@ -23,6 +23,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -172,7 +173,9 @@ public class JobImpl implements org.apache.hadoop.mapreduce.v2.app.job.Job,
   private final org.apache.hadoop.mapreduce.JobID oldJobId;
   private final TaskAttemptListener taskAttemptListener;
   private final Object tasksSyncHandle = new Object();
-  private final Set<TaskId> mapTasks = new LinkedHashSet<TaskId>();
+  //private final LinkedHashSet<TaskId> mapTasks = new LinkedHashSet<TaskId>();
+  private final Set<TaskId> mapTasks = new CopyOnWriteArraySet<TaskId>();
+  private final TaskId[] mapTasksArray = null;
   private final Set<TaskId> reduceTasks = new LinkedHashSet<TaskId>();
   /**
    * maps nodes to tasks that have run on those nodes
@@ -945,16 +948,44 @@ public class JobImpl implements org.apache.hadoop.mapreduce.v2.app.job.Job,
     }
   }
 
+  protected void scheduleTask(TaskInfo taskInfo, TaskId taskID,
+      boolean recoverTaskOutput) {
+    if (taskInfo != null) {
+      eventHandler.handle(new TaskRecoverEvent(taskID, taskInfo,
+                          committer, recoverTaskOutput));
+    } else {         // --jbuck start Map tasks here
+      eventHandler.handle(new TaskEvent(taskID, TaskEventType.T_SCHEDULE));
+      if (TaskType.REDUCE.equals(taskID.getTaskType()) && conf.useDependencyScheduling()) {
+        CountingReduceTaskImpl currentReduceTask = (CountingReduceTaskImpl)(tasks.get(taskID));
+        int[] mapTaskDeps = currentReduceTask.getMapTaskDependencies();
+        /*
+        for (int i=0; i<mapTaskDeps.length; i++) { 
+          LOG.info("reduce task " + taskID.toString() + " dependency " + i + " is reducer " + mapTaskDeps[i] + 
+                  " which is task " + mapTasksArray[mapTaskDeps[i]]);
+          TaskId dependentMapTaskId = mapTasksArray[mapTaskDeps[i]];
+          Task task = tasks.get(dependentMapTaskId);
+          // don't schedule this if it's already scheduled or running
+          if (!TaskState.NEW.equals(task.getState())) {
+            LOG.info("Map task " + dependentMapTaskId.toString() + 
+                     " is a dependency of reduce task " + taskID.toString() + 
+                     " but is not in a NEW state, so we're not scheduling it");
+          } else { 
+            LOG.info("Scheduling map task " + dependentMapTaskId.toString() + 
+                     " as a byproduct of reduce task " + taskID.toString());
+            TaskInfo dependentMapTaskInfo = completedTasksFromPreviousRun.remove(dependentMapTaskId);
+            scheduleTask(dependentMapTaskInfo, dependentMapTaskId, numReduceTasks == 0);
+          }
+        }
+          */
+      }
+    }
+  }
+
   protected void scheduleTasks(Set<TaskId> taskIDs,
       boolean recoverTaskOutput) {
     for (TaskId taskID : taskIDs) {
       TaskInfo taskInfo = completedTasksFromPreviousRun.remove(taskID);
-      if (taskInfo != null) {
-        eventHandler.handle(new TaskRecoverEvent(taskID, taskInfo,
-            committer, recoverTaskOutput));
-      } else {
-        eventHandler.handle(new TaskEvent(taskID, TaskEventType.T_SCHEDULE));
-      }
+      scheduleTask(taskInfo, taskID, recoverTaskOutput);
     }
   }
 
@@ -1509,11 +1540,11 @@ public class JobImpl implements org.apache.hadoop.mapreduce.v2.app.job.Job,
         return;
       }
 
-      LOG.info("In createMapTasks(), useDeps: " + job.conf.useDependencyScheduling());
+      LOG.info("In createMapTasks(), isCountingJob: " + job.conf.isCountingJob());
 
       for (int i=0; i < job.numMapTasks; ++i) {
         TaskImpl task;
-        if (job.conf.useDependencyScheduling()) { 
+        if (job.conf.isCountingJob()) { 
           task =
               new CountingMapTaskImpl(job.jobId, i,
                   job.eventHandler, 
@@ -1595,7 +1626,7 @@ public class JobImpl implements org.apache.hadoop.mapreduce.v2.app.job.Job,
 
       for (int i = 0; i < job.numReduceTasks; i++) {
         TaskImpl task;
-        if (job.conf.useDependencyScheduling()) { 
+        if (job.conf.isCountingJob()) { 
           task =
             new CountingReduceTaskImpl(job.jobId, i,
                 job.eventHandler, 
@@ -1660,10 +1691,12 @@ public class JobImpl implements org.apache.hadoop.mapreduce.v2.app.job.Job,
       }
 
       //-jbuck scheduling happens here
+      // we need to add all of the reduce tasks and then, when each gets schedulered, 
+      // then add in the associated Map tasks
       /*
       if (job.conf.useDependencyScheduling()) { 
         job.scheduleTasks(job.reduceTasks, true);
-        job.scheduleTasks(job.mapTasks, job.numReduceTasks == 0);
+        // we will schedule Map tasks as a side-effect of scheduling Reduce tasks
       } else { 
         job.scheduleTasks(job.mapTasks, job.numReduceTasks == 0);
         job.scheduleTasks(job.reduceTasks, true);

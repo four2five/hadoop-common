@@ -683,4 +683,6 @@ public interface MRJobConfig {
   public static final String DEPENDENCY_SCHEDULING = "mapreduce.dependency_scheduling";
 
   public static final String DAMASC_SHUFFLE = "org.apache.hadoop.mapreduce.task.reduce.DamascShuffle";
+
+  public static final String COUNTING_JOB = "mapreduce.CountingJob";
 }

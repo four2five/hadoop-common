@@ -869,7 +869,7 @@ public abstract class TaskImpl implements Task, EventHandler<TaskEvent> {
     @Override
     public void transition(TaskImpl task, TaskEvent event) {
       task.addAndScheduleAttempt(Avataar.VIRGIN);
-      task.scheduledTime = task.clock.getTime();
+      task.scheduledTime = task.clock.getTime(); 
       task.sendTaskStartedEvent();
     }
   }
