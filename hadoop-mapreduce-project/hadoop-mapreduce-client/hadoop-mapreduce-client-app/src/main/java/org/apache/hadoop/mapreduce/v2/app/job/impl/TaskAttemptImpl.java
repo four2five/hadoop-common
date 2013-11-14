@@ -23,6 +23,7 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
+import java.util.Arrays;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.HashMap;
@@ -48,6 +49,7 @@ import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.JobContext;
 import org.apache.hadoop.mapred.MapReduceChildJVM;
 import org.apache.hadoop.mapred.ShuffleHandler;
+import org.apache.hadoop.mapred.ReduceTask;
 import org.apache.hadoop.mapred.Task;
 import org.apache.hadoop.mapred.TaskAttemptContextImpl;
 import org.apache.hadoop.mapred.WrappedJvmID;
@@ -94,6 +96,7 @@ import org.apache.hadoop.mapreduce.v2.app.job.event.TaskAttemptKillEvent;
 import org.apache.hadoop.mapreduce.v2.app.job.event.TaskAttemptRecoverEvent;
 import org.apache.hadoop.mapreduce.v2.app.job.event.TaskAttemptStatusUpdateEvent;
 import org.apache.hadoop.mapreduce.v2.app.job.event.TaskAttemptStatusUpdateEvent.TaskAttemptStatus;
+import org.apache.hadoop.mapreduce.v2.app.job.event.TaskEvent;
 import org.apache.hadoop.mapreduce.v2.app.job.event.TaskEventType;
 import org.apache.hadoop.mapreduce.v2.app.job.event.TaskTAttemptEvent;
 import org.apache.hadoop.mapreduce.v2.app.launcher.ContainerLauncher;
@@ -104,6 +107,7 @@ import org.apache.hadoop.mapreduce.v2.app.rm.ContainerAllocatorEvent;
 import org.apache.hadoop.mapreduce.v2.app.rm.ContainerRequestEvent;
 import org.apache.hadoop.mapreduce.v2.app.speculate.SpeculatorEvent;
 import org.apache.hadoop.mapreduce.v2.util.MRApps;
+import org.apache.hadoop.mapreduce.v2.util.MRBuilderUtils;
 import org.apache.hadoop.net.NetUtils;
 import org.apache.hadoop.security.Credentials;
 import org.apache.hadoop.security.UserGroupInformation;
@@ -1511,6 +1515,19 @@ public abstract class TaskAttemptImpl implements
           launchContext, container, taskAttempt.remoteTask));
 
       LOG.error("jbuck, just launched a container for task: " + taskAttempt.attemptId.toString());
+      // if this is a Reduce task, try to set the Map Tasks that depend on it to be scheduleable
+      if (!taskAttempt.remoteTask.isMapTask()) {
+        int[] mapTaskDependencies = ((org.apache.hadoop.mapred.ReduceTask)(taskAttempt.remoteTask)).getMapTaskDependencies();
+        LOG.info("jbuck, Task " + taskAttempt.attemptId.toString() + " depends on tasks " + Arrays.toString(mapTaskDependencies));
+        //LOG.info("jbuck, taskId is " + taskAttempt.attemptId.getTaskId() + " Id is " + taskAttempt.attemptId.getId());
+        TaskId taskId = taskAttempt.attemptId.getTaskId();
+        for (int i=0; i<mapTaskDependencies.length; i++) {  
+          //LOG.info("  jbuck, taskId " + taskAttempt.attemptId.getTaskId() + " depends on " + mapTaskDependencies[i]);
+          TaskId newTaskId = MRBuilderUtils.newTaskId(taskId.getJobId(), mapTaskDependencies[i], TaskType.MAP);
+          LOG.info("  jbuck, you should start " + newTaskId.toString());
+          taskAttempt.eventHandler.handle(new TaskEvent(newTaskId, TaskEventType.T_SCHEDULE));
+        }
+      }
 
       // send event to speculator that our container needs are satisfied
       taskAttempt.eventHandler.handle

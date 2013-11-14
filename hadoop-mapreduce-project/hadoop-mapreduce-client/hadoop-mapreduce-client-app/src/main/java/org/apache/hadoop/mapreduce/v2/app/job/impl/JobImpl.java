@@ -1532,6 +1532,7 @@ public class JobImpl implements org.apache.hadoop.mapreduce.v2.app.job.Job,
     private void createMapTasks(JobImpl job, long inputLength,
                                 TaskSplitMetaInfo[] splits) {
 
+      /*
       Job justJob = null;
       try {
         justJob = new Job(job.conf);
@@ -1539,6 +1540,7 @@ public class JobImpl implements org.apache.hadoop.mapreduce.v2.app.job.Job,
         LOG.error("Caught an IOE in JobImpl.createMapTasks()\n" + ioe.toString());
         return;
       }
+      */
 
       LOG.info("In createMapTasks(), isCountingJob: " + job.conf.isCountingJob());
 

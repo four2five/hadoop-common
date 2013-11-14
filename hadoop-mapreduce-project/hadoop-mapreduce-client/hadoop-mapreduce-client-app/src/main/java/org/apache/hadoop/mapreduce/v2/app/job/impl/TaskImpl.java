@@ -578,6 +578,7 @@ public abstract class TaskImpl implements Task, EventHandler<TaskEvent> {
 
   // This is always called in the Write Lock
   private void addAndScheduleAttempt(Avataar avataar) {
+    // -jbuck we might need to deal with starting the same task multiple times
     TaskAttempt attempt = addAttempt(avataar);
     inProgressAttempts.add(attempt.getID());
     //schedule the nextAttemptNumber
