@@ -18,6 +18,7 @@
 
 package org.apache.hadoop.mapreduce.v2.app.job.impl;
 
+
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
@@ -71,16 +72,19 @@ import org.apache.hadoop.mapreduce.jobhistory.TaskAttemptUnsuccessfulCompletionE
 import org.apache.hadoop.mapreduce.security.TokenCache;
 import org.apache.hadoop.mapreduce.security.token.JobTokenIdentifier;
 import org.apache.hadoop.mapreduce.v2.api.records.Avataar;
+//import org.apache.hadoop.mapreduce.v2.api.records.JobId;
 import org.apache.hadoop.mapreduce.v2.api.records.Locality;
 import org.apache.hadoop.mapreduce.v2.api.records.Phase;
 import org.apache.hadoop.mapreduce.v2.api.records.TaskAttemptId;
 import org.apache.hadoop.mapreduce.v2.api.records.TaskAttemptReport;
 import org.apache.hadoop.mapreduce.v2.api.records.TaskAttemptState;
 import org.apache.hadoop.mapreduce.v2.api.records.TaskId;
+import org.apache.hadoop.mapreduce.v2.api.records.TaskState;
 import org.apache.hadoop.mapreduce.v2.api.records.TaskType;
 import org.apache.hadoop.mapreduce.v2.app.AppContext;
 import org.apache.hadoop.mapreduce.v2.app.TaskAttemptListener;
 import org.apache.hadoop.mapreduce.v2.app.commit.CommitterTaskAbortEvent;
+import org.apache.hadoop.mapreduce.v2.app.job.Job;
 import org.apache.hadoop.mapreduce.v2.app.job.TaskAttemptStateInternal;
 import org.apache.hadoop.mapreduce.v2.app.job.event.JobCounterUpdateEvent;
 import org.apache.hadoop.mapreduce.v2.app.job.event.JobDiagnosticsUpdateEvent;
@@ -558,6 +562,10 @@ public abstract class TaskAttemptImpl implements
     // This "this leak" is okay because the retained pointer is in an
     //  instance variable.
     stateMachine = stateMachineFactory.make(this);
+  }
+
+  public AppContext getAppContext() { 
+    return this.appContext;
   }
 
   private int getMemoryRequired(Configuration conf, TaskType taskType) {
@@ -1524,8 +1532,21 @@ public abstract class TaskAttemptImpl implements
         for (int i=0; i<mapTaskDependencies.length; i++) {  
           //LOG.info("  jbuck, taskId " + taskAttempt.attemptId.getTaskId() + " depends on " + mapTaskDependencies[i]);
           TaskId newTaskId = MRBuilderUtils.newTaskId(taskId.getJobId(), mapTaskDependencies[i], TaskType.MAP);
-          LOG.info("  jbuck, you should start " + newTaskId.toString());
-          taskAttempt.eventHandler.handle(new TaskEvent(newTaskId, TaskEventType.T_SCHEDULE));
+          // issue here -jbuck
+          /*
+          org.apache.hadoop.mapred.JobID jobId = taskAttempt.remoteTask.getTaskID().getJobID();
+          LOG.info("  jobId is " + jobId.toString());
+          */
+          Job thisTasksJob = taskAttempt.getAppContext().getJob(taskId.getJobId()); 
+          // use the JobID to somehow sort out how to check if this is already running
+          org.apache.hadoop.mapreduce.v2.app.job.Task mapTask = thisTasksJob.getTask(newTaskId);
+          TaskState mapTaskState = mapTask.getState();
+          if (TaskState.NEW == mapTask.getState()) {  // if the map task has not been scheduled, do so
+            LOG.info("  jbuck, task " + newTaskId.toString() + " is new. Schedule it" );
+            taskAttempt.eventHandler.handle(new TaskEvent(newTaskId, TaskEventType.T_SCHEDULE));
+          } else { 
+            LOG.info("  jbuck, task " + newTaskId.toString() + " is NOT new. It has state: " + mapTaskState.toString());
+          }
         }
       }
 

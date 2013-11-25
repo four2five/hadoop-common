@@ -1695,7 +1695,6 @@ public class JobImpl implements org.apache.hadoop.mapreduce.v2.app.job.Job,
       //-jbuck scheduling happens here
       // we need to add all of the reduce tasks and then, when each gets schedulered, 
       // then add in the associated Map tasks
-      /*
       if (job.conf.useDependencyScheduling()) { 
         job.scheduleTasks(job.reduceTasks, true);
         // we will schedule Map tasks as a side-effect of scheduling Reduce tasks
@@ -1703,10 +1702,9 @@ public class JobImpl implements org.apache.hadoop.mapreduce.v2.app.job.Job,
         job.scheduleTasks(job.mapTasks, job.numReduceTasks == 0);
         job.scheduleTasks(job.reduceTasks, true);
       }
-      */
 
-      job.scheduleTasks(job.mapTasks, job.numReduceTasks == 0);
-      job.scheduleTasks(job.reduceTasks, true);
+      //job.scheduleTasks(job.mapTasks, job.numReduceTasks == 0);
+      //job.scheduleTasks(job.reduceTasks, true);
 
       // If we have no tasks, just transition to job completed
       if (job.numReduceTasks == 0 && job.numMapTasks == 0) {
