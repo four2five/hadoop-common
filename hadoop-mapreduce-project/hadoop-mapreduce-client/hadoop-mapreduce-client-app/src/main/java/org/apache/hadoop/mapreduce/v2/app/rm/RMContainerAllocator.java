@@ -146,6 +146,7 @@ public class RMContainerAllocator extends RMContainerRequestor
   private float reduceSlowStart = 0;
   private long retryInterval;
   private long retrystartTime;
+  private boolean useDependencyScheduling = false;
 
   BlockingQueue<ContainerAllocatorEvent> eventQueue
     = new LinkedBlockingQueue<ContainerAllocatorEvent>();
@@ -175,6 +176,8 @@ public class RMContainerAllocator extends RMContainerRequestor
     // Init startTime to current time. If all goes well, it will be reset after
     // first attempt to contact RM.
     retrystartTime = System.currentTimeMillis();
+
+    useDependencyScheduling = conf.getBoolean(MRJobConfig.DEPENDENCY_SCHEDULING, false);
   }
 
   @Override
@@ -258,6 +261,10 @@ public class RMContainerAllocator extends RMContainerRequestor
 
   public boolean getIsReduceStarted() {
     return reduceStarted;
+  }
+  
+  public boolean getUseDependencyScheduling() {
+    return useDependencyScheduling;
   }
   
   public void setIsReduceStarted(boolean reduceStarted) {
@@ -433,7 +440,7 @@ public class RMContainerAllocator extends RMContainerRequestor
     LOG.info("Recalculating schedule, headroom=" + headRoom);
     
     //check for slow start
-    if (!getIsReduceStarted()) {//not set yet
+    if (!getIsReduceStarted() && !getUseDependencyScheduling()) {//not set yet
       int completedMapsForReduceSlowstart = (int)Math.ceil(reduceSlowStart * 
                       totalMaps);
       if(completedMaps < completedMapsForReduceSlowstart) {
