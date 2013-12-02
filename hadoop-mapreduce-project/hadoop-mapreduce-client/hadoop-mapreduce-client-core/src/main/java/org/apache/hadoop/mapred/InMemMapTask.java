@@ -56,6 +56,7 @@ import org.apache.hadoop.io.serializer.Serializer;
 import org.apache.hadoop.mapred.IFile.Writer;
 import org.apache.hadoop.mapred.Merger.Segment;
 import org.apache.hadoop.mapred.SortedRanges.SkipRangeIterator;
+import org.apache.hadoop.mapred.buffer.BufferUmbilicalProtocol;
 import org.apache.hadoop.mapreduce.JobContext;
 import org.apache.hadoop.mapreduce.MRJobConfig;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
@@ -84,11 +85,11 @@ public class InMemMapTask extends Task {
 
   protected TrackedRecordReader recordReader = null;
 
-  protected OutputCollector collector = null;
+  //protected OutputCollector collector = null;
 
-  private BytesWritable split = new BytesWritable();
-  private String splitClass;
-  private InputSplit instantiatedSplit = null;
+  //private BytesWritable split = new BytesWritable();
+  //private String splitClass;
+  //private InputSplit instantiatedSplit = null;
 
   private TaskSplitIndex splitMetaInfo = new TaskSplitIndex();
   private final static int APPROX_HEADER_LENGTH = 150;
@@ -305,6 +306,13 @@ public class InMemMapTask extends Task {
       }
       skipWriter.append(key, value);
     }
+  }
+
+  // this should never be called -jbuck
+  @Override
+  public void run(final JobConf job, final TaskUmbilicalProtocol umbilical)
+    throws IOException, ClassNotFoundException, InterruptedException {
+    throw new IOException("The method run(job, umbilical) should not be called for InMemMapTask. Call run(job, umbilical, bufferumbilical)");
   }
 
   @Override
@@ -787,6 +795,10 @@ public class InMemMapTask extends Task {
   // -jbuck start here
   class JMapOutputBuffer<K, V>
     implements MapOutputCollector<K, V> {
+
+    public void flush() throws IOException, InterruptedException, 
+                               ClassNotFoundException {
+    }
   }
 
   class DirectMapOutputCollector<K, V>

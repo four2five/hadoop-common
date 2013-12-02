@@ -53,6 +53,7 @@ import org.apache.hadoop.io.WritableUtils;
 import org.apache.hadoop.io.serializer.Deserializer;
 import org.apache.hadoop.io.serializer.SerializationFactory;
 import org.apache.hadoop.mapred.IFile.Writer;
+import org.apache.hadoop.mapred.buffer.BufferUmbilicalProtocol;
 import org.apache.hadoop.mapreduce.FileSystemCounter;
 import org.apache.hadoop.mapreduce.OutputCommitter;
 import org.apache.hadoop.mapreduce.TaskCounter;
@@ -527,6 +528,12 @@ abstract public class Task implements Writable, Configurable {
    */
   public abstract void run(JobConf job, TaskUmbilicalProtocol umbilical)
     throws IOException, ClassNotFoundException, InterruptedException;
+
+  // this is only overridden by InMemMapTask 
+  public void run(JobConf job, TaskUmbilicalProtocol umbilical, BufferUmbilicalProtocol bufferUmbilical)
+    throws IOException, ClassNotFoundException, InterruptedException { 
+    run(job, umbilical);
+  }
 
   /** The number of milliseconds between progress reports. */
   public static final int PROGRESS_INTERVAL = 3000;
