@@ -17,10 +17,13 @@
  */
 package org.apache.hadoop.mapred;
 
+import java.io.ByteArrayInputStream;
 import java.io.DataInput;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.EOFException;
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 
@@ -482,4 +485,151 @@ public class IFile {
     }
 
   }    
+
+  /**
+   * <code>IFile.InMemoryReader</code> to read map-outputs present in-memory.
+   */
+  public static class InMemoryReader<K, V> extends Reader<K, V> {
+    RamManager ramManager;
+    TaskID taskid;
+    
+    public InMemoryReader(RamManager ramManager, TaskID taskid,
+                          byte[] data, int start, int length)
+                          throws IOException {
+      super(null, null, length - start, null, null);
+      this.ramManager = ramManager;
+      this.taskid = taskid;
+      
+      buffer = data;
+      bufferSize = (int)fileLength;
+      this.dataIn = new DataInputStream(new ByteArrayInputStream(buffer, start, length));
+    }
+    
+    @Override
+    public long getPosition() throws IOException {
+      // InMemoryReader does not initialize streams like Reader, so in.getPos()
+      // would not work. Instead, return the number of uncompressed bytes read,
+      // which will be correct since in-memory data is not compressed.
+      return bytesRead;
+    }
+    
+    @Override
+    public long getLength() { 
+      return fileLength;
+    }
+    
+    private void dumpOnError() {
+      File dumpFile = new File("../output/" + taskid + ".dump");
+      System.err.println("Dumping corrupt map-output of " + taskid + 
+                         " to " + dumpFile.getAbsolutePath());
+      try {
+        FileOutputStream fos = new FileOutputStream(dumpFile);
+        fos.write(buffer, 0, bufferSize);
+        fos.close();
+      } catch (IOException ioe) {
+        System.err.println("Failed to dump map-output of " + taskid);
+      }
+    }
+    
+    public boolean next(DataInputBuffer key, DataInputBuffer value) 
+    throws IOException {
+
+      boolean retVal = true; 
+      retVal = nextRawKey(key);
+      if (false == retVal) { 
+        return retVal;
+      } else { 
+        nextRawValue(value);
+      }
+
+      return retVal;
+
+
+      /*
+      try {
+      // Sanity check
+      if (eof) {
+        throw new EOFException("Completed reading " + bytesRead);
+      }
+      
+      // Read key and value lengths
+      //int oldPos = dataIn.getPosition();
+      int keyLength = WritableUtils.readVInt(dataIn);
+      int valueLength = WritableUtils.readVInt(dataIn);
+      //int pos = dataIn.getPosition();
+      //bytesRead += pos - oldPos;
+      bytesRead += WritableUtils.getVIntSize(keyLength) +
+                   WritableUtils.getVIntSize(valueLength);
+      
+      // Check for EOF
+      if (keyLength == EOF_MARKER && valueLength == EOF_MARKER) {
+        eof = true;
+        return false;
+      }
+      
+      // Sanity check
+      if (keyLength < 0) {
+        throw new IOException("Rec# " + recNo + ": Negative key-length: " + 
+                              keyLength);
+      }
+      if (valueLength < 0) {
+        throw new IOException("Rec# " + recNo + ": Negative value-length: " + 
+                              valueLength);
+      }
+
+      final int recordLength = keyLength + valueLength;
+      
+      // Setup the key and value
+      pos = dataIn.getPosition();
+      byte[] data = dataIn.getData();
+      key.reset(data, pos, keyLength);
+      value.reset(data, (pos + keyLength), valueLength);
+      
+      // from above
+      if (keyBytes.length < currentKeyLength) {
+        keyBytes = new byte[currentKeyLength << 1];
+      }
+      int i = readData(keyBytes, 0, currentKeyLength);
+      if (i != currentKeyLength) {
+        throw new IOException ("Asked for " + currentKeyLength + " Got: " + i);
+      }
+      key.reset(keyBytes, currentKeyLength);
+      bytesRead += currentKeyLength;
+
+      // new approach ? 
+      byte[] data = dataIn.getData();
+      key.reset(data, 0, keyLength);
+      value.reset(data, keyLength, valueLength);
+
+
+      // Position for the next record
+      long skipped = dataIn.skip(recordLength);
+      if (skipped != recordLength) {
+        throw new IOException("Rec# " + recNo + ": Failed to skip past record of length: " + 
+                              recordLength);
+      }
+      
+      // Record the byte
+      bytesRead += recordLength;
+
+      ++recNo;
+      
+      return true;
+      } catch (IOException ioe) {
+        dumpOnError();
+        throw ioe;
+      }
+
+      */
+    }
+      
+    public void close() {
+      // Release
+      dataIn = null;
+      buffer = null;
+      
+      // Inform the RamManager
+      ramManager.unreserve(bufferSize);
+    }
+  }
 }

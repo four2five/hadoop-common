@@ -799,6 +799,37 @@ public class JobConf extends Configuration {
     }
     return codecClass;
   }
+
+ 
+  public Class<?> getMapInputValueClass() {
+    Class<?> retv = getClass(JobContext.MAP_INPUT_VALUE_CLASS, null, Object.class);
+    if (retv == null) {
+      retv = getInputValueClass();
+    }
+    return retv;
+  }
+
+  public void setMapInputValueClass(Class<?> theClass) {
+    setClass(JobContext.MAP_INPUT_VALUE_CLASS, theClass, Object.class);
+  }
+
+  public Class<?> getMapInputKeyClass() {
+    Class<?> retv = getClass(JobContext.MAP_INPUT_KEY_CLASS, null, Object.class);
+    if (retv == null) {
+      retv = getInputKeyClass();
+    }
+    return retv;
+  }
+
+  /**
+   * Set the key class for the job input data.
+   * 
+   * @param theClass the key class for the job input data.
+   */
+  public void setMapInputKeyClass(Class<?> theClass) {
+    setClass(JobContext.MAP_INPUT_KEY_CLASS, theClass, Object.class);
+  }
+
   
   /**
    * Get the key class for the map output data. If it is not set, use the
@@ -860,6 +891,11 @@ public class JobConf extends Configuration {
    */
   public Class<?> getOutputKeyClass() {
     return getClass(JobContext.OUTPUT_KEY_CLASS,
+                    LongWritable.class, Object.class);
+  }
+
+  public Class<?> getInputKeyClass() {
+    return getClass(JobContext.INPUT_KEY_CLASS,
                     LongWritable.class, Object.class);
   }
   
@@ -1031,6 +1067,10 @@ public class JobConf extends Configuration {
     setBoolean("mapred.reducer.new-api", flag);
   }
 
+  public Class<?> getInputValueClass() {
+    return getClass(JobContext.INPUT_VALUE_CLASS, Text.class, Object.class);
+  }
+  
   /**
    * Get the value class for job outputs.
    * 

@@ -28,6 +28,7 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
 import org.apache.hadoop.mapred.JobClient;
+import org.apache.hadoop.mapred.InMemJobClient;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.JobID;
 import org.apache.hadoop.mapreduce.lib.jobcontrol.ControlledJob;
@@ -154,7 +155,12 @@ public class Job extends ControlledJob {
    */
   public JobClient getJobClient() {
     try {
-      return new JobClient(super.getJob().getConfiguration());
+      // if mapred.inmemory is true, return an InMemJobClient. Elsewise, return a JobClient --jbuck
+      if (super.getJob().getConfiguration().getBoolean("mapred.inmemory", false)) { 
+        return new InMemJobClient(super.getJob().getConfiguration());
+      } else { 
+        return new JobClient(super.getJob().getConfiguration());
+      }
     } catch (IOException ioe) {
       return null;
     }

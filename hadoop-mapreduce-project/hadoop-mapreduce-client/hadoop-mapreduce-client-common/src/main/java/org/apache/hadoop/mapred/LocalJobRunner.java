@@ -79,6 +79,8 @@ public class LocalJobRunner implements ClientProtocol {
   public static final String LOCAL_MAX_MAPS =
     "mapreduce.local.map.tasks.maximum";
 
+  private static final String INPUT = "input";
+
   private FileSystem fs;
   private HashMap<JobID, Job> jobs = new HashMap<JobID, Job>();
   private JobConf conf;

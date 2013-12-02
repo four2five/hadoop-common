@@ -87,6 +87,10 @@ public interface MRJobConfig {
 
   public static final String JOB_LOCAL_DIR = "mapreduce.job.local.dir";
 
+  public static final String INPUT_KEY_CLASS = "mapreduce.job.input.key.class";
+
+  public static final String INPUT_VALUE_CLASS = "mapreduce.job.input.value.class";
+
   public static final String OUTPUT_KEY_CLASS = "mapreduce.job.output.key.class";
 
   public static final String OUTPUT_VALUE_CLASS = "mapreduce.job.output.value.class";
@@ -216,6 +220,10 @@ public interface MRJobConfig {
   public static final String MAP_OUTPUT_COMPRESS = "mapreduce.map.output.compress";
 
   public static final String MAP_OUTPUT_COMPRESS_CODEC = "mapreduce.map.output.compress.codec";
+
+  public static final String MAP_INPUT_KEY_CLASS = "mapreduce.map.input.key.class";
+
+  public static final String MAP_INPUT_VALUE_CLASS = "mapreduce.map.input.value.class";
 
   public static final String MAP_OUTPUT_KEY_CLASS = "mapreduce.map.output.key.class";
 
