@@ -48,22 +48,33 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.LocalFileSystem;
-import org.apache.hadoop.ipc.ProtocolSignature;
 import org.apache.hadoop.ipc.RPC;
-import org.apache.hadoop.ipc.Server;
-//import org.apache.hadoop.ipc.RPC.Server;
+import org.apache.hadoop.ipc.RPC.Server;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.JobID;
+import org.apache.hadoop.mapred.MapOutputCollector;
 import org.apache.hadoop.mapred.TaskAttemptID;
 import org.apache.hadoop.mapred.TaskID;
 //import org.apache.hadoop.mapred.TaskTracker;
-import org.apache.hadoop.mapred.JobContext;
 import org.apache.hadoop.mapred.buffer.net.BufferExchange;
 import org.apache.hadoop.mapred.buffer.net.BufferExchangeSource;
 import org.apache.hadoop.mapred.buffer.net.BufferRequest;
 import org.apache.hadoop.mapred.buffer.net.MapBufferRequest;
 import org.apache.hadoop.mapred.buffer.net.ReduceBufferRequest;
+import org.apache.hadoop.mapreduce.MRJobConfig;
 import org.apache.hadoop.net.NetUtils;
+//import org.apache.hadoop.yarn.api.ApplicationMasterProtocol;
+//import org.apache.hadoop.yarn.conf.YarnConfiguration;
+import org.apache.hadoop.yarn.ipc.YarnRPC;
+//import org.apache.hadoop.fs.CommonConfigurationKeysPublic;
+//import org.apache.hadoop.security.SaslRpcServer;
+import org.apache.hadoop.mapreduce.v2.api.MRClientProtocol;
+import org.apache.hadoop.ipc.ProtocolSignature;
+
+
+
+
+
 
 /**
  * Manages the output buffers and buffer requests of all tasks running on this TaskTracker.
@@ -405,7 +416,8 @@ public class Manager implements BufferUmbilicalProtocol {
 		}
 	}
 
-    private JobContext jobContext;
+	/* The host TaskTracker object. */
+    //private TaskTracker tracker;
 
     /* The local file system, containing the output files. */
     private FileSystem localFs;
@@ -450,9 +462,15 @@ public class Manager implements BufferUmbilicalProtocol {
 	
 	private Thread serviceQueue;
 
-	public Manager(JobContext jobContext) throws IOException {
-		this.jobContext = jobContext;
-		this.localFs   = FileSystem.getLocal(jobContext.getJobConf());
+  private MapOutputCollector.Context context;
+
+  private MRClientProtocol protocolHandler;
+
+
+	public Manager(MapOutputCollector.Context context) throws IOException {
+		//this.tracker   = tracker;
+		this.context   = context;
+		this.localFs   = FileSystem.getLocal(context.getJobConf());
 		this.rfs       = ((LocalFileSystem)localFs).getRaw();
 		this.requestTransfer = new RequestTransfer();
 		this.executor  = Executors.newCachedThreadPool();
@@ -460,6 +478,7 @@ public class Manager implements BufferUmbilicalProtocol {
 		this.reduceSources = new HashMap<TaskID, Set<BufferExchangeSource>>();
 		this.fileManagers  = new ConcurrentHashMap<JobID, Map<TaskAttemptID, FileManager>>();
 		this.hostname      = InetAddress.getLocalHost().getCanonicalHostName();
+    this.protocolHandler = new MRClientProtocolHandler();
 		
 		this.queue = new LinkedBlockingQueue<OutputFile>();
 	}
@@ -487,23 +506,37 @@ public class Manager implements BufferUmbilicalProtocol {
 	}
 
 	public void open() throws IOException {
-		Configuration conf = jobContext.getJobConf();
+		Configuration conf = context.getJobConf();
 		int maxMaps = conf.getInt("mapred.tasktracker.map.tasks.maximum", 2);
 		int maxReduces = conf.getInt("mapred.tasktracker.reduce.tasks.maximum", 1);
 
+    /*
 		InetSocketAddress serverAddress = getServerAddress(conf);
-		//this.server = RPC.getServer(this, serverAddress.getHostName(), serverAddress.getPort(),
-				//maxMaps + maxReduces, false, conf); --jbuck
-    this.server = 
-          new RPC.Builder(conf).setProtocol(BufferUmbilicalProtocol.class)
-            .setInstance(this).setBindAddress(serverAddress.getAddress().getHostAddress())
-            .setPort(serverAddress.getPort()).setNumHandlers(
-                //conf.getInt(MRJobConfig.MR_AM_TASK_LISTENER_THREAD_COUNT,
-                //    MRJobConfig.DEFAULT_MR_AM_TASK_LISTENER_THREAD_COUNT))
-                    maxMaps + maxReduces)
-                    //.setVerbose(false).setSecretManager(jobTokenSecretManager)
-                    .setVerbose(false)
-                    .build();
+		this.server = RPC.getServer(this, serverAddress.getHostName(), serverAddress.getPort(),
+				maxMaps + maxReduces, false, conf);
+*/
+
+    YarnRPC rpc = YarnRPC.create(conf);
+    InetSocketAddress address = new InetSocketAddress(0);
+/*
+
+    InetSocketAddress masterServiceAddress = conf.getSocketAddr(
+        YarnConfiguration.RM_SCHEDULER_ADDRESS,
+        YarnConfiguration.DEFAULT_RM_SCHEDULER_ADDRESS,
+        YarnConfiguration.DEFAULT_RM_SCHEDULER_PORT);
+ */
+    //Configuration serverConf = conf;
+    // If the auth is not-simple, enforce it to be token-based.
+    //serverConf = new Configuration(conf);
+    //serverConf.set(
+     //   CommonConfigurationKeysPublic.HADOOP_SECURITY_AUTHENTICATION,
+      //  SaslRpcServer.AuthMethod.TOKEN.toString());
+    this.server =
+        rpc.getServer(MRClientProtocol.class, protocolHandler, address,
+            conf, appContext.getClientToAMTokenSecretManager(),
+            conf.getInt(MRJobConfig.MR_AM_JOB_CLIENT_THREAD_COUNT,
+                MRJobConfig.DEFAULT_MR_AM_JOB_CLIENT_THREAD_COUNT),
+                MRJobConfig.MR_AM_JOB_CLIENT_PORT_RANGE);
 
 		this.server.start();
 
@@ -598,15 +631,15 @@ public class Manager implements BufferUmbilicalProtocol {
 	throws IOException {
 		return 0;
 	}
+	
 
   @Override
   public ProtocolSignature getProtocolSignature(String protocol,
       long clientVersion, int clientMethodsHash) throws IOException {
-    return ProtocolSignature.getProtocolSignature(
-        this, protocol, clientVersion, clientMethodsHash);
+    return ProtocolSignature.getProtocolSignature(this,
+        protocol, clientVersion, clientMethodsHash);
   }
 
-	
 	public void free(TaskAttemptID tid) {
 		synchronized (this) {
 			JobID jobid = tid.getJobID();
@@ -737,7 +770,7 @@ public class Manager implements BufferUmbilicalProtocol {
 
 	private void register(MapBufferRequest request) throws IOException {
 		JobID jobid = request.mapJobId();
-		JobConf job = jobContext.getJobConf();
+		JobConf job = tracker.getJobConf(jobid);
 		BufferExchangeSource source = BufferExchangeSource.factory(rfs, job, request);
 		if (!this.mapSources.containsKey(jobid)) {
 			this.mapSources.put(jobid, new HashSet<BufferExchangeSource>());
@@ -764,7 +797,7 @@ public class Manager implements BufferUmbilicalProtocol {
 		LOG.debug("BufferController register reduce request " + request);
 
 		TaskID taskid = request.reduceTaskId();
-		JobConf job = jobContext.getJobConf();
+		JobConf job = tracker.getJobConf(taskid.getJobID());
 		BufferExchangeSource source = BufferExchangeSource.factory(rfs, job, request);
 
 		if (!this.reduceSources.containsKey(taskid)) {

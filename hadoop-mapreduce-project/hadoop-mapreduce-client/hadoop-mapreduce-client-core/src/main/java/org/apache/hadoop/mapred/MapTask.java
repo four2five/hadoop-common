@@ -83,7 +83,7 @@ public class MapTask extends Task {
   public static final int MAP_OUTPUT_INDEX_RECORD_LENGTH = 24;
 
   private TaskSplitIndex splitMetaInfo = new TaskSplitIndex();
-  private final static int APPROX_HEADER_LENGTH = 150;
+  protected final static int APPROX_HEADER_LENGTH = 150;
 
   private static final Log LOG = LogFactory.getLog(MapTask.class.getName());
 
@@ -1944,7 +1944,7 @@ public class MapTask extends Task {
    * to hold the current record.
    */
   @SuppressWarnings("serial")
-  private static class MapBufferTooSmallException extends IOException {
+  protected static class MapBufferTooSmallException extends IOException {
     public MapBufferTooSmallException(String s) {
       super(s);
     }

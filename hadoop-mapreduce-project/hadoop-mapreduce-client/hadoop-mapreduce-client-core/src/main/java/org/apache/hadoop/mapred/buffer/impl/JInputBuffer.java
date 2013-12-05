@@ -37,6 +37,7 @@ import org.apache.hadoop.mapred.RamManager;
 import org.apache.hadoop.mapred.RawKeyValueIterator;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.Task;
+import org.apache.hadoop.mapred.Task.CombineOutputCollector;
 import org.apache.hadoop.mapred.TaskID;
 import org.apache.hadoop.mapred.IFile.InMemoryReader;
 import org.apache.hadoop.mapred.IFile.Reader;

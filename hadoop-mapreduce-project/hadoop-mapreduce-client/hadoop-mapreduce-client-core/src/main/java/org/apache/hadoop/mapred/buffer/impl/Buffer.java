@@ -31,16 +31,18 @@ import org.apache.hadoop.mapred.RawKeyValueIterator;
 import org.apache.hadoop.mapred.Reducer;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.Task;
+import org.apache.hadoop.mapred.Task.CombineOutputCollector;
 import org.apache.hadoop.util.Progress;
 import org.apache.hadoop.util.ReflectionUtils;
 
 public abstract class Buffer<K extends Object, V extends Object> {
 	
-	protected static class CombineOutputCollector<K extends Object, V extends Object>
+  /*
+	protected static class InMemCombineOutputCollector<K extends Object, V extends Object>
 	implements OutputCollector<K, V> {
 		private IFile.Writer<K, V> writer = null;
 
-		public CombineOutputCollector() {
+		public InMemCombineOutputCollector() {
 		}
 		public synchronized void setWriter(IFile.Writer<K, V> writer) {
 			this.writer = writer;
@@ -55,8 +57,10 @@ public abstract class Buffer<K extends Object, V extends Object> {
 			if (writer != null) writer.append(key, value);
 		}
 	}
+  */
 	
 	@SuppressWarnings("unchecked")
+	//protected void combineAndSpill(InMemCombineOutputCollector<K, V> combineCollector, RawKeyValueIterator kvIter) throws IOException {
 	protected void combineAndSpill(CombineOutputCollector<K, V> combineCollector, RawKeyValueIterator kvIter) throws IOException {
 		Reducer combiner =
 			(Reducer)ReflectionUtils.newInstance(combinerClass, conf);
