@@ -65,11 +65,11 @@ import org.apache.hadoop.mapreduce.MRJobConfig;
 import org.apache.hadoop.net.NetUtils;
 //import org.apache.hadoop.yarn.api.ApplicationMasterProtocol;
 //import org.apache.hadoop.yarn.conf.YarnConfiguration;
-import org.apache.hadoop.yarn.ipc.YarnRPC;
+//import org.apache.hadoop.yarn.ipc.YarnRPC;
 //import org.apache.hadoop.fs.CommonConfigurationKeysPublic;
 //import org.apache.hadoop.security.SaslRpcServer;
-import org.apache.hadoop.mapreduce.v2.api.MRClientProtocol;
-import org.apache.hadoop.ipc.ProtocolSignature;
+//import org.apache.hadoop.mapreduce.v2.api.MRClientProtocol;
+//import org.apache.hadoop.ipc.ProtocolSignature;
 
 
 
@@ -464,7 +464,7 @@ public class Manager implements BufferUmbilicalProtocol {
 
   private MapOutputCollector.Context context;
 
-  private MRClientProtocol protocolHandler;
+  //private MRClientProtocol protocolHandler;
 
 
 	public Manager(MapOutputCollector.Context context) throws IOException {
@@ -506,18 +506,121 @@ public class Manager implements BufferUmbilicalProtocol {
 	}
 
 	public void open() throws IOException {
-		Configuration conf = context.getJobConf();
-		int maxMaps = conf.getInt("mapred.tasktracker.map.tasks.maximum", 2);
-		int maxReduces = conf.getInt("mapred.tasktracker.reduce.tasks.maximum", 1);
+    String appName = "InMem Buffer Manager appName";
+    String appId = "InMem Buffer Manager appId";
 
-    /*
-		InetSocketAddress serverAddress = getServerAddress(conf);
-		this.server = RPC.getServer(this, serverAddress.getHostName(), serverAddress.getPort(),
-				maxMaps + maxReduces, false, conf);
-*/
+    ApplicationClientProtocol applicationsManager; 
+    YarnConfiguration yarnConf = new YarnConfiguration(context.getJobConf());
+    InetSocketAddress rmAddress = 
+        NetUtils.createSocketAddr(yarnConf.get(
+            YarnConfiguration.RM_ADDRESS,
+            YarnConfiguration.DEFAULT_RM_ADDRESS));             
+    LOG.info("Manager.java Connecting to ResourceManager at " + rmAddress);
+    configuration appsManagerServerConf = new Configuration(context.getJobConf());
+    appsManagerServerConf.setClass(
+        YarnConfiguration.YARN_SECURITY_INFO,
+        ClientRMSecurityInfo.class, SecurityInfo.class);
+    applicationsManager = ((ApplicationClientProtocol) rpc.getProxy(
+        ApplicationClientProtocol.class, rmAddress, appsManagerServerConf));
 
-    YarnRPC rpc = YarnRPC.create(conf);
-    InetSocketAddress address = new InetSocketAddress(0);
+// Create a new ApplicationSubmissionContext
+    ApplicationSubmissionContext appContext = 
+        Records.newRecord(ApplicationSubmissionContext.class);
+    // set the ApplicationId 
+    appContext.setApplicationId(appId);
+    // set the application name
+    appContext.setApplicationName(appName);
+    
+    // Create a new container launch context for the AM's container
+    ContainerLaunchContext amContainer = 
+        Records.newRecord(ContainerLaunchContext.class);
+
+    // Define the local resources required 
+    Map<String, LocalResource> localResources = 
+        new HashMap<String, LocalResource>();
+    // Lets assume the jar we need for our ApplicationMaster is available in 
+    // HDFS at a certain known path to us and we want to make it available to
+    // the ApplicationMaster in the launched container 
+    Path jarPath; // <- known path to jar file  
+    FileStatus jarStatus = fs.getFileStatus(jarPath);
+    LocalResource amJarRsrc = Records.newRecord(LocalResource.class);
+    // Set the type of resource - file or archive
+    // archives are untarred at the destination by the framework
+    amJarRsrc.setType(LocalResourceType.FILE);
+    // Set visibility of the resource 
+    // Setting to most private option i.e. this file will only 
+    // be visible to this instance of the running application
+    amJarRsrc.setVisibility(LocalResourceVisibility.APPLICATION);          
+    // Set the location of resource to be copied over into the 
+    // working directory
+    amJarRsrc.setResource(ConverterUtils.getYarnUrlFromPath(jarPath)); 
+    // Set timestamp and length of file so that the framework 
+    // can do basic sanity checks for the local resource 
+    // after it has been copied over to ensure it is the same 
+    // resource the client intended to use with the application
+    amJarRsrc.setTimestamp(jarStatus.getModificationTime());
+    amJarRsrc.setSize(jarStatus.getLen());
+    // The framework will create a symlink called AppMaster.jar in the 
+    // working directory that will be linked back to the actual file. 
+    // The ApplicationMaster, if needs to reference the jar file, would 
+    // need to use the symlink filename.  
+    localResources.put("AppMaster.jar",  amJarRsrc);    
+    // Set the local resources into the launch context    
+    amContainer.setLocalResources(localResources);
+
+    // Set up the environment needed for the launch context
+    Map<String, String> env = new HashMap<String, String>();    
+    // For example, we could setup the classpath needed.
+    // Assuming our classes or jars are available as local resources in the
+    // working directory from which the command will be run, we need to append
+    // "." to the path. 
+    // By default, all the hadoop specific classpaths will already be available 
+    // in $CLASSPATH, so we should be careful not to overwrite it.   
+    String classPathEnv = "$CLASSPATH:./*:";    
+    env.put("CLASSPATH", classPathEnv);
+    amContainer.setEnvironment(env);
+    
+    // Construct the command to be executed on the launched container 
+    String command = 
+        "${JAVA_HOME}" + /bin/java" +
+        " MyAppMaster" + 
+        //" arg1 arg2 arg3" + 
+        " 1>" + ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/stdout" +
+        " 2>" + ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/stderr";                     
+
+
+    LOG.info("Manager.java command string: " + command);
+    List<String> commands = new ArrayList<String>();
+    commands.add(command);
+    // add additional commands if needed                
+
+    // Set the command array into the container spec
+    amContainer.setCommands(commands);
+    
+    // Define the resource requirements for the container
+    // For now, YARN only supports memory so we set the memory 
+    // requirements. 
+    // If the process takes more than its allocated memory, it will 
+    // be killed by the framework. 
+    // Memory being requested for should be less than max capability 
+    // of the cluster and all asks should be a multiple of the min capability. 
+    Resource capability = Records.newRecord(Resource.class);
+
+    // Let's start with a hard-coded value of 1 GB. TODO calculate this later
+    managerRAMSize = 1024 * 1024 * 1024; // I think this is in bytes?
+    capability.setMemory(managerRAMSize);
+    amContainer.setResource(capability);
+    
+    // Set the container launch content into the ApplicationSubmissionContext
+    appContext.setAMContainerSpec(amContainer);
+
+    GetApplicationReportRequest reportRequest = 
+        Records.newRecord(GetApplicationReportRequest.class);
+    reportRequest.setApplicationId(appId);
+    GetApplicationReportResponse reportResponse = 
+        applicationsManager.getApplicationReport(reportRequest);
+    ApplicationReport report = reportResponse.getApplicationReport();
+
 /*
 
     InetSocketAddress masterServiceAddress = conf.getSocketAddr(
