@@ -359,7 +359,7 @@ public class TestJobEndNotifier extends JobEndNotifier {
       protected void doUnregistration()
           throws YarnException, IOException, InterruptedException {
         if (crushUnregistration) {
-          app.successfullyUnregistered.set(true);
+          app.markSuccessfullyUnregistered();
         } else {
           throw new YarnException("test exception");
         }

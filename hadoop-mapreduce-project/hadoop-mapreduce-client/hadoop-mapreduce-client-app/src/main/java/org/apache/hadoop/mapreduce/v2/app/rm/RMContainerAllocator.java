@@ -897,11 +897,11 @@ public class RMContainerAllocator extends RMContainerRequestor
 
       assignedRequests.add(allocated, assigned.attemptID);
 
-      if (LOG.isDebugEnabled()) {
+      //if (LOG.isDebugEnabled()) {
         LOG.info("Assigned container (" + allocated + ") "
             + " to task " + assigned.attemptID + " on node "
             + allocated.getNodeId().toString());
-      }
+      //}
     }
     
     private void containerNotAssigned(Container allocated) {
@@ -1026,6 +1026,21 @@ public class RMContainerAllocator extends RMContainerRequestor
           }
           TaskAttemptId tId = list.removeFirst();
           if (maps.containsKey(tId)) {
+            /*
+            // -- jbuck, start here. Create a map with host names and RAM Managers
+            LOG.info("JB, assigning task " + tId + " to host " + host);
+            // check if there is a RAM manager spun up on that host and, it not, spin one up
+            if (ram_managers.containsKey(host)) { 
+              LOG.info("JB, new map task " + tId + " is running on host " + host + 
+                       " which already has ram_manager " + ram_managers.get(host));
+            } else { 
+              //LOG.info("JB, new map task " + tId + " is running on host " + host + 
+                       //" which DOES NOT have a ram_manager. Starting one now");
+              // start new ram_manager here. Need to fake a container request
+              //containerAssigned(rmallocated, rmassigned); 
+            }
+            */
+
             ContainerRequest assigned = maps.remove(tId);
             containerAssigned(allocated, assigned);
             it.remove();
@@ -1102,14 +1117,18 @@ public class RMContainerAllocator extends RMContainerRequestor
       new LinkedHashMap<TaskAttemptId, Container>();
     private final Set<TaskAttemptId> preemptionWaitingReduces = 
       new HashSet<TaskAttemptId>();
+      // -jbuck your new lookup thingy
+    private final LinkedHashMap<String, Container> ram_managers = 
+      new LinkedHashMap<String, Container>();
     
     void add(Container container, TaskAttemptId tId) {
       LOG.info("Assigned container " + container.getId().toString() + " to " + tId);
       containerToAttemptMap.put(container.getId(), tId);
       if (tId.getTaskId().getTaskType().equals(TaskType.MAP)) {
         maps.put(tId, container);
-      } else {
+      } else if (tId.getTaskId().getTaskType().equals(TaskType.REDUCE)) {
         reduces.put(tId, container);
+      } else { // implicitly this is a TaskType.RAM_MANAGER
       }
     }
 

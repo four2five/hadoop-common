@@ -379,7 +379,7 @@ public class TestMRApp {
     // AM is not unregistered
     Assert.assertEquals(JobState.RUNNING, job.getState());
     // imitate that AM is unregistered
-    app.successfullyUnregistered.set(true);
+    app.markSuccessfullyUnregistered();
     app.waitForState(job, JobState.SUCCEEDED);
   }
 

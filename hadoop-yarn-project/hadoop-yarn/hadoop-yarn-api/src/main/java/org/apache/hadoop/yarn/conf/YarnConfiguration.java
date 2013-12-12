@@ -182,6 +182,10 @@ public class YarnConfiguration extends Configuration {
     YARN_PREFIX + "nm.liveness-monitor.expiry-interval-ms";
   public static final int DEFAULT_RM_NM_EXPIRY_INTERVAL_MS = 600000;
 
+  /** Should the NM start up RAM_MANAGERs when they init */
+  public static final String NM_START_RAM_MANAGER = "nm.start_ram_managers";
+  public static final boolean DEFAULT_NM_START_RAM_MANAGER = false;
+
   /** Are acls enabled.*/
   public static final String YARN_ACL_ENABLE = 
     YARN_PREFIX + "acl.enable";

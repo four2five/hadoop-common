@@ -212,8 +212,8 @@ public class MRAppMaster extends CompositeService {
   private long recoveredJobStartTime = 0;
 
   @VisibleForTesting
-  protected AtomicBoolean successfullyUnregistered =
-      new AtomicBoolean(false);
+  //protected AtomicBoolean successfullyUnregistered =
+  //    new AtomicBoolean(false);
 
   public MRAppMaster(ApplicationAttemptId applicationAttemptId,
       ContainerId containerId, String nmHost, int nmPort, int nmHttpPort,
@@ -244,14 +244,6 @@ public class MRAppMaster extends CompositeService {
     conf.setBoolean(Dispatcher.DISPATCHER_EXIT_ON_ERROR_KEY, true);
 
     initJobCredentialsAndUGI(conf);
-
-    context = new RunningAppContext(conf);
-
-    ((RunningAppContext)context).computeIsLastAMRetry();
-    LOG.info("The specific max attempts: " + maxAppAttempts +
-        " for application: " + appAttemptID.getApplicationId().getId() +
-        ". Attempt num: " + appAttemptID.getAttemptId() +
-        " is last retry: " + isLastAMRetry);
 
     // Job name is the same as the app name util we support DAG of jobs
     // for an app later
@@ -321,6 +313,8 @@ public class MRAppMaster extends CompositeService {
       dispatcher = createDispatcher();
       addIfService(dispatcher);
       
+      context = new RunningAppContext(conf, startTime, dispatcher, clock, appAttemptID, maxAppAttempts);
+
       NoopEventHandler eater = new NoopEventHandler();
       //We do not have a JobEventDispatcher in this path
       dispatcher.register(JobEventType.class, eater);
@@ -348,6 +342,7 @@ public class MRAppMaster extends CompositeService {
 
       // service to allocate containers from RM (if non-uber) or to fake it (uber)
       containerAllocator = createContainerAllocator(null, context);
+      ((RunningAppContext)context).setContainerAllocator(containerAllocator);
       addIfService(containerAllocator);
       dispatcher.register(ContainerAllocator.EventType.class, containerAllocator);
 
@@ -370,6 +365,8 @@ public class MRAppMaster extends CompositeService {
       dispatcher = createDispatcher();
       addIfService(dispatcher);
 
+      context = new RunningAppContext(conf, startTime, dispatcher, clock, appAttemptID, maxAppAttempts);
+
       //service to handle requests from JobClient
       clientService = createClientService(context);
       // Init ClientService separately so that we stop it separately, since this
@@ -378,6 +375,7 @@ public class MRAppMaster extends CompositeService {
       clientService.init(conf);
       
       containerAllocator = createContainerAllocator(clientService, context);
+      ((RunningAppContext)context).setContainerAllocator(containerAllocator);
       
       //service to handle the output committer
       committerEventHandler = createCommitterEventHandler(context, committer);
@@ -625,7 +623,7 @@ public class MRAppMaster extends CompositeService {
             committer, newApiCommitter,
             currentUser.getUserName(), appSubmitTime, amInfos, context, 
             forcedState, diagnostic);
-    ((RunningAppContext) context).jobs.put(newJob.getID(), newJob);
+    ((RunningAppContext) context).getJobs().put(newJob.getID(), newJob);
 
     dispatcher.register(JobFinishEvent.Type.class,
         createJobFinishEventHandler());     
@@ -899,98 +897,6 @@ public class MRAppMaster extends CompositeService {
         LOG.error("Failed to cleanup staging dir: ", io);
       }
       super.serviceStop();
-    }
-  }
-
-  public class RunningAppContext implements AppContext {
-
-    private final Map<JobId, Job> jobs = new ConcurrentHashMap<JobId, Job>();
-    private final Configuration conf;
-    private final ClusterInfo clusterInfo = new ClusterInfo();
-    private final ClientToAMTokenSecretManager clientToAMTokenSecretManager;
-
-    public RunningAppContext(Configuration config) {
-      this.conf = config;
-      this.clientToAMTokenSecretManager =
-          new ClientToAMTokenSecretManager(appAttemptID, null);
-    }
-
-    @Override
-    public ApplicationAttemptId getApplicationAttemptId() {
-      return appAttemptID;
-    }
-
-    @Override
-    public ApplicationId getApplicationID() {
-      return appAttemptID.getApplicationId();
-    }
-
-    @Override
-    public String getApplicationName() {
-      return appName;
-    }
-
-    @Override
-    public long getStartTime() {
-      return startTime;
-    }
-
-    @Override
-    public Job getJob(JobId jobID) {
-      return jobs.get(jobID);
-    }
-
-    @Override
-    public Map<JobId, Job> getAllJobs() {
-      return jobs;
-    }
-
-    @Override
-    public EventHandler getEventHandler() {
-      return dispatcher.getEventHandler();
-    }
-
-    @Override
-    public CharSequence getUser() {
-      return this.conf.get(MRJobConfig.USER_NAME);
-    }
-
-    @Override
-    public Clock getClock() {
-      return clock;
-    }
-    
-    @Override
-    public ClusterInfo getClusterInfo() {
-      return this.clusterInfo;
-    }
-
-    @Override
-    public Set<String> getBlacklistedNodes() {
-      return ((RMContainerRequestor) containerAllocator).getBlacklistedNodes();
-    }
-    
-    @Override
-    public ClientToAMTokenSecretManager getClientToAMTokenSecretManager() {
-      return clientToAMTokenSecretManager;
-    }
-
-    @Override
-    public boolean isLastAMRetry(){
-      return isLastAMRetry;
-    }
-
-    @Override
-    public boolean hasSuccessfullyUnregistered() {
-      return successfullyUnregistered.get();
-    }
-
-    public void markSuccessfulUnregistration() {
-      successfullyUnregistered.set(true);
-    }
-
-    public void computeIsLastAMRetry() {
-      isLastAMRetry = appAttemptID.getAttemptId() >= maxAppAttempts;
     }
   }
 
@@ -1449,5 +1355,13 @@ public class MRAppMaster extends CompositeService {
         return null;
       }
     });
+  }
+
+  public void markSuccessfullyUnregistered() { 
+    ((RunningAppContext) context).markSuccessfulUnregistration();
+  }
+
+  public void markFailedUnregistered() { 
+    ((RunningAppContext) context).markFailedUnregistration();
   }
 }

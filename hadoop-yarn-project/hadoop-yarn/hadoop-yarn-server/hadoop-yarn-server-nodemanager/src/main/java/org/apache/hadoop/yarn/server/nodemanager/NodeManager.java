@@ -75,6 +75,7 @@ public class NodeManager extends CompositeService
   private Context context;
   private AsyncDispatcher dispatcher;
   private ContainerManagerImpl containerManager;
+  private RAMManagerService ramManager;
   private NodeStatusUpdater nodeStatusUpdater;
   private static CompositeServiceShutdownHook nodeManagerShutdownHook; 
   
@@ -110,6 +111,10 @@ public class NodeManager extends CompositeService
 
   protected DeletionService createDeletionService(ContainerExecutor exec) {
     return new DeletionService(exec);
+  }
+
+  protected RAMManagerService createRAMManagerService(ContainerExecutor exec) {
+    return new RAMManagerService(exec);
   }
 
   protected NMContext createNMContext(
@@ -178,6 +183,16 @@ public class NodeManager extends CompositeService
     dispatcher.register(ContainerManagerEventType.class, containerManager);
     dispatcher.register(NodeManagerEventType.class, this);
     addService(dispatcher);
+
+    // add the RAM_manager service here, if configured to do so
+    // -jbuck, instantiate the RAM manager here
+    if (conf.getBoolean(YarnConfiguration.NM_START_RAM_MANAGER,YarnConfiguration.DEFAULT_NM_START_RAM_MANAGER)) { 
+      LOG.info("Starting up RAMManager on node ");
+      ramManager = createRAMManagerService(exec);
+      addService(ramManager);
+    } else { 
+      LOG.info("NOT starting RAMManager on node ");
+    }
     
     DefaultMetricsSystem.initialize("NodeManager");
 

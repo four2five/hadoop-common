@@ -237,7 +237,11 @@ public class MRApp extends MRAppMaster {
     this.autoComplete = autoComplete;
     // If safeToReportTerminationToUser is set to true, we can verify whether
     // the job can reaches the final state when MRAppMaster shuts down.
-    this.successfullyUnregistered.set(unregistered);
+    if (unregistered) { 
+      this.markSuccessfullyUnregistered();
+    } else { 
+      this.markFailedUnregistered();
+    }
   }
 
   @Override

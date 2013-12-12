@@ -418,8 +418,17 @@ public class YARNRunner implements ClientProtocol {
     warnForJavaLibPath(mrAppMasterUserOptions, "app master", 
         MRJobConfig.MR_AM_COMMAND_OPTS, MRJobConfig.MR_AM_ENV);
     vargs.add(mrAppMasterUserOptions);
+
+    String appMasterClass = conf.get(MRJobConfig.APPLICATION_MASTER_CLASS_NAME, MRJobConfig.APPLICATION_MASTER_CLASS);
+    LOG.info("JB, AppMasterClass is " + appMasterClass);
+    LOG.info("JB, conf is " + conf);
+    String appMasterClass2 = jobConf.get(MRJobConfig.APPLICATION_MASTER_CLASS_NAME, MRJobConfig.APPLICATION_MASTER_CLASS);
+    LOG.info("JB, AppMasterClass2 is " + appMasterClass2);
+    LOG.info("JB, jobConf is " + jobConf);
     
-    vargs.add(MRJobConfig.APPLICATION_MASTER_CLASS);
+    //vargs.add(MRJobConfig.APPLICATION_MASTER_CLASS);
+    // use the parameterized version
+    vargs.add(appMasterClass);
     vargs.add("1>" + ApplicationConstants.LOG_DIR_EXPANSION_VAR +
         Path.SEPARATOR + ApplicationConstants.STDOUT);
     vargs.add("2>" + ApplicationConstants.LOG_DIR_EXPANSION_VAR +
@@ -434,7 +443,7 @@ public class YARNRunner implements ClientProtocol {
     }
     vargsFinal.add(mergedCommand.toString());
 
-    LOG.debug("Command to launch container for ApplicationMaster is : "
+    LOG.info("Command to launch container for ApplicationMaster is : "
         + mergedCommand);
 
     // Setup the CLASSPATH in environment
@@ -448,6 +457,8 @@ public class YARNRunner implements ClientProtocol {
     // Setup the environment variables (LD_LIBRARY_PATH, etc)
     MRApps.setEnvFromInputString(environment, 
         conf.get(MRJobConfig.MR_AM_ENV));
+
+    LOG.info("JB, environment is " + environment);
 
     // Parse distributed cache
     MRApps.setupDistributedCache(jobConf, localResources);

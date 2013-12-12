@@ -18,8 +18,12 @@
 package org.apache.hadoop.examples;
 
 import java.io.IOException;
+import java.lang.InterruptedException;
+import java.lang.reflect.Method;
 import java.util.StringTokenizer;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.IntWritable;
@@ -33,18 +37,28 @@ import org.apache.hadoop.util.GenericOptionsParser;
 
 public class WordCount {
 
+  private static final Log LOG = LogFactory.getLog(WordCount.class);
+
   public static class TokenizerMapper 
        extends Mapper<Object, Text, Text, IntWritable>{
     
     private final static IntWritable one = new IntWritable(1);
     private Text word = new Text();
-      
+
     public void map(Object key, Text value, Context context
                     ) throws IOException, InterruptedException {
       StringTokenizer itr = new StringTokenizer(value.toString());
       while (itr.hasMoreTokens()) {
         word.set(itr.nextToken());
         context.write(word, one);
+      }
+    }
+    public void setup(org.apache.hadoop.mapreduce.Mapper.Context context) throws IOException, InterruptedException { 
+      super.setup(context);
+      Class conObj = context.getClass();
+      LOG.info("Methods");
+      for (Method method : conObj.getMethods()) { 
+        LOG.info("  " + method.getName());
       }
     }
   }

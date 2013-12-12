@@ -664,6 +664,7 @@ public class MapTask extends Task {
     private final MapOutputCollector<K,V> collector;
     private final org.apache.hadoop.mapreduce.Partitioner<K,V> partitioner;
     private final int partitions;
+    private final Log LOG2 = LogFactory.getLog(NewOutputCollector.class);
 
     @SuppressWarnings("unchecked")
     NewOutputCollector(org.apache.hadoop.mapreduce.JobContext jobContext,
@@ -671,6 +672,8 @@ public class MapTask extends Task {
                        TaskUmbilicalProtocol umbilical,
                        TaskReporter reporter
                        ) throws IOException, ClassNotFoundException {
+      LOG2.info("This is running on node : " + 
+        ((TaskAttemptContext)jobContext).getAssignedContainerMgrAddress());
       collector = createSortingCollector(job, reporter);
       partitions = jobContext.getNumReduceTasks();
       if (partitions > 1) {
