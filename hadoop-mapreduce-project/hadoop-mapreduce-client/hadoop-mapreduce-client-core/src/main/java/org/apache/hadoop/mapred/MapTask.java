@@ -672,8 +672,8 @@ public class MapTask extends Task {
                        TaskUmbilicalProtocol umbilical,
                        TaskReporter reporter
                        ) throws IOException, ClassNotFoundException {
-      LOG2.info("This is running on node : " + 
-        ((TaskAttemptContext)jobContext).getAssignedContainerMgrAddress());
+      //LOG2.info("This is running on node : " + 
+       // ((TaskAttemptContext)jobContext).getAssignedContainerMgrAddress());
       collector = createSortingCollector(job, reporter);
       partitions = jobContext.getNumReduceTasks();
       if (partitions > 1) {

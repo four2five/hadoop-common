@@ -224,6 +224,7 @@ abstract public class Task implements Writable, Configurable {
     mergedMapOutputsCounter = 
       counters.findCounter(TaskCounter.MERGED_MAP_OUTPUTS);
     gcUpdater = new GcTimeUpdater();
+    //LOG.info("Task " + taskId + " is executing on host " + actualAttempt.getNodeHttpAddress());
   }
 
   ////////////////////////////////////////////

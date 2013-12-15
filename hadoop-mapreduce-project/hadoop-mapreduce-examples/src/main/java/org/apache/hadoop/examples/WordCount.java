@@ -60,6 +60,7 @@ public class WordCount {
       for (Method method : conObj.getMethods()) { 
         LOG.info("  " + method.getName());
       }
+      LOG.info("Context: " + context.toString());
     }
   }
   

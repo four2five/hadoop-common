@@ -18,6 +18,8 @@
 
 package org.apache.hadoop.mapreduce.v2.app.job.impl;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.MapTaskAttemptImpl;
@@ -38,6 +40,7 @@ import org.apache.hadoop.yarn.util.Clock;
 public class MapTaskImpl extends TaskImpl {
 
   private final TaskSplitMetaInfo taskSplitMetaInfo;
+  private static final Log LOG = LogFactory.getLog(MapTaskImpl.class);
 
   public MapTaskImpl(JobId jobId, int partition, EventHandler eventHandler,
       Path remoteJobConfFile, JobConf conf,
@@ -50,6 +53,7 @@ public class MapTaskImpl extends TaskImpl {
         conf, taskAttemptListener, jobToken, credentials, clock,
         appAttemptId, metrics, appContext);
     this.taskSplitMetaInfo = taskSplitMetaInfo;
+    LOG.warn("In MapTaskImpl");
   }
 
   @Override
