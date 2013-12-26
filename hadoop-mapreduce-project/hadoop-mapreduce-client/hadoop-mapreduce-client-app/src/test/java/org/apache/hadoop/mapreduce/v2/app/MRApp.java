@@ -703,7 +703,7 @@ public class MRApp extends MRAppMaster {
           new JobTokenSecretManager(), new Credentials(), clock,
           getCompletedTaskFromPreviousRun(), metrics, committer,
           newApiCommitter, user, System.currentTimeMillis(), getAllAMInfos(),
-          appContext, forcedState, diagnostic);
+          appContext, forcedState, diagnostic, null);
 
       // This "this leak" is okay because the retained pointer is in an
       //  instance variable.

@@ -306,7 +306,7 @@ public class LocalContainerLauncher extends AbstractService implements
           MapTask map = (MapTask)task;
           map.setConf(conf);
 
-          map.run(conf, umbilical);
+          map.run(conf, umbilical, null);
 
           if (renameOutputs) {
             renameMapOutputForReduce(conf, attemptID, map.getMapOutputFile());
@@ -337,7 +337,7 @@ public class LocalContainerLauncher extends AbstractService implements
           ReduceTask reduce = (ReduceTask)task;
           reduce.setConf(conf);          
 
-          reduce.run(conf, umbilical);
+          reduce.run(conf, umbilical, null);
           //relocalize();  // needed only if more than one reducer supported (is MAPREDUCE-434 fixed yet?)
         }
 

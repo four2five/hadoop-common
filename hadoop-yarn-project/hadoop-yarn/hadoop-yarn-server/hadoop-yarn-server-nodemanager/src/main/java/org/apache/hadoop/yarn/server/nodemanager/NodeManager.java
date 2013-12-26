@@ -30,6 +30,7 @@ import org.apache.hadoop.classification.InterfaceAudience.Private;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.http.HttpConfig;
 import org.apache.hadoop.http.HttpConfig.Policy;
+//import org.apache.hadoop.mapred.BufferTransferListenerImpl;
 import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.apache.hadoop.security.SecurityUtil;
 import org.apache.hadoop.service.CompositeService;
@@ -75,8 +76,9 @@ public class NodeManager extends CompositeService
   private Context context;
   private AsyncDispatcher dispatcher;
   private ContainerManagerImpl containerManager;
-  private RAMManagerService ramManager;
+  //private RAMManagerService ramManager;
   private NodeStatusUpdater nodeStatusUpdater;
+  //private BufferTransferListener bufferTransferListener;
   private static CompositeServiceShutdownHook nodeManagerShutdownHook; 
   
   private AtomicBoolean isStopping = new AtomicBoolean(false);
@@ -113,9 +115,11 @@ public class NodeManager extends CompositeService
     return new DeletionService(exec);
   }
 
+  /*
   protected RAMManagerService createRAMManagerService(ContainerExecutor exec) {
     return new RAMManagerService(exec);
   }
+  */
 
   protected NMContext createNMContext(
       NMContainerTokenSecretManager containerTokenSecretManager,
@@ -186,13 +190,19 @@ public class NodeManager extends CompositeService
 
     // add the RAM_manager service here, if configured to do so
     // -jbuck, instantiate the RAM manager here
+    /*
     if (conf.getBoolean(YarnConfiguration.NM_START_RAM_MANAGER,YarnConfiguration.DEFAULT_NM_START_RAM_MANAGER)) { 
-      LOG.info("Starting up RAMManager on node ");
-      ramManager = createRAMManagerService(exec);
-      addService(ramManager);
+      LOG.info("Starting up BufferTransferListener on node ");
+      //ramManager = createRAMManagerService(exec);
+      //addService(ramManager);
+
+      //service to handle requests to TaskUmbilicalProtocol
+      bufferTransferListener = createBufferTransferListener(context);
+      addService(bufferTransferListener);
     } else { 
       LOG.info("NOT starting RAMManager on node ");
     }
+    */
     
     DefaultMetricsSystem.initialize("NodeManager");
 

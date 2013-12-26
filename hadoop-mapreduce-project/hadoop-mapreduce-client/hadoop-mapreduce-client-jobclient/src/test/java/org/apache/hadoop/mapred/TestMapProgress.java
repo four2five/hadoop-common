@@ -255,7 +255,7 @@ public class TestMapProgress extends TestCase {
       JobConf localConf = new JobConf(job);
       map.localizeConfiguration(localConf);
       map.setConf(localConf);
-      map.run(localConf, fakeUmbilical);
+      map.run(localConf, fakeUmbilical, null);
     }
     // clean up
     fs.delete(rootDir, true);

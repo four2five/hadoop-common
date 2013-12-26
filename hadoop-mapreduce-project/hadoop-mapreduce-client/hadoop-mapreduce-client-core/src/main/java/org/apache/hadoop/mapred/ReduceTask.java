@@ -47,6 +47,7 @@ import org.apache.hadoop.io.SequenceFile.CompressionType;
 import org.apache.hadoop.io.compress.CompressionCodec;
 import org.apache.hadoop.io.compress.DefaultCodec;
 import org.apache.hadoop.mapred.SortedRanges.SkipRangeIterator;
+import org.apache.hadoop.mapred.buffer.BufferUmbilicalProtocol;
 import org.apache.hadoop.mapreduce.MRConfig;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.hadoop.mapreduce.TaskCounter;
@@ -146,6 +147,16 @@ public class ReduceTask extends Task {
 
   @Override
   public boolean isMapTask() {
+    return false;
+  }
+
+  @Override
+  public boolean isReduceTask() {
+    return true;
+  }
+
+  @Override
+  public boolean isRAMManagerTask() {
     return false;
   }
 
@@ -309,11 +320,11 @@ public class ReduceTask extends Task {
 
   @Override
   @SuppressWarnings("unchecked")
-  public void run(JobConf job, final TaskUmbilicalProtocol umbilical)
+  public void run(JobConf job, final TaskUmbilicalProtocol umbilical, final BufferUmbilicalProtocol bufUmbilical)
     throws IOException, InterruptedException, ClassNotFoundException {
     job.setBoolean(JobContext.SKIP_RECORDS, isSkipping());
 
-    if (isMapOrReduce()) {
+    if (isMapReduceOrRAMManager()) {
       copyPhase = getProgress().addPhase("copy");
       sortPhase  = getProgress().addPhase("sort");
       reducePhase = getProgress().addPhase("reduce");

@@ -30,14 +30,15 @@ import org.apache.hadoop.mapred.buffer.net.BufferRequest;
  * @author tcondie
  */
 public interface BufferUmbilicalProtocol extends VersionedProtocol {
-	long versionID = 0;
+	long versionID = 1;
 
 	/**
 	 * Used to make new requests for map/reduce buffers.
 	 * @param request The buffer request.
 	 * @throws IOException
 	 */
-	void request(BufferRequest request) throws IOException;
+	//void request(BufferRequest request) throws IOException;
+	void request(byte[] request) throws IOException;
 
 	/**
 	 * Statistic on how well pipelining is keeping up with the production
@@ -54,5 +55,11 @@ public interface BufferUmbilicalProtocol extends VersionedProtocol {
 	 * @param buffer The output file.
 	 * @throws IOException
 	 */
-	void output(OutputFile buffer) throws IOException;
+	//void output(OutputFile buffer) throws IOException;
+	void output(byte[] buffer) throws IOException; // fix this later
+
+  /**
+   * Dummy function to inject data into the Manager's output
+   */
+  void printLogMessage(String output) throws IOException;
 }

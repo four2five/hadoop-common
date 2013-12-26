@@ -1226,6 +1226,8 @@ public abstract class TaskImpl implements Task, EventHandler<TaskEvent> {
     public void transition(TaskImpl task, TaskEvent event) {
       task.metrics.launchedTask(task);
       task.metrics.runningTask(task);
+      // check if there's a RAMManager already running on that node. If not, start one. --jbuck
+      LOG.info("Just started task " + task.getID());
       
     }
   }

@@ -630,6 +630,7 @@ public class JobImpl implements org.apache.hadoop.mapreduce.v2.app.job.Job,
   private float reduceProgress;
   private float cleanupProgress;
   private boolean isUber = false;
+  private List<NodeId> nodeIds;
 
   private Credentials jobCredentials;
   private Token<JobTokenIdentifier> jobToken;
@@ -651,7 +652,7 @@ public class JobImpl implements org.apache.hadoop.mapreduce.v2.app.job.Job,
       Map<TaskId, TaskInfo> completedTasksFromPreviousRun, MRAppMetrics metrics,
       OutputCommitter committer, boolean newApiCommitter, String userName,
       long appSubmitTime, List<AMInfo> amInfos, AppContext appContext,
-      JobStateInternal forcedState, String forcedDiagnostic) {
+      JobStateInternal forcedState, String forcedDiagnostic, List<NodeId> nodeIds) {
     this.applicationAttemptId = applicationAttemptId;
     this.jobId = jobId;
     this.jobName = conf.get(JobContext.JOB_NAME, "<missing job name>");
@@ -667,6 +668,7 @@ public class JobImpl implements org.apache.hadoop.mapreduce.v2.app.job.Job,
     this.oldJobId = TypeConverter.fromYarn(jobId);
     this.committer = committer;
     this.newApiCommitter = newApiCommitter;
+    this.nodeIds = nodeIds;
 
     this.taskAttemptListener = taskAttemptListener;
     this.eventHandler = eventHandler;
@@ -1432,6 +1434,9 @@ public class JobImpl implements org.apache.hadoop.mapreduce.v2.app.job.Job,
         job.allowedReduceFailuresPercent =
             job.conf.getInt(MRJobConfig.REDUCE_FAILURES_MAXPERCENT, 0);
 
+        // setup the RAMManagers first
+        // startup a RAMManager on every node
+        createRAMManagers(job);
         // create the Tasks but don't start them yet
         createMapTasks(job, inputLength, taskSplitMetaInfo);
         createReduceTasks(job);
@@ -1487,6 +1492,28 @@ public class JobImpl implements org.apache.hadoop.mapreduce.v2.app.job.Job,
         TokenCache.setShuffleSecretKey(job.jobToken.getPassword(),
             job.jobCredentials);
       }
+    }
+
+    // -jbuck
+    private void createRAMManagers(JobImpl job) { 
+      // copy createMapTasks and create RAMManagerTasks
+      for (int i=0; i < this.nodeIds.size(); i++) { 
+        TaskImpl task = 
+          new RAMManagerImpl(job.jobId, i,
+            this.nodeIds[i],
+            job.eventHandler, 
+            job.remoteJobConfFile, 
+            job.conf, this.nodeIds.size(),
+            job.taskAttemptListener, 
+            job.jobToken,
+            job.jobCredentials,
+            job.clock,
+            job.applicationAttemptId.getAttemptId(),
+            job.metrics, job.appContext);
+          job.addTask(task);
+        LOG.info("Starting RAMManager on node " + this.nodeIds[i]);
+      }
+      LOG.info("Started a total of " + this.nodeIds.size() + " RAMManagers");
     }
 
     private void createMapTasks(JobImpl job, long inputLength,

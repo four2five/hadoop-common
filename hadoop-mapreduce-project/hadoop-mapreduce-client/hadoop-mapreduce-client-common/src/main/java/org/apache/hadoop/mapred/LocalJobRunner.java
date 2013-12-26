@@ -232,7 +232,7 @@ public class LocalJobRunner implements ClientProtocol {
           try {
             map_tasks.getAndIncrement();
             myMetrics.launchMap(mapId);
-            map.run(localConf, Job.this);
+            map.run(localConf, Job.this, null);
             myMetrics.completeMap(mapId);
           } finally {
             map_tasks.getAndDecrement();
@@ -442,7 +442,7 @@ public class LocalJobRunner implements ClientProtocol {
               reduce.setConf(localConf);
               reduce_tasks += 1;
               myMetrics.launchReduce(reduce.getTaskID());
-              reduce.run(localConf, this);
+              reduce.run(localConf, this, null);
               myMetrics.completeReduce(reduce.getTaskID());
               reduce_tasks -= 1;
             } else {

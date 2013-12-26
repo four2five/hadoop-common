@@ -59,6 +59,7 @@ import org.apache.hadoop.mapreduce.TaskCounter;
 import org.apache.hadoop.mapreduce.JobStatus;
 import org.apache.hadoop.mapreduce.MRConfig;
 import org.apache.hadoop.mapreduce.MRJobConfig;
+import org.apache.hadoop.mapred.buffer.BufferUmbilicalProtocol;
 import org.apache.hadoop.mapreduce.lib.reduce.WrappedReducer;
 import org.apache.hadoop.mapreduce.task.ReduceContextImpl;
 import org.apache.hadoop.yarn.util.ResourceCalculatorProcessTree;
@@ -184,6 +185,7 @@ abstract public class Task implements Writable, Configurable {
   protected final Counters.Counter mergedMapOutputsCounter;
   private int numSlotsRequired;
   protected TaskUmbilicalProtocol umbilical;
+  protected BufferUmbilicalProtocol bufUmbilical;
   protected SecretKey tokenSecret;
   protected SecretKey shuffleSecret;
   protected GcTimeUpdater gcUpdater;
@@ -441,8 +443,9 @@ abstract public class Task implements Writable, Configurable {
     jobRunStateForCleanup = status;
   }
   
-  boolean isMapOrReduce() {
+  boolean isMapReduceOrRAMManager() {
     return !jobSetup && !jobCleanup && !taskCleanup;
+    //return isMapTask() || isReduceTask();
   }
 
   /**
@@ -526,7 +529,7 @@ abstract public class Task implements Writable, Configurable {
    * child process and is what invokes user-supplied map, reduce, etc. methods.
    * @param umbilical for progress reports
    */
-  public abstract void run(JobConf job, TaskUmbilicalProtocol umbilical)
+  public abstract void run(JobConf job, TaskUmbilicalProtocol umbilical, BufferUmbilicalProtocol bufUmbilical)
     throws IOException, ClassNotFoundException, InterruptedException;
 
   /** The number of milliseconds between progress reports. */
@@ -542,6 +545,10 @@ abstract public class Task implements Writable, Configurable {
   
   public abstract boolean isMapTask();
 
+  public abstract boolean isReduceTask();
+
+  public abstract boolean isRAMManagerTask();
+
   public Progress getProgress() { return taskProgress; }
 
   public void initialize(JobConf job, JobID id, 
@@ -554,6 +561,7 @@ abstract public class Task implements Writable, Configurable {
     if (getState() == TaskStatus.State.UNASSIGNED) {
       setState(TaskStatus.State.RUNNING);
     }
+
     if (useNewApi) {
       if (LOG.isDebugEnabled()) {
         LOG.debug("using new api for output committer");
@@ -564,6 +572,7 @@ abstract public class Task implements Writable, Configurable {
     } else {
       committer = conf.getOutputCommitter();
     }
+
     Path outputPath = FileOutputFormat.getOutputPath(conf);
     if (outputPath != null) {
       if ((committer instanceof FileOutputCommitter)) {
@@ -1039,7 +1048,7 @@ abstract public class Task implements Writable, Configurable {
    */
   boolean isCommitRequired() throws IOException {
     boolean commitRequired = false;
-    if (isMapOrReduce()) {
+    if (isMapReduceOrRAMManager()) {
       commitRequired = committer.needsTaskCommit(taskContext);
     }
     return commitRequired;
@@ -1092,7 +1101,7 @@ abstract public class Task implements Writable, Configurable {
    * @return -1 if it can't be found.
    */
    private long calculateOutputSize() throws IOException {
-    if (!isMapOrReduce()) {
+    if (!isMapReduceOrRAMManager()) {
       return -1;
     }
 

@@ -875,6 +875,7 @@ public class RPC {
      }
      for (Map.Entry<ProtoNameVer, ProtoClassProtoImpl> pv : 
            getProtocolImplMap(rpcKind).entrySet()) {
+       LOG.info("in rpc entrySet: " + pv.getKey().protocol + " ver: " + pv.getKey().version);
        if (pv.getKey().protocol.equals(protocolName)) {
          if ((highest == null) || (pv.getKey().version > highestVersion)) {
            highest = pv.getValue();

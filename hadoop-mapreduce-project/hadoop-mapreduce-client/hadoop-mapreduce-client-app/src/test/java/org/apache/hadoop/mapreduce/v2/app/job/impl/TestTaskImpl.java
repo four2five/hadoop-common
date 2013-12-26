@@ -34,6 +34,7 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.Task;
 import org.apache.hadoop.mapred.TaskUmbilicalProtocol;
+import org.apache.hadoop.mapred.buffer.BufferUmbilicalProtocol;
 import org.apache.hadoop.mapreduce.Counter;
 import org.apache.hadoop.mapreduce.Counters;
 import org.apache.hadoop.mapreduce.TaskCounter;
@@ -196,7 +197,7 @@ public class TestTaskImpl {
     }
     
     @Override
-    public void run(JobConf job, TaskUmbilicalProtocol umbilical)
+    public void run(JobConf job, TaskUmbilicalProtocol umbilical, BufferUmbilicalProtocol bufUmbilical)
         throws IOException, ClassNotFoundException, InterruptedException {
       return;
     }

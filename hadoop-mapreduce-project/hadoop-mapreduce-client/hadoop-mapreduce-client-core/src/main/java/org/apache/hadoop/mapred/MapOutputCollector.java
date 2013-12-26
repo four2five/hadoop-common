@@ -24,6 +24,7 @@ import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
 
 import org.apache.hadoop.mapred.Task.TaskReporter;
+import org.apache.hadoop.mapred.buffer.BufferUmbilicalProtocol;
 
 @InterfaceAudience.LimitedPrivate({"MapReduce"})
 @InterfaceStability.Unstable
@@ -43,11 +44,13 @@ public interface MapOutputCollector<K, V> {
     private final MapTask mapTask;
     private final JobConf jobConf;
     private final TaskReporter reporter;
+    private BufferUmbilicalProtocol bufUmbilical = null; 
 
-    public Context(MapTask mapTask, JobConf jobConf, TaskReporter reporter) {
+    public Context(MapTask mapTask, JobConf jobConf, TaskReporter reporter, BufferUmbilicalProtocol bufUmbilcal) {
       this.mapTask = mapTask;
       this.jobConf = jobConf;
       this.reporter = reporter;
+      this.bufUmbilical = bufUmbilical;
     }
 
     public MapTask getMapTask() {
@@ -60,6 +63,10 @@ public interface MapOutputCollector<K, V> {
 
     public TaskReporter getReporter() {
       return reporter;
+    }
+
+    public BufferUmbilicalProtocol getBufferUmbilicalProtocol() { 
+      return bufUmbilical;
     }
   }
 }

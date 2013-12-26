@@ -201,6 +201,8 @@ public interface MRJobConfig {
 
   public static final String MAP_MAX_ATTEMPTS = "mapreduce.map.maxattempts";
 
+  public static final String RAMMANAGER_MAX_ATTEMPTS = "mapreduce.rammanager.maxattempts";
+
   public static final String MAP_DEBUG_SCRIPT = "mapreduce.map.debug.script";
 
   public static final String MAP_SPECULATIVE = "mapreduce.map.speculative";

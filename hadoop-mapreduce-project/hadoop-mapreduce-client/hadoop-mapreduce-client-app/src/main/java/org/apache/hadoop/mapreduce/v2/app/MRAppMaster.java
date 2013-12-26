@@ -23,6 +23,7 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.security.PrivilegedExceptionAction;
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedList;
@@ -121,16 +122,25 @@ import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.hadoop.util.ShutdownHookManager;
 import org.apache.hadoop.util.StringInterner;
 import org.apache.hadoop.yarn.YarnUncaughtExceptionHandler;
+import org.apache.hadoop.yarn.api.ApplicationClientProtocol;
 import org.apache.hadoop.yarn.api.ApplicationConstants;
 import org.apache.hadoop.yarn.api.ApplicationConstants.Environment;
 import org.apache.hadoop.yarn.api.records.ApplicationAttemptId;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.hadoop.yarn.api.records.ContainerId;
+import org.apache.hadoop.yarn.api.records.NodeId;
+import org.apache.hadoop.yarn.api.records.NodeReport;
+import org.apache.hadoop.yarn.api.records.NodeState;
+import org.apache.hadoop.yarn.api.protocolrecords.GetClusterNodesRequest;
+import org.apache.hadoop.yarn.api.protocolrecords.GetClusterNodesResponse;
+//import org.apache.hadoop.yarn.client.api.YarnClient;
+import org.apache.hadoop.yarn.client.ClientRMProxy;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.event.AsyncDispatcher;
 import org.apache.hadoop.yarn.event.Dispatcher;
 import org.apache.hadoop.yarn.event.Event;
 import org.apache.hadoop.yarn.event.EventHandler;
+import org.apache.hadoop.yarn.exceptions.YarnException;
 import org.apache.hadoop.yarn.exceptions.YarnRuntimeException;
 import org.apache.hadoop.yarn.security.AMRMTokenIdentifier;
 import org.apache.hadoop.yarn.security.client.ClientToAMTokenSecretManager;
@@ -615,6 +625,32 @@ public class MRAppMaster extends CompositeService {
   protected Job createJob(Configuration conf, JobStateInternal forcedState, 
       String diagnostic) {
 
+    // Let's see if we can get the list of nodes currently in the system --jbuck
+    //YarnClient yarnClient = createYarnClient(conf);
+    List<NodeReport> liveNodes = null;
+    List<NodeId> nodeIDs = null;
+    ApplicationClientProtocol rmClient;
+    try {
+      rmClient = ClientRMProxy.createRMProxy(conf, ApplicationClientProtocol.class);
+      EnumSet<NodeState> statesSet = EnumSet.allOf(NodeState.class);
+      GetClusterNodesRequest request = GetClusterNodesRequest
+          .newInstance(statesSet);
+      GetClusterNodesResponse response = rmClient.getClusterNodes(request);
+      liveNodes = response.getNodeReports();
+      nodeIDs = new ArrayList<NodeId>();
+      for (NodeReport tmpNode: liveNodes) { 
+        nodeIDs.add(tmpNode.getNodeId());
+      }
+    } catch (IOException e) {
+      throw new YarnRuntimeException(e);
+    } catch (YarnException ye) {
+      throw new YarnRuntimeException(ye);
+    }
+
+    LOG.info("Current nodes are: "); // -jbuck
+    for (NodeId tempNode : nodeIDs) { 
+      LOG.info("  " + tempNode.toString());
+    }
     // create single job
     Job newJob =
         new JobImpl(jobId, appAttemptID, conf, dispatcher.getEventHandler(),
@@ -622,13 +658,22 @@ public class MRAppMaster extends CompositeService {
             completedTasksFromPreviousRun, metrics,
             committer, newApiCommitter,
             currentUser.getUserName(), appSubmitTime, amInfos, context, 
-            forcedState, diagnostic);
+            forcedState, diagnostic, nodeIDs);
     ((RunningAppContext) context).getJobs().put(newJob.getID(), newJob);
 
     dispatcher.register(JobFinishEvent.Type.class,
         createJobFinishEventHandler());     
     return newJob;
   } // end createJob()
+
+  /*
+  protected YarnClient createYarnClient(Configuration conf) {
+    YarnClient yarnClient = YarnClient.createYarnClient();
+    yarnClient.init(conf);
+    yarnClient.start();
+    return yarnClient;
+  }
+  */
 
 
   /**

@@ -224,7 +224,7 @@ public class TestTaskCommit extends HadoopTestCase {
     // the cleanup task.
     task.setTaskCleanupTask();
     MyUmbilical umbilical = new MyUmbilical();
-    task.run(job, umbilical);
+    task.run(job, umbilical, null);
     assertTrue("Task did not succeed", umbilical.taskDone);
   }
 

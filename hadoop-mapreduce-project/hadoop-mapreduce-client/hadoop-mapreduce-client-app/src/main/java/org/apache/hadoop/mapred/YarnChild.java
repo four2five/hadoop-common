@@ -38,6 +38,7 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.ipc.RPC;
+//import org.apache.hadoop.mapred.buffer.BufferUmbilicalProtocol;
 import org.apache.hadoop.mapreduce.MRConfig;
 import org.apache.hadoop.mapreduce.MRJobConfig;
 import org.apache.hadoop.mapreduce.TaskType;
@@ -59,6 +60,7 @@ import org.apache.hadoop.yarn.YarnUncaughtExceptionHandler;
 import org.apache.hadoop.yarn.api.ApplicationConstants;
 import org.apache.hadoop.yarn.api.ApplicationConstants.Environment;
 import org.apache.hadoop.yarn.api.records.ApplicationAttemptId;
+import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.util.ConverterUtils;
 import org.apache.log4j.LogManager;
 
@@ -142,6 +144,25 @@ class YarnChild {
       // Create the job-conf and set credentials
       final JobConf job = configureTask(task, credentials, jt);
 
+      /*
+      BufferUmbilicalProtocol tempBuf = null;
+      if (job.getBoolean(YarnConfiguration.NM_START_RAM_MANAGER,YarnConfiguration.DEFAULT_NM_START_RAM_MANAGER)) {
+        LOG.info("This job is using inmemory streaming");
+        LOG.info("Opening a buffer protocol impl to " + address);
+        // -jbuck
+        tempBuf = taskOwner.doAs(new PrivilegedExceptionAction<BufferUmbilicalProtocol>() {
+          @Override
+          public BufferUmbilicalProtocol run() throws Exception {
+            return (BufferUmbilicalProtocol)RPC.getProxy(BufferUmbilicalProtocol.class,
+                BufferUmbilicalProtocol.versionID, address, defaultConf);
+          }
+        });
+      }
+
+      final BufferUmbilicalProtocol bufUmbilical = tempBuf;
+      */
+
+
       // Initiate Java VM metrics
       JvmMetrics.initSingleton(jvmId.toString(), job.getSessionId());
       childUGI = UserGroupInformation.createRemoteUser(System
@@ -159,7 +180,8 @@ class YarnChild {
         public Object run() throws Exception {
           // use job-specified working directory
           FileSystem.get(job).setWorkingDirectory(job.getWorkingDirectory());
-          taskFinal.run(job, umbilical); // run the task
+          //taskFinal.run(job, umbilical, bufUmbilical); // run the task
+          taskFinal.run(job, umbilical, null); // run the task
           return null;
         }
       });
