@@ -212,7 +212,7 @@ public class LocalContainerLauncher extends AbstractService implements
           }
 
           try {
-            if (remoteTask.isMapOrReduce()) {
+            if (remoteTask.isMapReduceOrRAMManager()) {
               JobCounterUpdateEvent jce = new JobCounterUpdateEvent(attemptID.getTaskId().getJobId());
               jce.addCounterUpdate(JobCounter.TOTAL_LAUNCHED_UBERTASKS, 1);
               if (remoteTask.isMapTask()) {

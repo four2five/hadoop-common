@@ -691,6 +691,10 @@ public class JobImpl implements org.apache.hadoop.mapreduce.v2.app.job.Job,
     }
   }
 
+  public List<NodeId> getNodeIds() { 
+    return nodeIds;
+  }
+
   protected StateMachine<JobStateInternal, JobEventType, JobEvent> getStateMachine() {
     return stateMachine;
   }
@@ -1435,6 +1439,14 @@ public class JobImpl implements org.apache.hadoop.mapreduce.v2.app.job.Job,
             job.conf.getInt(MRJobConfig.REDUCE_FAILURES_MAXPERCENT, 0);
 
         // setup the RAMManagers first
+        // get a list of all the current nodes -jbuck
+        List<NodeId> nodeIds = job.getNodeIds();
+
+        LOG.info("In transition arc, node ids are: ");
+        for (NodeId node : nodeIds) { 
+          LOG.info("  " + node.getHost());
+        }
+
         // startup a RAMManager on every node
         createRAMManagers(job);
         // create the Tasks but don't start them yet
@@ -1496,14 +1508,15 @@ public class JobImpl implements org.apache.hadoop.mapreduce.v2.app.job.Job,
 
     // -jbuck
     private void createRAMManagers(JobImpl job) { 
+      List<NodeId> nodeIds = job.getNodeIds();
       // copy createMapTasks and create RAMManagerTasks
-      for (int i=0; i < this.nodeIds.size(); i++) { 
+      for (int i=0; i < nodeIds.size(); i++) { 
         TaskImpl task = 
-          new RAMManagerImpl(job.jobId, i,
-            this.nodeIds[i],
+          new RAMManagerTaskImpl(job.jobId, i,
+            nodeIds.get(i),
             job.eventHandler, 
             job.remoteJobConfFile, 
-            job.conf, this.nodeIds.size(),
+            job.conf, nodeIds.size(),
             job.taskAttemptListener, 
             job.jobToken,
             job.jobCredentials,
@@ -1511,9 +1524,9 @@ public class JobImpl implements org.apache.hadoop.mapreduce.v2.app.job.Job,
             job.applicationAttemptId.getAttemptId(),
             job.metrics, job.appContext);
           job.addTask(task);
-        LOG.info("Starting RAMManager on node " + this.nodeIds[i]);
+        LOG.info("Starting RAMManager on node " + nodeIds.toArray()[i]);
       }
-      LOG.info("Started a total of " + this.nodeIds.size() + " RAMManagers");
+      LOG.info("Started a total of " + nodeIds.size() + " RAMManagers");
     }
 
     private void createMapTasks(JobImpl job, long inputLength,

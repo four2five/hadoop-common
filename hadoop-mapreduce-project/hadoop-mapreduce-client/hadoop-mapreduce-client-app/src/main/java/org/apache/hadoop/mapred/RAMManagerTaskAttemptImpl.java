@@ -18,6 +18,8 @@
 
 package org.apache.hadoop.mapred;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.mapreduce.MRJobConfig;
 import org.apache.hadoop.mapreduce.TypeConverter;
@@ -38,6 +40,8 @@ public class RAMManagerTaskAttemptImpl extends TaskAttemptImpl {
 
   private final NodeId nodeId;
 
+  private static final Log LOG = LogFactory.getLog(RAMManagerTaskAttemptImpl.class);
+
   public RAMManagerTaskAttemptImpl(TaskId taskId, int attempt, 
       EventHandler eventHandler, Path jobFile, 
       int partition, NodeId nodeId, JobConf conf,
@@ -46,13 +50,15 @@ public class RAMManagerTaskAttemptImpl extends TaskAttemptImpl {
       Credentials credentials, Clock clock,
       AppContext appContext) {
     super(taskId, attempt, eventHandler, 
-        taskAttemptListener, jobFile, partition, conf, nodeId,
+        taskAttemptListener, jobFile, partition, conf, new String[] {nodeId.getHost()},
         jobToken, credentials, clock, appContext);
     this.nodeId = nodeId;
+    LOG.warn("in RAMManagerTaskAttemptImpl()");
   }
 
   @Override
   public Task createRemoteTask() {
+    LOG.warn("in createRemoteTask()");
     //job file name is set in TaskAttempt, setting it null here
     RAMManagerTask ramManagerTask =
       new RAMManagerTask("", TypeConverter.fromYarn(getID()), partition,

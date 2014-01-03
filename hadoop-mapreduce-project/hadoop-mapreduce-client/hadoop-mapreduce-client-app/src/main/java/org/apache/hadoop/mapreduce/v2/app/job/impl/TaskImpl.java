@@ -302,6 +302,7 @@ public abstract class TaskImpl implements Task, EventHandler<TaskEvent> {
     //  have a convention that none of the overrides depends on any
     //  fields that need initialization.
     maxAttempts = getMaxAttempts();
+    LOG.info("JB, creating task ID for jobId: " + jobId + " partition: " + partition + " taskType: " + taskType);
     taskId = MRBuilderUtils.newTaskId(jobId, partition, taskType);
     this.partition = partition;
     this.taskAttemptListener = taskAttemptListener;

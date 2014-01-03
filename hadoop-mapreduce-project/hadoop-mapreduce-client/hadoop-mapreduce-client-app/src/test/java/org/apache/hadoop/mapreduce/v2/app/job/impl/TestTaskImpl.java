@@ -207,6 +207,16 @@ public class TestTaskImpl {
       return (taskType == TaskType.MAP);
     }    
     
+    @Override
+    public boolean isReduceTask() {
+      return (taskType == TaskType.REDUCE);
+    }    
+    
+    @Override
+    public boolean isRAMManagerTask () {
+      return (taskType == TaskType.RAMMANAGER);
+    }    
+    
   }
   
   @Before 

@@ -27,6 +27,7 @@ import "yarn_protos.proto";
 enum TaskTypeProto {
   MAP = 1;
   REDUCE = 2;
+  RAMMANAGER = 3;
 }
 
 message JobIdProto {

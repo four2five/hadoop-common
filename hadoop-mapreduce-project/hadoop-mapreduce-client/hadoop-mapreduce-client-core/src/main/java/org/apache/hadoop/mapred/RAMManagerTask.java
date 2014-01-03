@@ -102,12 +102,14 @@ public class RAMManagerTask extends Task {
 
   public RAMManagerTask() {
     super();
+    LOG.warn("in empty RAMManagerTask()");
   }
 
   public RAMManagerTask(String jobFile, TaskAttemptID taskId, 
                  int partition, NodeId nodeId,
                  int numSlotsRequired) {
     super(jobFile, taskId, partition, numSlotsRequired);
+    LOG.warn("In RAMManagerTask()");
     this.nodeId = nodeId;
   }
 
@@ -136,8 +138,11 @@ public class RAMManagerTask extends Task {
   public void write(DataOutput out) throws IOException {
     super.write(out);
     if (isMapReduceOrRAMManager()) {
+      LOG.warn("in write()");
       Text.writeString(out, nodeId.getHost());
       out.writeInt(nodeId.getPort());
+    } else { 
+      LOG.warn("not a Map, Reduce nor RAMManager task (write)");
     }
   }
   
@@ -145,20 +150,26 @@ public class RAMManagerTask extends Task {
   public void readFields(DataInput in) throws IOException {
     super.readFields(in);
     if (isMapReduceOrRAMManager()) {
+      LOG.warn("In readFields()");
       String hostName = Text.readString(in);
       int portNum = in.readInt();
       nodeId = NodeId.newInstance(hostName, portNum);
+    } else { 
+      LOG.warn("not a Map, Reduce nor RAMManager task (readfields)");
     }
   }
 
   @Override
   public void run(final JobConf job, final TaskUmbilicalProtocol umbilical, final BufferUmbilicalProtocol bufUmbilical)
     throws IOException, ClassNotFoundException, InterruptedException {
+    LOG.warn("in run()");
     this.umbilical = umbilical;
     this.bufUmbilical = bufUmbilical;
 
     if (null != this.bufUmbilical) { 
       this.bufUmbilical.printLogMessage("Logging from task" + getTaskID());
+    } else { 
+      LOG.warn("In RAMManagerTask, bufUmbilical was null");
     }
 
     /*
@@ -175,35 +186,54 @@ public class RAMManagerTask extends Task {
       }
     }
     */
+    /*
+    LOG.warn("about to start reporter");
     TaskReporter reporter = startReporter(umbilical);
  
+    LOG.warn("about to initialize");
     //boolean useNewApi = job.getUseNewMapper();
     initialize(job, getJobID(), reporter, true); // i guess we'll useNewAPI to true ? 
 
+    LOG.warn("is a cleanup task?");
     // check if it is a cleanupJobTask
     if (jobCleanup) {
+      LOG.warn("  YES");
       runJobCleanupTask(umbilical, reporter);
       return;
+    }  else { 
+      LOG.warn("  NO");
     }
+    LOG.warn("is a jobSetup task?");
     if (jobSetup) {
+      LOG.warn("  YES");
       runJobSetupTask(umbilical, reporter);
       return;
+    } else { 
+      LOG.warn("  NO");
     }
+    LOG.info("is a taskCleanup?");
     if (taskCleanup) {
+      LOG.info("  YES");
       runTaskCleanupTask(umbilical, reporter);
       return;
+    } else { 
+      LOG.info("  NO");
     }
 
-    /*
+    
     if (useNewApi) {
       runNewMapper(job, splitMetaInfo, umbilical, bufUmbilical, reporter);
     } else {
       runOldMapper(job, splitMetaInfo, umbilical, reporter);
     }
-    */
+    
+    LOG.warn("calling runRAMManager");
     runRAMManager(job, nodeId, umbilical, bufUmbilical, reporter);
 
+    LOG.warn("calling done()");
     done(umbilical, reporter);
+    */
+    LOG.warn("at the end of run");
   }
 
   /*
@@ -236,9 +266,9 @@ public class RAMManagerTask extends Task {
     
     boolean stream = job.getBoolean("mapred.stream", false);
     if (stream) { 
-      LOG.info("This should be a streaming job");
+      LOG.warn("This should be a streaming job");
     } else { 
-      LOG.info("This is NOT a streaming job");
+      LOG.warn("This is NOT a streaming job");
     }
  
     // do we need to create a RAMManager context class? -jbuck
