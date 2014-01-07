@@ -170,6 +170,7 @@ public class JobImpl implements org.apache.hadoop.mapreduce.v2.app.job.Job,
   private final org.apache.hadoop.mapreduce.JobID oldJobId;
   private final TaskAttemptListener taskAttemptListener;
   private final Object tasksSyncHandle = new Object();
+  private final Set<TaskId> RAMManagerTasks = new LinkedHashSet<TaskId>();
   private final Set<TaskId> mapTasks = new LinkedHashSet<TaskId>();
   private final Set<TaskId> reduceTasks = new LinkedHashSet<TaskId>();
   /**
@@ -921,11 +922,13 @@ public class JobImpl implements org.apache.hadoop.mapreduce.v2.app.job.Job,
     try {
       if (TaskType.MAP == taskType) {
         tasksOfGivenType = mapTasks;
-      } else {
+      } else if (TaskType.REDUCE == taskType) {
         tasksOfGivenType = reduceTasks;
+      } else if (TaskType.RAMMANAGER == taskType) {
+        tasksOfGivenType = RAMManagerTasks;
       }
       for (TaskId taskID : tasksOfGivenType)
-      result.put(taskID, localTasksCopy.get(taskID));
+        result.put(taskID, localTasksCopy.get(taskID));
       return result;
     } finally {
       readLock.unlock();
@@ -1058,6 +1061,10 @@ public class JobImpl implements org.apache.hadoop.mapreduce.v2.app.job.Job,
       mapTasks.add(task.getID());
     } else if (task.getType() == TaskType.REDUCE) {
       reduceTasks.add(task.getID());
+    } else if (task.getType() == TaskType.RAMMANAGER) { 
+      RAMManagerTasks.add(task.getID());
+    } else {
+      LOG.error("Task of unknown type detected, task type: " + task.getType().toString());
     }
     metrics.waitingTask(task);
   }
@@ -1448,7 +1455,7 @@ public class JobImpl implements org.apache.hadoop.mapreduce.v2.app.job.Job,
         }
 
         // startup a RAMManager on every node
-        createRAMManagers(job);
+        //createRAMManagers(job);
         // create the Tasks but don't start them yet
         createMapTasks(job, inputLength, taskSplitMetaInfo);
         createReduceTasks(job);
@@ -1524,7 +1531,7 @@ public class JobImpl implements org.apache.hadoop.mapreduce.v2.app.job.Job,
             job.applicationAttemptId.getAttemptId(),
             job.metrics, job.appContext);
           job.addTask(task);
-        LOG.info("Starting RAMManager on node " + nodeIds.toArray()[i]);
+        LOG.info("Adding RAMManager on node " + nodeIds.toArray()[i]);
       }
       LOG.info("Started a total of " + nodeIds.size() + " RAMManagers");
     }
@@ -1592,6 +1599,7 @@ public class JobImpl implements org.apache.hadoop.mapreduce.v2.app.job.Job,
     @Override
     public void transition(JobImpl job, JobEvent event) {
       job.setupProgress = 1.0f;
+      job.scheduleTasks(job.RAMManagerTasks, false);
       job.scheduleTasks(job.mapTasks, job.numReduceTasks == 0);
       job.scheduleTasks(job.reduceTasks, true);
 

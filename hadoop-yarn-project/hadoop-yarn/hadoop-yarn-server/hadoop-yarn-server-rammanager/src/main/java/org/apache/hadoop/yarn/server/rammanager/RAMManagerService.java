@@ -16,7 +16,7 @@
 * limitations under the License.
 */
 
-package org.apache.hadoop.yarn.server.nodemanager;
+package org.apache.hadoop.yarn.server.rammanager;
 
 import static java.util.concurrent.TimeUnit.SECONDS;
 
@@ -47,12 +47,13 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
 public class RAMManagerService extends AbstractService {
   static final Log LOG = LogFactory.getLog(RAMManagerService.class);
   private int debugDelay;
-  private final ContainerExecutor exec;
+  //private final ContainerExecutor exec;
   //private ScheduledThreadPoolExecutor sched;
 
-  public RAMManagerService(ContainerExecutor exec) {
+  //public RAMManagerService(ContainerExecutor exec) {
+  public RAMManagerService() {
     super(RAMManagerService.class.getName());
-    this.exec = exec;
+    //this.exec = exec;
     this.debugDelay = 0;
   }
   
@@ -75,7 +76,7 @@ public class RAMManagerService extends AbstractService {
       //sched = new ScheduledThreadPoolExecutor(
       //    conf.getInt(YarnConfiguration.NM_DELETE_THREAD_COUNT, YarnConfiguration.DEFAULT_NM_DELETE_THREAD_COUNT),
        //   tf);
-      debugDelay = conf.getInt(YarnConfiguration.DEBUG_NM_DELETE_DELAY_SEC, 0);
+      //debugDelay = conf.getInt(YarnConfiguration.DEBUG_RAMM_DELETE_DELAY_SEC, 0);
     } else {
       //sched = new ScheduledThreadPoolExecutor(YarnConfiguration.DEFAULT_NM_DELETE_THREAD_COUNT,
       //    tf);

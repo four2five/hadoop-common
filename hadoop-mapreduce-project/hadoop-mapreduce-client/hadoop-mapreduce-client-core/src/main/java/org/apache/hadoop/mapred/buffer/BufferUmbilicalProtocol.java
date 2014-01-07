@@ -38,7 +38,7 @@ public interface BufferUmbilicalProtocol extends VersionedProtocol {
 	 * @throws IOException
 	 */
 	//void request(BufferRequest request) throws IOException;
-	void request(byte[] request) throws IOException;
+	//void request(byte[] request) throws IOException;
 
 	/**
 	 * Statistic on how well pipelining is keeping up with the production
@@ -47,7 +47,7 @@ public interface BufferUmbilicalProtocol extends VersionedProtocol {
 	 * @return Stall fraction
 	 * @throws IOException
 	 */
-	float stallFraction(TaskAttemptID owner) throws IOException;
+	//float stallFraction(TaskAttemptID owner) throws IOException;
 
 	/**
 	 * Register a new output file (e.g., snapshot, spill file, or final output)
@@ -56,7 +56,7 @@ public interface BufferUmbilicalProtocol extends VersionedProtocol {
 	 * @throws IOException
 	 */
 	//void output(OutputFile buffer) throws IOException;
-	void output(byte[] buffer) throws IOException; // fix this later
+	//void output(byte[] buffer) throws IOException; // fix this later
 
   /**
    * Dummy function to inject data into the Manager's output

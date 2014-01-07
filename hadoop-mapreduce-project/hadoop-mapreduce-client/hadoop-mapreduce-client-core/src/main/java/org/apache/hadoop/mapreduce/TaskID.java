@@ -274,6 +274,7 @@ public class TaskID extends org.apache.hadoop.mapred.ID {
       typeToCharMap.put(TaskType.JOB_SETUP, 's');
       typeToCharMap.put(TaskType.JOB_CLEANUP, 'c');
       typeToCharMap.put(TaskType.TASK_CLEANUP, 't');
+      typeToCharMap.put(TaskType.RAMMANAGER, 'a');
     }
 
     private static void setupCharToTaskTypeMapping() {
@@ -282,6 +283,7 @@ public class TaskID extends org.apache.hadoop.mapred.ID {
       charToTypeMap.put('s', TaskType.JOB_SETUP);
       charToTypeMap.put('c', TaskType.JOB_CLEANUP);
       charToTypeMap.put('t', TaskType.TASK_CLEANUP);
+      charToTypeMap.put('a', TaskType.RAMMANAGER);
     }
 
     static char getRepresentingCharacter(TaskType type) {

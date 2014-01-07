@@ -97,6 +97,8 @@ public class TypeConverter {
       return org.apache.hadoop.mapreduce.TaskType.MAP;
     case REDUCE:
       return org.apache.hadoop.mapreduce.TaskType.REDUCE;
+    case RAMMANAGER:
+      return org.apache.hadoop.mapreduce.TaskType.RAMMANAGER;
     default:
       throw new YarnRuntimeException("Unrecognized task type: " + taskType);
     }
@@ -109,6 +111,8 @@ public class TypeConverter {
       return TaskType.MAP;
     case REDUCE:
       return TaskType.REDUCE;
+    case RAMMANAGER:
+      return TaskType.RAMMANAGER;
     default:
       throw new YarnRuntimeException("Unrecognized task type: " + taskType);
     }

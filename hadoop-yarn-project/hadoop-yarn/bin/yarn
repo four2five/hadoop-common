@@ -58,6 +58,7 @@ function print_usage(){
   echo "where COMMAND is one of:"
   echo "  resourcemanager      run the ResourceManager" 
   echo "  nodemanager          run a nodemanager on each slave" 
+  echo "  rammanager           run a rammanager on each slaves" 
   echo "  rmadmin              admin tools" 
   echo "  version              print the version"
   echo "  jar <jar>            run a jar file"
@@ -196,6 +197,13 @@ elif [ "$COMMAND" = "nodemanager" ] ; then
   YARN_OPTS="$YARN_OPTS -server $YARN_NODEMANAGER_OPTS"
   if [ "$YARN_NODEMANAGER_HEAPSIZE" != "" ]; then
     JAVA_HEAP_MAX="-Xmx""$YARN_NODEMANAGER_HEAPSIZE""m"
+  fi
+elif [ "$COMMAND" = "rammanager" ] ; then
+  CLASSPATH=${CLASSPATH}:$YARN_CONF_DIR/nm-config/log4j.properties
+  CLASS='org.apache.hadoop.yarn.server.rammanager.RAMManager'
+  YARN_OPTS="$YARN_OPTS -server $YARN_RAMMANAGER_OPTS"
+  if [ "$YARN_RAMMANAGER_HEAPSIZE" != "" ]; then
+    JAVA_HEAP_MAX="-Xmx""$YARN_RAMMANAGER_HEAPSIZE""m"
   fi
 elif [ "$COMMAND" = "proxyserver" ] ; then
   CLASS='org.apache.hadoop.yarn.server.webproxy.WebAppProxyServer'

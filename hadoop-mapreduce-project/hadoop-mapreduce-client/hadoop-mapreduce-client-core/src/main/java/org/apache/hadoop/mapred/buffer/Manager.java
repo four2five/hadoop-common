@@ -74,10 +74,21 @@ public class Manager implements BufferUmbilicalProtocol {
 
 	public Manager(Configuration conf) throws IOException {
     this.conf = conf;
-		this.hostname      = InetAddress.getLocalHost().getCanonicalHostName();
+		this.hostname = InetAddress.getLocalHost().getCanonicalHostName();
 	}
 
 	public static InetSocketAddress getControlAddress(Configuration conf) {
+		try {
+			int port = conf.getInt("mapred.buffer.manager.control.port", 9020);
+			String address = InetAddress.getLocalHost().getCanonicalHostName();
+			address += ":" + port;
+			return NetUtils.createSocketAddr(address);
+		} catch (Throwable t) {
+			return NetUtils.createSocketAddr("localhost:9020");
+		}
+	}
+
+	public static InetSocketAddress getServerAddress(Configuration conf) {
 		try {
 			int port = conf.getInt("mapred.buffer.manager.data.port", 9021);
 			String address = InetAddress.getLocalHost().getCanonicalHostName();
@@ -85,17 +96,6 @@ public class Manager implements BufferUmbilicalProtocol {
 			return NetUtils.createSocketAddr(address);
 		} catch (Throwable t) {
 			return NetUtils.createSocketAddr("localhost:9021");
-		}
-	}
-
-	public static InetSocketAddress getServerAddress(Configuration conf) {
-		try {
-			String address = InetAddress.getLocalHost().getCanonicalHostName();
-			int port = conf.getInt("mapred.buffer.manager.control.port", 9020);
-			address += ":" + port;
-			return NetUtils.createSocketAddr(address);
-		} catch (Throwable t) {
-			return NetUtils.createSocketAddr("localhost:9020");
 		}
 	}
 
@@ -189,28 +189,4 @@ public class Manager implements BufferUmbilicalProtocol {
 	@Override
 	public void request(byte[] request) throws IOException {
 	}
-	
-
-	/******************** PRIVATE METHODS ***********************/
-	
-  /*
-	// private void add(OutputFile file) throws IOException {
-	private void add(byte[] file) throws IOException {
-	}
-
-	//private void add(byte[] request) throws IOException {
-	}
-
-	//private void add(byte[] request) throws IOException {
-	//}
-
-	private void register(byte[] request) throws IOException {
-	}
-
-	private void register(byte[] request) throws IOException {
-	}
-
-	private void register(byte[] fm) throws IOException {
-	}
-  */
 }

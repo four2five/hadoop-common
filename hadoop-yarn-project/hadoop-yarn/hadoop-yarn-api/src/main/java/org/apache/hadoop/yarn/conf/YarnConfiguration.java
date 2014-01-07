@@ -186,6 +186,9 @@ public class YarnConfiguration extends Configuration {
   public static final String NM_START_RAM_MANAGER = "nm.start_ram_managers";
   public static final boolean DEFAULT_NM_START_RAM_MANAGER = false;
 
+  public static final String RAMMANAGER_PORT = "rammanager.port";
+  public static final int DEFAULT_RAMMANAGER_PORT = 4321;
+
   /** Are acls enabled.*/
   public static final String YARN_ACL_ENABLE = 
     YARN_PREFIX + "acl.enable";
