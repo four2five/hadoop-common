@@ -257,6 +257,7 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
   public static final String  DFS_METRICS_SESSION_ID_KEY = "dfs.metrics.session-id";
   public static final String  DFS_METRICS_PERCENTILES_INTERVALS_KEY = "dfs.metrics.percentiles.intervals";
   public static final String  DFS_DATANODE_HOST_NAME_KEY = "dfs.datanode.hostname";
+  public static final String  DFS_RAMMANAGERNODE_HOST_NAME_KEY = "dfs.rammanagernode.hostname";
   public static final String  DFS_NAMENODE_HOSTS_KEY = "dfs.namenode.hosts";
   public static final String  DFS_NAMENODE_HOSTS_EXCLUDE_KEY = "dfs.namenode.hosts.exclude";
   public static final String  DFS_CLIENT_SOCKET_TIMEOUT_KEY = "dfs.client.socket-timeout";
@@ -298,8 +299,12 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
   public static final int     DFS_DATANODE_DIRECTORYSCAN_THREADS_DEFAULT = 1;
   public static final String  DFS_DATANODE_DNS_INTERFACE_KEY = "dfs.datanode.dns.interface";
   public static final String  DFS_DATANODE_DNS_INTERFACE_DEFAULT = "default";
+  public static final String  DFS_RAMMANAGERNODE_DNS_INTERFACE_KEY = "dfs.rammanagernode.dns.interface";
+  public static final String  DFS_RAMMANAGERNODE_DNS_INTERFACE_DEFAULT = "default";
   public static final String  DFS_DATANODE_DNS_NAMESERVER_KEY = "dfs.datanode.dns.nameserver";
   public static final String  DFS_DATANODE_DNS_NAMESERVER_DEFAULT = "default";
+  public static final String  DFS_RAMMANAGERNODE_DNS_NAMESERVER_KEY = "dfs.rammanagernode.dns.nameserver";
+  public static final String  DFS_RAMMANAGERNODE_DNS_NAMESERVER_DEFAULT = "default";
   public static final String  DFS_DATANODE_DU_RESERVED_KEY = "dfs.datanode.du.reserved";
   public static final long    DFS_DATANODE_DU_RESERVED_DEFAULT = 0;
   public static final String  DFS_DATANODE_HANDLER_COUNT_KEY = "dfs.datanode.handler.count";
