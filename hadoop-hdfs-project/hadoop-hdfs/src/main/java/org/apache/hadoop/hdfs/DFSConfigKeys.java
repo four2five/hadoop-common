@@ -345,6 +345,12 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
   public static final String  DFS_DATANODE_IPC_ADDRESS_DEFAULT = "0.0.0.0:" + DFS_DATANODE_IPC_DEFAULT_PORT;
   public static final String  DFS_DATANODE_MIN_SUPPORTED_NAMENODE_VERSION_KEY = "dfs.datanode.min.supported.namenode.version";
   public static final String  DFS_DATANODE_MIN_SUPPORTED_NAMENODE_VERSION_DEFAULT = "2.1.0-beta";
+  public static final String  DFS_RAMMANAGERNODE_IPC_ADDRESS_KEY = "dfs.rammanagernode.ipc.address";
+  public static final String  DFS_RAMMANAGERNODE_HANDLER_COUNT_KEY = "dfs.rammanagernode.handler.count";
+  public static final int     DFS_RAMMANAGERNODE_HANDLER_COUNT_DEFAULT = 10;
+  public static final String  DFS_RAMMANAGERNODE_HTTP_ADDRESS_KEY = "dfs.rammanagernode.http.address";
+  public static final int     DFS_RAMMANAGERNODE_HTTP_DEFAULT_PORT = 50091;
+  public static final String  DFS_RAMMANAGERNODE_HTTP_ADDRESS_DEFAULT = "0.0.0.0:" + DFS_RAMMANAGERNODE_HTTP_DEFAULT_PORT;
 
   public static final String  DFS_BLOCK_ACCESS_TOKEN_ENABLE_KEY = "dfs.block.access.token.enable";
   public static final boolean DFS_BLOCK_ACCESS_TOKEN_ENABLE_DEFAULT = false;
@@ -418,6 +424,9 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
   public static final String  DFS_SECONDARY_NAMENODE_INTERNAL_SPNEGO_USER_NAME_KEY = "dfs.secondary.namenode.kerberos.internal.spnego.principal";
   public static final String  DFS_NAMENODE_NAME_CACHE_THRESHOLD_KEY = "dfs.namenode.name.cache.threshold";
   public static final int     DFS_NAMENODE_NAME_CACHE_THRESHOLD_DEFAULT = 10;
+  public static final String  DFS_RAMMANAGERNODE_KEYTAB_FILE_KEY = "dfs.rammanagernode.keytab.file";
+  public static final String  DFS_RAMMANAGERNODE_STARTUP_KEY = "dfs.rammanagernode.startup";
+  public static final String  DFS_RAMMANAGERNODE_USER_NAME_KEY = "dfs.rammanagernode.kerberos.principal";
   
   public static final String  DFS_NAMESERVICES = "dfs.nameservices";
   public static final String  DFS_NAMESERVICE_ID = "dfs.nameservice.id";

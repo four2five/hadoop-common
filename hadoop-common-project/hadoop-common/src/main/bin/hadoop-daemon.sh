@@ -142,7 +142,7 @@ case $startStop in
     echo starting $command, logging to $log
     cd "$HADOOP_PREFIX"
     case $command in
-      namenode|secondarynamenode|datanode|journalnode|dfs|dfsadmin|fsck|balancer|zkfc)
+      namenode|secondarynamenode|datanode|rammanagernode|journalnode|dfs|dfsadmin|fsck|balancer|zkfc)
         if [ -z "$HADOOP_HDFS_HOME" ]; then
           hdfsScript="$HADOOP_PREFIX"/bin/hdfs
         else

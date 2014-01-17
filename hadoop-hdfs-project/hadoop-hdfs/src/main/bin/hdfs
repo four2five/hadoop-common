@@ -43,6 +43,7 @@ function print_usage(){
   echo "  journalnode          run the DFS journalnode"
   echo "  zkfc                 run the ZK Failover Controller daemon"
   echo "  datanode             run a DFS datanode"
+  echo "  rammanagernode       run a RAMManagernode "
   echo "  dfsadmin             run a DFS admin client"
   echo "  haadmin              run a DFS HA admin client"
   echo "  fsck                 run a DFS filesystem checking utility"
@@ -116,6 +117,13 @@ elif [ "$COMMAND" = "datanode" ] ; then
   else
     HADOOP_OPTS="$HADOOP_OPTS -server $HADOOP_DATANODE_OPTS"
   fi
+elif [ "$COMMAND" = "rammanagernode" ] ; then
+  CLASS='org.apache.hadoop.hdfs.server.rammanagernode.RAMManagerNode'
+  #if [ "$starting_secure_dn" = "true" ]; then
+  #  HADOOP_OPTS="$HADOOP_OPTS -jvm server $HADOOP_DATANODE_OPTS"
+  #else
+  HADOOP_OPTS="$HADOOP_OPTS -server $HADOOP_DATANODE_OPTS"
+  #fi
 elif [ "$COMMAND" = "journalnode" ] ; then
   CLASS='org.apache.hadoop.hdfs.qjournal.server.JournalNode'
   HADOOP_OPTS="$HADOOP_OPTS $HADOOP_JOURNALNODE_OPTS"
