@@ -40,7 +40,7 @@ import org.apache.hadoop.util.PriorityQueue;
 import org.apache.hadoop.util.Progress;
 import org.apache.hadoop.util.Progressable;
 
-class Merger {  
+public class Merger {  
   private static final Log LOG = LogFactory.getLog(Merger.class);
 
   // Local directories
@@ -110,7 +110,7 @@ class Merger {
                                                readsCounter, writesCounter);
   }
 
-  static <K extends Object, V extends Object>
+  public static <K extends Object, V extends Object>
     RawKeyValueIterator merge(Configuration conf, FileSystem fs,
                             Class<K> keyClass, Class<V> valueClass,
                             List<Segment<K, V>> segments,
@@ -128,7 +128,7 @@ class Merger {
   }
 
 
-  static <K extends Object, V extends Object>
+  public static <K extends Object, V extends Object>
   RawKeyValueIterator merge(Configuration conf, FileSystem fs,
                           Class<K> keyClass, Class<V> valueClass,
                           CompressionCodec codec,
@@ -225,7 +225,7 @@ class Merger {
     long getNumRecords() { return this.numRecords; }
     long getNumRecordsRepresented() { return this.numRecordsRepresented; }
 
-    long getLength() { 
+    public long getLength() { 
       return (reader == null) ?
         segmentLength : reader.getLength();
     }

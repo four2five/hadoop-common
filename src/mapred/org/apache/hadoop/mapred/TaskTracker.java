@@ -307,6 +307,7 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
   static final String DISTCACHEDIR = "distcache";
   static final String JOBCACHE = "jobcache";
   static final String OUTPUT = "output";
+  static final String INPUT = "input";
   static final String JARSDIR = "jars";
   static final String LOCAL_SPLIT_FILE = "split.info";
   static final String JOBFILE = "job.xml";
@@ -601,6 +602,12 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
     + TaskTracker.OUTPUT;
   }
 
+  static String getIntermediateInputDir(String user, String jobid,
+      String taskid) {
+    return getLocalTaskDir(user, jobid, taskid) + Path.SEPARATOR
+    + TaskTracker.INPUT;
+  }
+
   public static String getLocalTaskDir(String user, String jobid, 
       String taskid) {
     return getLocalTaskDir(user, jobid, taskid, false);
@@ -661,6 +668,10 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
       throw new IOException("Unknown protocol for task tracker: " +
                             protocol);
     }
+  }
+
+  public Configuration conf() {
+    return this.fConf;
   }
 
   /**
@@ -4323,6 +4334,14 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
   @Override
   public String getConfigVersion() {
     return originalConf.get(CONF_VERSION_KEY, CONF_VERSION_DEFAULT);
+  }
+
+  public JobConf getJobConf(String user, JobID jobid) throws IOException {
+    Path localJobFile =
+      lDirAlloc.getLocalPathToRead(getLocalJobDir(user, jobid.toString()) +
+                               Path.SEPARATOR + "job.xml", fConf);
+
+    return new JobConf(localJobFile);
   }
 
   @Override
