@@ -53,6 +53,8 @@ class MapOutputFile {
    */
   public Path getOutputFile()
       throws IOException {
+    System.out.println("JB, TaskTracker.OUTPUT: " + TaskTracker.OUTPUT + " separator: " + Path.SEPARATOR + 
+                       " file.out");
     return lDirAlloc.getLocalPathToRead(TaskTracker.OUTPUT + Path.SEPARATOR
         + "file.out", conf);
   }

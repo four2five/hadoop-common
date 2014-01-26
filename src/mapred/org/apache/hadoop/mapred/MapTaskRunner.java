@@ -19,11 +19,15 @@ package org.apache.hadoop.mapred;
 
 import java.io.*;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+
 import org.apache.hadoop.mapred.TaskTracker.TaskInProgress;
 
 /** Runs a map task. */
 class MapTaskRunner extends TaskRunner {
-  
+  private static final Log LOG = LogFactory.getLog(MapTaskRunner.class);
+
   public MapTaskRunner(TaskInProgress task, TaskTracker tracker, JobConf conf,
                        TaskTracker.RunningJob rjob) 
   throws IOException {
@@ -36,14 +40,22 @@ class MapTaskRunner extends TaskRunner {
       return false;
     }
     
-    mapOutputFile.removeAll();
+    Task task = getTask();
+    if (task == null) { 
+      LOG.error("in MapTaskRunner.prepare() and task is null");
+    }
+    TaskAttemptID taskAttemptId = task.getTaskID();
+    if (taskAttemptId == null) { 
+      LOG.error("in MapTaskRunner.prepare() and taskID is null");
+    }
+    mapOutputFile.removeAll(taskAttemptId);
     return true;
   }
 
   /** Delete all of the temporary map output files. */
   public void close() throws IOException {
     LOG.info(getTask()+" done; removing files.");
-    mapOutputFile.removeAll();
+    mapOutputFile.removeAll(getTask().getTaskID());
   }
 
   @Override

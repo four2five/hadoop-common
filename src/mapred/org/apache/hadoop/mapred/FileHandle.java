@@ -20,6 +20,9 @@ package org.apache.hadoop.mapred;
 
 import java.io.IOException;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.LocalDirAllocator;
 import org.apache.hadoop.fs.Path;
@@ -31,6 +34,7 @@ public class FileHandle {
 
   protected JobConf conf;
   protected JobID jobId;
+  private static final Log LOG = LogFactory.getLog(MapTaskRunner.class);
   
   public FileHandle() {
   }
@@ -247,11 +251,26 @@ public class FileHandle {
 
   /** Removes all of the files related to a task. */
   public void removeAll(TaskAttemptID taskId) throws IOException {
-    conf.deleteLocalFiles(TaskTracker.getIntermediateOutputDir(
-                          this.conf.getUser(), jobId.toString(), taskId.toString()));
+    if (this.conf == null) { 
+      LOG.error("this.conf is null");
+    }
+    if (this.conf.getUser() == null) { 
+      LOG.error("this.conf.getUser() is null");
+    }
+    if (jobId == null) { 
+      LOG.error("jobId is null");
+    }
+    if (taskId == null) { 
+      LOG.error("taskId is null");
+    }
+    String intOutputDir = TaskTracker.getIntermediateOutputDir(
+                              this.conf.getUser(), jobId.toString(), taskId.toString());
+    String intInputDir = TaskTracker.getIntermediateInputDir(
+                              this.conf.getUser(), jobId.toString(), taskId.toString());
+    LOG.info("intInputDir: " + intOutputDir + " intOutputDir " + intOutputDir); 
+    conf.deleteLocalFiles(intOutputDir);
+    conf.deleteLocalFiles(intInputDir);
     
-    conf.deleteLocalFiles(TaskTracker.getIntermediateInputDir(
-                          this.conf.getUser(), jobId.toString(), taskId.toString()));
   }
 
   public void setConf(Configuration conf) {

@@ -109,7 +109,8 @@ abstract class TaskRunner extends Thread {
   /** 
    * for cleaning up old map outputs
    */
-  protected MapOutputFile mapOutputFile;
+  //protected MapOutputFile mapOutputFile;
+  protected FileHandle mapOutputFile;
 
   public TaskRunner(TaskTracker.TaskInProgress tip, TaskTracker tracker, 
                     JobConf conf, TaskTracker.RunningJob rjob
@@ -118,7 +119,8 @@ abstract class TaskRunner extends Thread {
     this.t = tip.getTask();
     this.tracker = tracker;
     this.conf = conf;
-    this.mapOutputFile = new MapOutputFile();
+    //this.mapOutputFile = new MapOutputFile();
+    this.mapOutputFile = new FileHandle(rjob.getJobID());
     this.mapOutputFile.setConf(conf);
     this.jvmManager = tracker.getJvmManagerInstance();
     this.localdirs = conf.getLocalDirs();

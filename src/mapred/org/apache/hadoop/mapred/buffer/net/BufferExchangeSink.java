@@ -140,11 +140,11 @@ public class BufferExchangeSink<K extends Object, V extends Object> implements B
 		this.maxConnections = conf.getInt("mapred.reduce.parallel.copies", 20);
 
 		this.task = task;
-	    //this.numInputs = task.getNumberOfInputs();
-	    this.numInputs = conf.getNumMapTasks();
-	    this.inputProgress = new HashMap<TaskID, Float>();
-	    
-	    this.cursor = new HashMap<TaskID, Position>();
+    //this.numInputs = task.getNumberOfInputs();
+    this.numInputs = conf.getNumMapTasks();
+    this.inputProgress = new HashMap<TaskID, Float>();
+     
+    this.cursor = new HashMap<TaskID, Position>();
 	    
 		this.executor = Executors.newFixedThreadPool(Math.min(maxConnections, Math.max(numInputs, 5)));
 		this.handlers = Collections.synchronizedSet(new HashSet<Handler>());
@@ -199,12 +199,15 @@ public class BufferExchangeSink<K extends Object, V extends Object> implements B
 							BufferExchange.BufferType type = WritableUtils.readEnum(istream, BufferExchange.BufferType.class);
 							Handler handler = null;
 							if (BufferType.FILE == type) {
+                LOG.info("hander is FileHandler");
 								handler = new FileHandler(collector, istream, ostream);
 							}
 							else if (BufferType.SNAPSHOT == type) {
+                LOG.info("hander is SnapshotHandler");
 								handler = new SnapshotHandler(collector, istream, ostream);
 							}
 							else if (BufferType.STREAM == type) {
+                LOG.info("hander is StreamHandler");
 								handler = new StreamHandler(collector, istream, ostream);
 							}
 							else {
@@ -253,6 +256,8 @@ public class BufferExchangeSink<K extends Object, V extends Object> implements B
 	 * @return true if all inputs have sent all their input.
 	 */
 	public boolean complete() {
+    LOG.info("in sink.complete(), size: " + this.successful.size() + 
+             " numInputs " + numInputs);
 		return this.successful.size() == numInputs;
 	}
 
@@ -333,7 +338,7 @@ public class BufferExchangeSink<K extends Object, V extends Object> implements B
 
 						if (open == Integer.MAX_VALUE) {
 							H header = (H) OutputFile.Header.readHeader(istream);
-							LOG.debug("Handler " + this + " receive " + header.compressed() + " bytes. header: " + header);
+							LOG.info("Handler " + this + " receive " + header.compressed() + " bytes. header: " + header);
 							receive(header);
 						}
 					} catch (IOException e) {
@@ -343,7 +348,7 @@ public class BufferExchangeSink<K extends Object, V extends Object> implements B
 					}
 				}
 			} finally {
-				LOG.debug("Handler done: " + this);
+				LOG.info("Handler done: " + this);
 				done(this);
 				close();
 			}
@@ -399,6 +404,7 @@ public class BufferExchangeSink<K extends Object, V extends Object> implements B
 		}
 		
 		public void receive(OutputFile.FileHeader header) throws IOException {
+      LOG.info("In BufferExchangeSink.receive()");
 			/* Get my position for this source taskid. */
 			Position position = null;
 			TaskID inputTaskID = header.owner().getTaskID();
@@ -415,7 +421,7 @@ public class BufferExchangeSink<K extends Object, V extends Object> implements B
 				if (header.ids().first() == pos) {
 					WritableUtils.writeEnum(ostream, BufferExchange.Transfer.READY);
 					ostream.flush();
-					LOG.debug("File handler " + hashCode() + " ready to receive -- " + header);
+					LOG.info("File handler " + hashCode() + " ready to receive -- " + header);
 					if (collector.read(istream, header)) {
 						updateProgress(header);
 						synchronized (task) {
@@ -423,16 +429,16 @@ public class BufferExchangeSink<K extends Object, V extends Object> implements B
 						}
 					}
 					position.set(header.ids().last() + 1);
-					LOG.debug("File handler " + " done receiving up to position " + position.intValue());
+					LOG.info("File handler " + " done receiving up to position " + position.intValue());
 				}
 				else {
-					LOG.debug(this + " ignoring -- " + header);
+					LOG.info(this + " ignoring -- " + header);
 					WritableUtils.writeEnum(ostream, BufferExchange.Transfer.IGNORE);
 				}
 			}
 			/* Indicate the next spill file that I expect. */
 			pos = position.intValue();
-			LOG.debug("Updating source position to " + pos);
+			LOG.info("Updating source position to " + pos);
 			ostream.writeInt(pos);
 			ostream.flush();
 		}

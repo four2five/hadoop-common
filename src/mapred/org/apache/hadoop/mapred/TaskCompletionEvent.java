@@ -30,7 +30,7 @@ import org.apache.hadoop.io.WritableUtils;
  * job tracker. 
  */
 public class TaskCompletionEvent implements Writable{
-  static public enum Status {FAILED, KILLED, SUCCEEDED, OBSOLETE, TIPFAILED};
+  static public enum Status {FAILED, KILLED, SUCCEEDED, OBSOLETE, TIPFAILED, RUNNING};
     
   private int eventId; 
   private String taskTrackerHttp;
@@ -86,7 +86,13 @@ public class TaskCompletionEvent implements Writable{
    */
   @Deprecated
   public String getTaskId() {
-    return taskId.toString();
+    //return taskId.toString();
+    StringBuilder sb = new StringBuilder();
+    sb.append(taskId.toString() + ": ");
+    sb.append("status = " + this.status);
+    sb.append(". trackerhttp = " + this.taskTrackerHttp);
+    return sb.toString();
+
   }
   
   /**

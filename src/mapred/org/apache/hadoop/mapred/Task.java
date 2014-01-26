@@ -24,6 +24,7 @@ import java.io.IOException;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.text.NumberFormat;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
@@ -47,8 +48,12 @@ import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.hadoop.io.serializer.Deserializer;
 import org.apache.hadoop.io.serializer.SerializationFactory;
-import org.apache.hadoop.mapred.TaskTracker.TaskInProgress;
+import org.apache.hadoop.mapred.buffer.BufferUmbilicalProtocol;
+import org.apache.hadoop.mapred.buffer.impl.JSnapshotBuffer;
+import org.apache.hadoop.mapred.buffer.impl.ValuesIterator;
 import org.apache.hadoop.mapred.IFile.Writer;
+import org.apache.hadoop.mapred.TaskTracker.TaskInProgress;
+import org.apache.hadoop.mapred.buffer.BufferUmbilicalProtocol;
 import org.apache.hadoop.mapreduce.JobStatus;
 import org.apache.hadoop.net.NetUtils;
 import org.apache.hadoop.util.Progress;
@@ -125,6 +130,12 @@ abstract public class Task implements Writable, Configurable {
     return "part-" + NUMBER_FORMAT.format(partition);
   }
 
+  static synchronized String getSnapshotOutputName(int partition, float progress) {
+    return "snapshot-" + NUMBER_FORMAT.format(progress) + "-" + NUMBER_FORMAT.format(partition); 
+  }
+  
+
+
   ////////////////////////////////////////////
   // Fields
   ////////////////////////////////////////////
@@ -154,7 +165,8 @@ abstract public class Task implements Writable, Configurable {
   private long initCpuCumulativeTime = 0;
 
   protected JobConf conf;
-  protected MapOutputFile mapOutputFile = new MapOutputFile();
+  //protected MapOutputFile mapOutputFile = new MapOutputFile();
+  protected FileHandle mapOutputFile = new FileHandle();
   protected LocalDirAllocator lDirAlloc;
   private final static int MAX_RETRIES = 10;
   protected JobContext jobContext;
@@ -165,6 +177,7 @@ abstract public class Task implements Writable, Configurable {
   private int numSlotsRequired;
   private String pidFile = "";
   protected TaskUmbilicalProtocol umbilical;
+  protected BufferUmbilicalProtocol bufferUmb;
   protected SecretKey tokenSecret;
   protected JvmContext jvmContext;
 
@@ -483,7 +496,7 @@ abstract public class Task implements Writable, Configurable {
    * child process and is what invokes user-supplied map, reduce, etc. methods.
    * @param umbilical for progress reports
    */
-  public abstract void run(JobConf job, TaskUmbilicalProtocol umbilical)
+  public abstract void run(JobConf job, TaskUmbilicalProtocol umbilical, BufferUmbilicalProtocol bufferUmb)
       throws IOException, ClassNotFoundException, InterruptedException;
 
   /** Return an approprate thread runner for this task. 
@@ -501,10 +514,34 @@ abstract public class Task implements Writable, Configurable {
   // Current counters
   private transient Counters counters = new Counters();
 
+  /**
+   * flag that indicates whether progress update needs to be sent to parent.
+   * If true, it has been set. If false, it has been reset. 
+   * Using AtomicBoolean since we need an atomic read & reset method. 
+   */
+  private AtomicBoolean progressFlag = new AtomicBoolean(false);
+
   /* flag to track whether task is done */
   private AtomicBoolean taskDone = new AtomicBoolean(false);
+
+  // getters and setters for flag
+  protected void setProgressFlag() {
+    progressFlag.set(true);
+  }
+  private boolean resetProgressFlag() {
+    return progressFlag.getAndSet(false);
+  }
+
   
   public abstract boolean isMapTask();
+
+  public boolean isPipeline() {
+    return false;
+  }
+
+  public int getNumberOfInputs() {
+    return 0;
+  }
 
   // this is for reducers to communicate their dependency info
   //public org.apache.hadoop.mapred.TaskInProgress[] getDependencies() { return new org.apache.hadoop.mapred.TaskInProgress[0]; }
@@ -515,6 +552,13 @@ abstract public class Task implements Writable, Configurable {
   public void  setDependencies( int[] dependencies) { return; }
 
   public Progress getProgress() { return taskProgress; }
+
+  public void setProgress(float progress) {
+      taskProgress.set(progress);
+      // indicate that progress update needs to be sent
+      setProgressFlag();
+    }
+
 
   public void initialize(JobConf job, JobID id, 
                          Reporter reporter,
@@ -583,13 +627,16 @@ abstract public class Task implements Writable, Configurable {
       this.taskProgress = taskProgress;
       this.jvmContext = jvmContext;
     }
+
     // getters and setters for flag
-    void setProgressFlag() {
+    public void setProgressFlag() {
       progressFlag.set(true);
     }
-    boolean resetProgressFlag() {
+
+    public boolean resetProgressFlag() {
       return progressFlag.getAndSet(false);
     }
+
     public void setStatus(String status) {
       //Check to see if the status string 
       // is too long and just concatenate it
@@ -687,12 +734,22 @@ abstract public class Task implements Writable, Configurable {
             taskStatus.statusUpdate(taskProgress.get(),
                                     taskProgress.toString(), 
                                     counters);
+            long begin = System.currentTimeMillis();
             taskFound = umbilical.statusUpdate(taskId, taskStatus, jvmContext);
+            begin = System.currentTimeMillis() - begin;
+            if (begin > 1000) {
+              LOG.debug("Status update took " + begin + " ms!");
+            }
+
             taskStatus.clearStatus();
-          }
-          else {
+          } else {
             // send ping 
+            long begin = System.currentTimeMillis();
             taskFound = umbilical.ping(taskId, jvmContext);
+            begin = System.currentTimeMillis() - begin;
+            if (begin > 1000) {
+              LOG.debug("Status update took " + begin + " ms!");
+            }
           }
 
           // if Task Tracker is not aware of our task ID (probably because it died and 
@@ -767,7 +824,13 @@ abstract public class Task implements Writable, Configurable {
     if (LOG.isDebugEnabled()) {
       LOG.debug("sending reportNextRecordRange " + range);
     }
+    long begin = System.currentTimeMillis();
     umbilical.reportNextRecordRange(taskId, range, jvmContext);
+    begin = System.currentTimeMillis() - begin;
+    if (begin> 1000) {
+      LOG.debug("report next record range took " + begin + " ms.");
+    }
+
   }
 
   /**
@@ -866,10 +929,11 @@ abstract public class Task implements Writable, Configurable {
                    ) throws IOException, InterruptedException {
     LOG.info("Task:" + taskId + " is done."
              + " And is in the process of commiting");
+    long begin = System.currentTimeMillis();
     updateCounters();
 
     boolean commitRequired = isCommitRequired();
-    if (commitRequired) {
+    if (!isPipeline() && commitRequired) {
       int retries = MAX_RETRIES;
       setState(TaskStatus.State.COMMIT_PENDING);
       // say the task tracker that task is commit pending
@@ -916,6 +980,8 @@ abstract public class Task implements Writable, Configurable {
   protected void statusUpdate(TaskUmbilicalProtocol umbilical) 
   throws IOException {
     int retries = MAX_RETRIES;
+//    long begin = System.currentTimeMillis();
+
     while (true) {
       try {
         if (!umbilical.statusUpdate(getTaskID(), taskStatus, jvmContext)) {
@@ -941,7 +1007,7 @@ abstract public class Task implements Writable, Configurable {
    */
   private void sendLastUpdate(TaskUmbilicalProtocol umbilical) 
   throws IOException {
-    taskStatus.setOutputSize(calculateOutputSize());
+    //taskStatus.setOutputSize(calculateOutputSize());
     // send a final status report
     taskStatus.statusUpdate(taskProgress.get(),
                             taskProgress.toString(), 
@@ -954,6 +1020,7 @@ abstract public class Task implements Writable, Configurable {
    * 
    * @return -1 if it can't be found.
    */
+/*
    private long calculateOutputSize() throws IOException {
     if (!isMapOrReduce()) {
       return -1;
@@ -970,12 +1037,18 @@ abstract public class Task implements Writable, Configurable {
     }
     return -1;
   }
+  */
 
   private void sendDone(TaskUmbilicalProtocol umbilical) throws IOException {
     int retries = MAX_RETRIES;
     while (true) {
       try {
+        long begin = System.currentTimeMillis();
         umbilical.done(getTaskID(), jvmContext);
+        begin = System.currentTimeMillis() - begin;
+        if (begin > 1000) {
+          LOG.debug("It took " + begin + " ms just to call done!");
+        }
         LOG.info("Task '" + taskId + "' done.");
         return;
       } catch (IOException ie) {

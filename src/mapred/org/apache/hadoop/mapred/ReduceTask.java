@@ -78,6 +78,17 @@ import org.apache.hadoop.mapred.IFile.*;
 import org.apache.hadoop.mapred.Merger.Segment;
 import org.apache.hadoop.mapred.SortedRanges.SkipRangeIterator;
 import org.apache.hadoop.mapred.TaskTracker.TaskInProgress;
+import org.apache.hadoop.mapred.buffer.BufferUmbilicalProtocol;
+import org.apache.hadoop.mapred.buffer.OutputFile;
+import org.apache.hadoop.mapred.buffer.impl.Buffer;
+import org.apache.hadoop.mapred.buffer.impl.JInputBuffer;
+import org.apache.hadoop.mapred.buffer.impl.JOutputBuffer;
+import org.apache.hadoop.mapred.buffer.impl.JSnapshotBuffer;
+import org.apache.hadoop.mapred.buffer.impl.ValuesIterator;
+import org.apache.hadoop.mapred.buffer.net.BufferExchange;
+import org.apache.hadoop.mapred.buffer.net.BufferRequest;
+import org.apache.hadoop.mapred.buffer.net.BufferExchangeSink;
+import org.apache.hadoop.mapred.buffer.net.MapBufferRequest;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.hadoop.metrics2.MetricsBuilder;
 import org.apache.hadoop.util.Progress;
@@ -98,6 +109,101 @@ import org.apache.hadoop.metrics2.lib.MetricsRegistry;
 /** A Reduce task. */
 class ReduceTask extends Task {
 
+  private class MapOutputFetcher extends Thread {
+
+    private TaskUmbilicalProtocol trackerUmbilical;
+
+    private BufferUmbilicalProtocol bufferUmbilical;
+
+    private BufferExchangeSink sink;
+
+    private Reporter reporter;
+
+    public MapOutputFetcher(TaskUmbilicalProtocol trackerUmbilical, BufferUmbilicalProtocol bufferUmbilical, Reporter reporter, BufferExchangeSink sink) {
+      this.trackerUmbilical = trackerUmbilical;
+      this.bufferUmbilical = bufferUmbilical;
+      this.reporter = reporter;
+      this.sink = sink;
+    }
+
+    public void run() {
+      Set<TaskID> finishedMapTasks = new HashSet<TaskID>();
+      Set<TaskAttemptID>  mapTasks = new HashSet<TaskAttemptID>();
+
+      int eid = 0;
+      while (!isInterrupted() && finishedMapTasks.size() < getNumberOfInputs()) {
+        try {
+          MapTaskCompletionEventsUpdate updates =
+            trackerUmbilical.getMapCompletionEvents(getJobID(), eid, Integer.MAX_VALUE, ReduceTask.this.getTaskID(), jvmContext);
+
+          reporter.progress();
+          eid += updates.events.length;
+
+          // Process the TaskCompletionEvents:
+          // 1. Save the SUCCEEDED maps in knownOutputs to fetch the outputs.
+          // 2. Save the OBSOLETE/FAILED/KILLED maps in obsoleteOutputs to stop fetching
+          //    from those maps.
+          // 3. Remove TIPFAILED maps from neededOutputs since we don't need their
+          //    outputs at all.
+          for (TaskCompletionEvent event : updates.events) {
+            switch (event.getTaskStatus()) {
+	            case FAILED:
+	            case KILLED:
+	            case OBSOLETE:
+	            case TIPFAILED:
+	            {
+	              TaskAttemptID mapTaskId = event.getTaskAttemptId();
+	              if (!mapTasks.contains(mapTaskId)) {
+	                mapTasks.remove(mapTaskId);
+	              }
+	            }
+	            break;
+	            case SUCCEEDED:
+	            {
+	              TaskAttemptID mapTaskId = event.getTaskAttemptId();
+	              finishedMapTasks.add(mapTaskId.getTaskID());
+	            }
+	            case RUNNING:
+              {
+		            URI u = URI.create(event.getTaskTrackerHttp());
+		            String host = u.getHost();
+		            TaskAttemptID mapTaskId = event.getTaskAttemptId();
+		            if (!mapTasks.contains(mapTaskId)) {
+		              BufferExchange.BufferType type = BufferExchange.BufferType.FILE;
+		              //if (inputSnapshots) type = BufferExchange.BufferType.SNAPSHOT;
+		              //if (stream) type = BufferExchange.BufferType.STREAM;
+		
+		              BufferRequest request =
+		                new MapBufferRequest(host, getTaskID(), sink.getAddress(), type, mapTaskId.getJobID(), getPartition());
+		              try {
+                    LOG.info("Requesting buffer from " + event.getTaskAttemptId().toString());
+		                bufferUmbilical.request(request);
+		                mapTasks.add(mapTaskId);
+		                if (mapTasks.size() == getNumberOfInputs()) {
+		                  LOG.info("ReduceTask " + getTaskID() + " has requested all map buffers. " +
+		                        mapTasks.size() + " map buffers.");
+		                }
+		              } catch (IOException e) {
+		                LOG.warn("BufferUmbilical problem in taking request " + request + ". " + e);
+		              }
+		            }
+              }
+	          }
+          }
+        }
+        catch (IOException e) {
+          e.printStackTrace();
+        }
+
+        try {
+          int waittime = mapTasks.size() == getNumberOfInputs() ? 60000 : 1000;
+          sleep(waittime);
+        } catch (InterruptedException e) { return; }
+      }
+    }
+  }
+
+
   static {                                        // register a ctor
     WritableFactories.setFactory
       (ReduceTask.class,
@@ -107,8 +213,10 @@ class ReduceTask extends Task {
   }
   
   private static final Log LOG = LogFactory.getLog(ReduceTask.class.getName());
+  protected JOutputBuffer outputBuffer = null;
+
   private int numMaps;
-  private ReduceCopier reduceCopier;
+  //private ReduceCopier reduceCopier;
 
   private long numRecordsAssigned;
   private long numRecordsRepresentedAssigned;
@@ -121,6 +229,10 @@ class ReduceTask extends Task {
 
   private CompressionCodec codec;
 
+  private float   snapshotThreshold = 1f;
+  private float   snapshotFreq    = 1f;
+  private boolean inputSnapshots = false;
+  private boolean stream = false;
 
   { 
     getProgress().setStatus("reduce"); 
@@ -323,6 +435,7 @@ class ReduceTask extends Task {
   }
   
   // Get the input files for the reducer.
+  /*
   private Path[] getMapFiles(FileSystem fs, boolean isLocal) 
   throws IOException {
     List<Path> fileList = new ArrayList<Path>();
@@ -339,6 +452,7 @@ class ReduceTask extends Task {
     }
     return fileList.toArray(new Path[0]);
   }
+  */
 
   private class ReduceValuesIterator<KEY,VALUE> 
           extends ValuesIterator<KEY,VALUE> {
@@ -457,7 +571,7 @@ class ReduceTask extends Task {
 
   @Override
   @SuppressWarnings("unchecked")
-  public void run(JobConf job, final TaskUmbilicalProtocol umbilical)
+  public void run(JobConf job, final TaskUmbilicalProtocol umbilical, BufferUmbilicalProtocol bufferUmbilical)
     throws IOException, InterruptedException, ClassNotFoundException {
     this.umbilical = umbilical;
     job.setBoolean("mapred.skip.on", isSkipping());
@@ -496,6 +610,7 @@ class ReduceTask extends Task {
 
     boolean isLocal = "local".equals(job.get("mapred.job.tracker", "local"));
     if (!isLocal) {
+      /*
       reduceCopier = new ReduceCopier(umbilical, job, reporter);
       if (!reduceCopier.fetchOutputs(startReducersDynamically)) {
         if(reduceCopier.mergeThrowable instanceof FSError) {
@@ -504,12 +619,16 @@ class ReduceTask extends Task {
         throw new IOException("Task: " + getTaskID() + 
             " - The reduce copier failed", reduceCopier.mergeThrowable);
       }
+      */
     }
     copyPhase.complete();                         // copy is already complete
     setPhase(TaskStatus.Phase.SORT);
     statusUpdate(umbilical);
 
     final FileSystem rfs = FileSystem.getLocal(job).getRaw();
+    // we use JInputBuffer instead
+
+    /*
     RawKeyValueIterator rIter = isLocal
       ? Merger.merge(job, rfs, job.getMapOutputKeyClass(),
           job.getMapOutputValueClass(), codec, getMapFiles(rfs, true),
@@ -517,7 +636,8 @@ class ReduceTask extends Task {
           new Path(getTaskID().toString()), job.getOutputKeyComparator(),
           reporter, spilledRecordsCounter, null)
       : reduceCopier.createKVIterator(job, rfs, reporter);
-        
+    */
+     
     // free up the data structures
     mapOutputFilesOnDisk.clear();
     
@@ -529,11 +649,16 @@ class ReduceTask extends Task {
     RawComparator comparator = job.getOutputValueGroupingComparator();
 
     if (useNewApi) {
-      runNewReducer(job, umbilical, reporter, rIter, comparator, 
-                    keyClass, valueClass);
+      //runNewReducer(job, umbilical, bufferUmbilical, reporter, rIter, comparator, 
+      //              keyClass, valueClass);
+      runNewReducer(job, umbilical, bufferUmbilical, reporter, null, comparator, 
+                    keyClass, valueClass, rfs);
     } else {
-      runOldReducer(job, umbilical, reporter, rIter, comparator, 
-                    keyClass, valueClass);
+      LOG.error("JB, you're calling runOldReducer. You should not be doing this");
+      //runOldReducer(job, umbilical, bufferUmbilical, reporter, rIter, comparator, 
+      //              keyClass, valueClass, rfs);
+      //runOldReducer(job, umbilical, bufferUmbilical, reporter, null, comparator, 
+      //              keyClass, valueClass, rfs);
     }
     done(umbilical, reporter);
   }
@@ -592,11 +717,14 @@ class ReduceTask extends Task {
   private <INKEY,INVALUE,OUTKEY,OUTVALUE>
   void runOldReducer(JobConf job,
                      TaskUmbilicalProtocol umbilical,
+                     final BufferUmbilicalProtocol bufferUmbilical,
                      final TaskReporter reporter,
                      RawKeyValueIterator rIter,
                      RawComparator<INKEY> comparator,
                      Class<INKEY> keyClass,
-                     Class<INVALUE> valueClass) throws IOException {
+                     Class<INVALUE> valueClass,
+                     final FileSystem rfs
+                    ) throws IOException {
     Reducer<INKEY,INVALUE,OUTKEY,OUTVALUE> reducer = 
       ReflectionUtils.newInstance(job.getReducerClass(), job);
     // make output collector
@@ -717,19 +845,84 @@ class ReduceTask extends Task {
     }
   }
 
+  protected <INKEY,INVALUE,OUTKEY,OUTVALUE>
+  void copy(JobConf job, 
+      JInputBuffer jInputBuffer,
+      //RawKeyValueIterator rawIter,
+      BufferExchangeSink sink, TaskReporter reporter,
+      BufferUmbilicalProtocol bufferUmbilical,
+      final FileSystem rfs,
+      RawComparator<INKEY> comparator,
+      Class<INKEY> keyClass,
+      Class<INVALUE> valueClass
+    ) throws IOException {
+    float maxSnapshotProgress = job.getFloat("mapred.snapshot.max.progress", 0.9f);
+
+    long starttime = System.currentTimeMillis();
+    synchronized (this) {
+      LOG.info("ReduceTask " + getTaskID() + ": In copy function.");
+      sink.open();
+      while(!sink.complete()) {
+        copyPhase.set(sink.getProgress().get());
+        //reporter.setProgressFlag();
+
+        if (sink.getProgress().get() > snapshotThreshold &&
+             sink.getProgress().get() < maxSnapshotProgress) {
+            snapshotThreshold += snapshotFreq;
+            LOG.info("ReduceTask: " + getTaskID() + 
+                     " perform snapshot. progress " + (snapshotThreshold - snapshotFreq));
+            //reduce(job, reporter, inputCollector, bufferUmbilical, sink.getProgress(), null);
+            //reduce(job, reporter, rawIter, bufferUmbilical, sink.getProgress(), null);
+            try {
+              TaskReporter tempReporter = new TaskReporter(sink.getProgress(), umbilical,
+                                                       jvmContext);
+              applyReduce(job, tempReporter, jInputBuffer.createKVIterator(job, rfs, tempReporter), 
+                          comparator, keyClass, valueClass);
+            } catch (Exception e) { 
+              LOG.error("Caught an exception: " + e.toString());
+            }
+            LOG.info("ReduceTask: " + getTaskID() + 
+                     " done with snapshot. progress " + (snapshotThreshold - snapshotFreq));
+        }
+        try { 
+          this.wait();
+        } catch (InterruptedException e) { }
+      }
+      copyPhase.complete();
+      reporter.setProgressFlag();
+      LOG.info("ReduceTask " + getTaskID() + " copy phase completed in " +
+           (System.currentTimeMillis() - starttime) + " ms.");
+      sink.close();
+    }
+  }
+
   @SuppressWarnings("unchecked")
   private <INKEY,INVALUE,OUTKEY,OUTVALUE>
   void runNewReducer(JobConf job,
                      final TaskUmbilicalProtocol umbilical,
+                     final BufferUmbilicalProtocol bufferUmbilical,
                      final TaskReporter reporter,
                      RawKeyValueIterator rIter,
                      RawComparator<INKEY> comparator,
                      Class<INKEY> keyClass,
-                     Class<INVALUE> valueClass
+                     Class<INVALUE> valueClass,
+                     final FileSystem rfs
                      ) throws IOException,InterruptedException, 
                               ClassNotFoundException {
     // wrap value iterator to report progress.
-    final RawKeyValueIterator rawIter = rIter;
+    //final RawKeyValueIterator rawIter = rIter;
+
+    // some HOP stuff
+    Class inputKeyClass = job.getMapOutputKeyClass();
+    Class inputValClass = job.getMapOutputValueClass();
+
+    Class outputKeyClass = job.getOutputKeyClass();
+    Class outputValClass = job.getOutputValueClass();
+
+    Class<? extends CompressionCodec> codecClass = null;
+
+
+    /*
     rIter = new RawKeyValueIterator() {
       public void close() throws IOException {
         rawIter.close();
@@ -753,9 +946,72 @@ class ReduceTask extends Task {
         return ret;
       }
     };
+    */
+
+
+    if (job.getCompressMapOutput()) {
+      codecClass = conf.getMapOutputCompressorClass(DefaultCodec.class);
+    }
+
+    boolean reducePipeline = job.getBoolean("mapred.reduce.pipeline", false);
+    snapshotFreq   = job.getFloat("mapred.snapshot.frequency", 1f);
+    snapshotThreshold = snapshotFreq;
+    inputSnapshots  = job.getBoolean("mapred.job.input.snapshots", false);
+     
+    //InputCollector inputCollector = null;                                                 
+    JInputBuffer jInputBuffer = new JInputBuffer(job, this, reporter, copyPhase,
+                                      inputKeyClass, inputValClass, codecClass);
+
+    BufferExchangeSink sink = new BufferExchangeSink(job, jInputBuffer, this);
+
+    MapOutputFetcher fetcher = new MapOutputFetcher(umbilical, bufferUmbilical, reporter, sink);
+    fetcher.setDaemon(true);
+    fetcher.start();
+
+    setPhase(TaskStatus.Phase.SHUFFLE);
+    stream = job.getBoolean("mapred.stream", false) ||
+         job.getBoolean("mapred.job.monitor", false);
+
+    job.setBoolean("mapred.skip.on", isSkipping());
+
+    TaskReporter tempReporter = new TaskReporter(sink.getProgress(), umbilical,
+                                                 jvmContext);
+    //if (stream) {
+    //  stream(job, inputCollector, sink, reporter, bufferUmbilical);
+    //}
+    //else {
+    //copy(job, jInputBuffer, sink, reporter, bufferUmbilical, rfs, comparator, keyClass, valueClass);
+    copy(job, jInputBuffer, sink, tempReporter, bufferUmbilical, rfs, comparator, keyClass, valueClass);
+    // -jbuck
+
+    //}
+    fetcher.interrupt();
+
+    try { 
+      //applyReduce(job, reporter, jInputBuffer.createKVIterator(job,rfs, sink.getProgress()), comparator, keyClass, valueClass);
+      applyReduce(job, tempReporter, jInputBuffer.createKVIterator(job,rfs, tempReporter), comparator, keyClass, valueClass);
+    } catch (IOException ioe) {
+      LOG.error("Caught an ioe: " + ioe.toString());
+    } catch (Exception e) {
+      LOG.error("Caught an e: " + e.toString());
+    }
+
+
+  }
+
+  public <INKEY,INVALUE,OUTKEY,OUTVALUE>
+  void applyReduce(JobConf job,
+                     final TaskReporter reporter,
+                     RawKeyValueIterator rIter,
+                     RawComparator<INKEY> comparator,
+                     Class<INKEY> keyClass,
+                     Class<INVALUE> valueClass
+
+  ) throws ClassNotFoundException, InterruptedException, IOException {
     // make a task context so we can get the classes
     org.apache.hadoop.mapreduce.TaskAttemptContext taskContext =
       new org.apache.hadoop.mapreduce.TaskAttemptContext(job, getTaskID());
+
     // make a reducer
     org.apache.hadoop.mapreduce.Reducer<INKEY,INVALUE,OUTKEY,OUTVALUE> reducer =
       (org.apache.hadoop.mapreduce.Reducer<INKEY,INVALUE,OUTKEY,OUTVALUE>)
@@ -763,7 +1019,7 @@ class ReduceTask extends Task {
      org.apache.hadoop.mapreduce.RecordWriter<OUTKEY,OUTVALUE> trackedRW = 
        new NewTrackingRecordWriter<OUTKEY, OUTVALUE>(reduceOutputCounter,
          job, reporter, taskContext);
-    job.setBoolean("mapred.skip.on", isSkipping());
+
     org.apache.hadoop.mapreduce.Reducer.Context 
          reducerContext = createReduceContext(reducer, job, getTaskID(),
                                                rIter, reduceInputKeyCounter,
@@ -771,6 +1027,7 @@ class ReduceTask extends Task {
                                                trackedRW, committer,
                                                reporter, comparator, keyClass,
                                                valueClass);
+    long begin = System.currentTimeMillis();
     reducer.run(reducerContext);
     trackedRW.close(reducerContext);
   }
@@ -2160,6 +2417,7 @@ class ReduceTask extends Task {
     }
     
     
+    /*
     public boolean fetchOutputs(boolean startReducerDynamically) throws IOException {
       int totalFailures = 0;
       int            numInFlight = 0, numCopied = 0;
@@ -2594,6 +2852,7 @@ class ReduceTask extends Task {
         }
         return mergeThrowable == null && copiedMapOutputs.size() == requiredOutputs;
     }
+    */
     
     // Notify the JobTracker
     // after every read error, if 'reportReadErrorImmediately' is true or
@@ -2657,6 +2916,7 @@ class ReduceTask extends Task {
      * first merge pass. If not, then said outputs must be written to disk
      * first.
      */
+     /*
     @SuppressWarnings("unchecked")
     private RawKeyValueIterator createKVIterator(
         JobConf job, FileSystem fs, Reporter reporter) throws IOException {
@@ -2755,6 +3015,7 @@ class ReduceTask extends Task {
                    finalSegments, finalSegments.size(), tmpDir,
                    comparator, reporter, spilledRecordsCounter, null);
     }
+    */
 
     class RawKVIteratorReader extends IFile.Reader<K,V> {
 
@@ -2929,6 +3190,7 @@ class ReduceTask extends Task {
       }
     }
 
+    /*
     private class InMemFSMergeThread extends Thread {
       
       public InMemFSMergeThread() {
@@ -3028,7 +3290,8 @@ class ReduceTask extends Task {
           addToMapOutputFilesOnDisk(status);
         }
       }
-    }
+    } // class InMemFSMergeThread  
+    */
 
     private class GetMapEventsThread extends Thread {
       
@@ -3209,4 +3472,7 @@ class ReduceTask extends Task {
     return Integer.numberOfTrailingZeros(hob) +
       (((hob >>> 1) & value) == 0 ? 0 : 1);
   }
+
+  public int getNumberOfInputs() { return numMaps; }
+
 }

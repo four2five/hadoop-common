@@ -42,7 +42,7 @@ import org.apache.hadoop.mapred.FileHandle;
 import org.apache.hadoop.mapred.IFile;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.Merger;
-import org.apache.hadoop.mapred.OutputCollector;
+import org.apache.hadoop.mapred.MapTask;
 import org.apache.hadoop.mapred.Partitioner;
 import org.apache.hadoop.mapred.RawKeyValueIterator;
 import org.apache.hadoop.mapred.Reporter;
@@ -59,7 +59,7 @@ import org.apache.hadoop.util.ReflectionUtils;
 
 public class JOutputBuffer<K extends Object, V extends Object> 
        extends Buffer<K, V>
-	   implements OutputCollector<K, V>, IndexedSortable {
+	   implements MapTask.MapOutputCollector<K, V>, IndexedSortable {
 
 	private class PartitionBufferMerger {
 
@@ -378,7 +378,7 @@ public class JOutputBuffer<K extends Object, V extends Object>
 				PartitionBufferFile spill = spills.get(nextPipelineSpill);
 				OutputFile file = new OutputFile(taskid, nextPipelineSpill, spill.progress,
 						                        spill.data, spill.index, spill.eof, partitions);
-				LOG.info(JOutputBuffer.this.taskid + " pipelining " + file);
+				LOG.info("JB, " +  JOutputBuffer.this.taskid + " pipelining " + file);
 				umbilical.output(file);
 				nextPipelineSpill++;
 			}
@@ -575,6 +575,8 @@ public class JOutputBuffer<K extends Object, V extends Object>
 	private boolean pipeline = false;
 	
 	private boolean eof = false;
+
+  private int totalKeys;
 	
 	@SuppressWarnings("unchecked")
 	public JOutputBuffer(BufferUmbilicalProtocol umbilical, Task task, JobConf job, 
@@ -646,6 +648,7 @@ public class JOutputBuffer<K extends Object, V extends Object>
 
 		// combiner
 		minSpillsForCombine = job.getInt("min.num.spills.for.combine", 3);
+    this.totalKeys = 0;
 	}
 
 	public JobConf getJobConf() {
@@ -711,10 +714,15 @@ public class JOutputBuffer<K extends Object, V extends Object>
 		}
 	}
 
-	public synchronized OutputFile close() throws IOException {
+  // just for interface compatability
+  public void close() throws IOException, InterruptedException { 
+    LOG.info("Calling the useless close(). Wrote a total of " + this.totalKeys + " keys");
+  }
+
+	public synchronized OutputFile oldClose() throws IOException {
 		LOG.debug("PartitionBuffer: closed called at progress " + progress.get());
 		this.eof = true;
-		OutputFile finalOutput = flush();
+		OutputFile finalOutput = innerFlush();
 		return finalOutput;
 	}
 	
@@ -757,6 +765,7 @@ public class JOutputBuffer<K extends Object, V extends Object>
 
 	public synchronized void collect(DataInputBuffer key, DataInputBuffer value, 
                                    long recordsRepresented) throws IOException {
+    this.totalKeys++;
 		if (sortSpillException != null) {
 			throw (IOException)new IOException("Spill failed"
 			).initCause(sortSpillException);
@@ -801,13 +810,14 @@ public class JOutputBuffer<K extends Object, V extends Object>
 		}
 	}
 
-	public synchronized void collect(K key, V value)
+	public synchronized void collect(K key, V value, int partition)
 	throws IOException {
-    collect(key, value, 1);
+    collect(key, value, 1, partition);
   }
 
-	public synchronized void collect(K key, V value, long recordsRepresented)
+	public synchronized void collect(K key, V value, long recordsRepresented, int partition)
 	throws IOException {
+    this.totalKeys++;
 		reporter.progress();
 		if (key.getClass() != keyClass) {
 			throw new IOException("Type mismatch in key from map: expected "
@@ -843,7 +853,7 @@ public class JOutputBuffer<K extends Object, V extends Object>
 				bb.write(new byte[0], 0, 0);
 			}
 
-			int partition = partitioner.getPartition(key, value, partitions);
+			//int partition = partitioner.getPartition(key, value, partitions);
 			if (partition < 0 || partition >= partitions) {
 				throw new IOException("Illegal partition for " + key + " (" +
 						partition + ")");
@@ -1073,7 +1083,13 @@ public class JOutputBuffer<K extends Object, V extends Object>
 		}
 	}
 
-	private OutputFile flush() throws IOException {
+  public void flush() throws IOException, InterruptedException,
+                                  ClassNotFoundException {
+    // no-op to fulfill interface API
+  }
+
+
+	public OutputFile innerFlush() throws IOException {
 		long timestamp = System.currentTimeMillis();
 		LOG.debug("Begin final flush");
 

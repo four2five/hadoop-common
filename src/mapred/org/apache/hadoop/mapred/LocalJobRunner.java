@@ -211,7 +211,7 @@ class LocalJobRunner implements JobSubmissionProtocol {
             map_tasks += 1;
             myMetrics.launchMap(mapId);
             queueMetrics.launchMap(mapId);
-            map.run(localConf, this);
+            map.run(localConf, this, null);
             myMetrics.completeMap(mapId);
             queueMetrics.completeMap(mapId);
             map_tasks -= 1;
@@ -259,7 +259,7 @@ class LocalJobRunner implements JobSubmissionProtocol {
               reduce_tasks += 1;
               myMetrics.launchReduce(reduce.getTaskID());
               queueMetrics.launchReduce(reduce.getTaskID());
-              reduce.run(localConf, this);
+              reduce.run(localConf, this, null);
               myMetrics.completeReduce(reduce.getTaskID());
               queueMetrics.completeReduce(reduce.getTaskID());
               reduce_tasks -= 1;
@@ -405,6 +405,16 @@ class LocalJobRunner implements JobSubmissionProtocol {
       return new MapTaskCompletionEventsUpdate(TaskCompletionEvent.EMPTY_ARRAY,
           false);
     }
+
+    /*
+    @Override
+    public ReduceTaskCompletionEventsUpdate getReduceCompletionEvents(
+        JobID reduceJobId, int fromIndex, int maxLocs)
+        throws IOException {
+          return new ReduceTaskCompletionEventsUpdate(TaskCompletionEvent.EMPTY_ARRAY, false);
+    }
+    */
+
 
     @Override
     public void updatePrivateDistributedCacheSizes(

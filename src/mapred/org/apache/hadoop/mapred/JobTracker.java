@@ -3400,10 +3400,13 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
         if (tasks != null) {
           for (Task task : tasks) {
             expireLaunchingTasks.addNewTask(task.getTaskID());
-            if(LOG.isDebugEnabled()) {
-              LOG.debug(trackerName + " -> LaunchTask: " + task.getTaskID());
-            }
+            LOG.debug(trackerName + " -> LaunchTask: " + task.getTaskID());
             actions.add(new LaunchTaskAction(task));
+            //if (task.isMapTask() || task.isPipeline()) 
+            if (task.isMapTask()) {
+              JobInProgress job = getJob(task.getJobID());
+              job.fastUpdateTaskRunningStatus(task, taskTrackerStatus);
+            }
           }
         }
       }

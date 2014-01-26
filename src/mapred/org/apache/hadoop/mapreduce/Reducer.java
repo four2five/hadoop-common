@@ -20,9 +20,16 @@ package org.apache.hadoop.mapreduce;
 
 import java.io.IOException;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.io.RawComparator;
 import org.apache.hadoop.mapred.RawKeyValueIterator;
+
 
 /** 
  * Reduces a set of intermediate values which share a key to a smaller set of
@@ -117,6 +124,9 @@ import org.apache.hadoop.mapred.RawKeyValueIterator;
  */
 public class Reducer<KEYIN,VALUEIN,KEYOUT,VALUEOUT> {
 
+  private static final Log LOG = LogFactory.getLog(Reducer.class);
+
+
   public class Context 
     extends ReduceContext<KEYIN,VALUEIN,KEYOUT,VALUEOUT> {
     public Context(Configuration conf, TaskAttemptID taskid,
@@ -176,6 +186,7 @@ public class Reducer<KEYIN,VALUEIN,KEYOUT,VALUEOUT> {
   public void run(Context context) throws IOException, InterruptedException {
     setup(context);
     while (context.nextKey()) {
+      LOG.info("  JB, processing key: " + context.getCurrentKey());
       reduce(context.getCurrentKey(), context.getValues(), context);
     }
     cleanup(context);

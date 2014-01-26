@@ -75,11 +75,13 @@ import org.apache.hadoop.io.SecureIOUtils;
 import org.apache.hadoop.ipc.RPC;
 import org.apache.hadoop.ipc.RemoteException;
 import org.apache.hadoop.ipc.Server;
+import org.apache.hadoop.mapred.buffer.Manager;
 import org.apache.hadoop.mapred.CleanupQueue.PathDeletionContext;
 import org.apache.hadoop.mapred.TaskLog.LogFileDetail;
 import org.apache.hadoop.mapred.TaskLog.LogName;
 import org.apache.hadoop.mapred.TaskStatus.Phase;
 import org.apache.hadoop.mapred.TaskTrackerStatus.TaskTrackerHealthStatus;
+import org.apache.hadoop.mapred.buffer.Manager;
 import org.apache.hadoop.mapred.pipes.Submitter;
 import org.apache.hadoop.mapreduce.TaskType;
 import org.apache.hadoop.mapreduce.security.SecureShuffleUtils;
@@ -265,6 +267,8 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
   private final HttpServer server;
     
   volatile boolean shuttingDown = false;
+
+  Manager bufferController = null;
     
   Map<TaskAttemptID, TaskInProgress> tasks = new HashMap<TaskAttemptID, TaskInProgress>();
   /**
@@ -523,6 +527,14 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
     }
   }
 
+  static String getJobCacheSubdir() {
+    return TaskTracker.SUBDIR + Path.SEPARATOR + TaskTracker.JOBCACHE;
+  }
+
+  static String getLocalJobDir(String jobid) {
+  return getJobCacheSubdir() + Path.SEPARATOR + jobid;
+  }
+
   UserLogManager getUserLogManager() {
     return this.userLogManager;
   }
@@ -766,6 +778,9 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
 
     createInstrumentation();
 
+    this.bufferController = new Manager(this);
+    this.bufferController.open();
+
     // bind address
     String address = 
       NetUtils.getServerAddress(fConf,
@@ -930,9 +945,102 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
   // Object on wait which MapEventsFetcherThread is going to wait.
   private Object waitingOn = new Object();
 
+  private class ReduceEventsFetcherThread extends Thread {
+    Map<JobID, IntWritable> fromEventIds = new HashMap<JobID, IntWritable>();
+
+    private List<FetchStatus> mapsInPipeline() {
+      List <FetchStatus> fList = new ArrayList<FetchStatus>();
+      for (Map.Entry <JobID, RunningJob> item : runningJobs.entrySet()) {
+        RunningJob rjob = item.getValue();
+        JobID jobId = item.getKey();
+        FetchStatus f;
+        synchronized (rjob) {
+          f = rjob.getReduceFetchStatus();
+          for (TaskInProgress tip : rjob.tasks) {
+            Task task = tip.getTask();
+            if (task.isMapTask()) {
+              if (((MapTask)task).getPhase() == TaskStatus.Phase.PIPELINE) {
+                if (rjob.getReduceFetchStatus() == null) {
+                  //this is a new job; we start fetching its reduce events
+                  f = new FetchStatus(jobId, 1);
+                  rjob.setReduceFetchStatus(f);
+                }
+                f = rjob.getReduceFetchStatus();
+                fList.add(f);
+                break; //no need to check any more tasks belonging to this
+              }
+            }
+          }
+        }
+      }
+      //at this point, we have information about for which of
+      //the running jobs do we need to query the jobtracker for map
+      //outputs (actually map events).
+      return fList;
+    }
+
+    @Override
+    public void run() {
+      LOG.info("Starting thread: " + getName());
+
+      while (running) {
+        try {
+          List <FetchStatus> fList = null;
+          //List <FetchStatus> fMapList    = reducesInShuffle();
+          //List <FetchStatus> fReduceList = mapsInPipeline();
+          synchronized (runningJobs) {
+          //  while (((fList = mapsInPipeline()).size()) == 0) {
+            while (((fList = mapsInPipeline()).size()) == 0) {
+              try {
+                runningJobs.wait();
+              } catch (InterruptedException e) {
+                LOG.info("Shutting down: " + getName());
+                return;
+              }
+            }
+          }          // now fetch all the map task events for all the reduce tasks
+          // possibly belonging to different jobs
+          boolean fetchAgain = false; //flag signifying whether we want to fetch
+          //immediately again.
+          for (FetchStatus f : fList) {
+            long currentTime = System.currentTimeMillis();
+            try {
+              //the method below will return true when we have not
+              //fetched all available events yet
+              if (f.fetchCompletionEvents(currentTime, false)) {
+                fetchAgain = true;
+              }
+            } catch (Exception e) {
+              LOG.warn(
+                  "Ignoring exception that fetch for reduce completion" +
+                  " events threw for " + f.jobId + " threw: " +
+                  StringUtils.stringifyException(e));
+            }
+            if (!running) {
+              break;
+            }
+          }
+          synchronized (waitingOn) {
+            try {
+              int waitTime;
+              if (!fetchAgain) {
+                waitingOn.wait(heartbeatInterval);
+              }
+            } catch (InterruptedException ie) {
+              LOG.info("Shutting down: " + getName());
+              return;
+            }
+          }
+        } catch (Exception e) {
+          LOG.info("Ignoring exception "  + e.getMessage());
+        }
+      }
+    }
+  }
+
   private class MapEventsFetcherThread extends Thread {
 
-    private List <FetchStatus> reducesInShuffle() {
+    private List<FetchStatus> reducesInShuffle() {
       List <FetchStatus> fList = new ArrayList<FetchStatus>();
       for (Map.Entry <JobID, RunningJob> item : runningJobs.entrySet()) {
         RunningJob rjob = item.getValue();
@@ -942,19 +1050,19 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
         JobID jobId = item.getKey();
         FetchStatus f;
         synchronized (rjob) {
-          f = rjob.getFetchStatus();
+          f = rjob.getMapFetchStatus();
           for (TaskInProgress tip : rjob.tasks) {
             Task task = tip.getTask();
             if (!task.isMapTask()) {
               if (((ReduceTask)task).getPhase() == 
                   TaskStatus.Phase.SHUFFLE) {
-                if (rjob.getFetchStatus() == null) {
+                if (rjob.getMapFetchStatus() == null) {
                   //this is a new job; we start fetching its map events
                   f = new FetchStatus(jobId, 
                                       ((ReduceTask)task).getNumMaps());
-                  rjob.setFetchStatus(f);
+                  rjob.setMapFetchStatus(f);
                 }
-                f = rjob.getFetchStatus();
+                f = rjob.getMapFetchStatus();
                 fList.add(f);
                 break; //no need to check any more tasks belonging to this
               }
@@ -967,18 +1075,58 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
       //outputs (actually map events).
       return fList;
     }
+    
+    private List<FetchStatus> mapsInPipeline() {
       
+      List <FetchStatus> fList = new ArrayList<FetchStatus>();
+      /*
+      for (Map.Entry <JobID, RunningJob> item : runningJobs.entrySet()) {
+        RunningJob rjob = item.getValue();
+        JobID jobId = item.getKey();
+        FetchStatus f;
+        synchronized (rjob) {
+          f = rjob.getReduceFetchStatus();
+          for (TaskInProgress tip : rjob.tasks) {
+            Task task = tip.getTask();
+            if (task.isMapTask() && task.isPipeline()) {
+                PipelineMapTask pmt = (PipelineMapTask) task;
+                TaskID reduceID = pmt.pipelineReduceTask(rjob.jobConf);
+                if (rjob.getReduceFetchStatus() == null) {
+                  //this is a new job; we start fetching its reduce events
+                  f = new FetchStatus(reduceID.getJobID(), 1);
+                  rjob.setReduceFetchStatus(f);
+                }
+                f = rjob.getReduceFetchStatus();
+                fList.add(f);
+                break; //no need to check any more tasks belonging to this
+            }
+          }
+        }
+      }
+      */
+      //at this point, we have information about for which of
+      //the running jobs do we need to query the jobtracker for map 
+      //outputs (actually map events).
+      return fList;
+    }
+  
     @Override
     public void run() {
       LOG.info("Starting thread: " + this.getName());
         
       while (running) {
         try {
-          List <FetchStatus> fList = null;
+          //List <FetchStatus> fList = null;
+          List <FetchStatus> fMapList    = reducesInShuffle();
+          List <FetchStatus> fReduceList = mapsInPipeline();
+
           synchronized (runningJobs) {
-            while (((fList = reducesInShuffle()).size()) == 0) {
+            //while (((fList = reducesInShuffle()).size()) == 0) {
+            while (fReduceList.size() == 0 && fMapList.size() == 0) {
               try {
                 runningJobs.wait();
+                fMapList    = reducesInShuffle();
+                fReduceList = mapsInPipeline();
               } catch (InterruptedException e) {
                 LOG.info("Shutting down: " + this.getName());
                 return;
@@ -989,12 +1137,12 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
           // possibly belonging to different jobs
           boolean fetchAgain = false; //flag signifying whether we want to fetch
                                       //immediately again.
-          for (FetchStatus f : fList) {
+          for (FetchStatus f : fMapList) {
             long currentTime = System.currentTimeMillis();
             try {
               //the method below will return true when we have not 
               //fetched all available events yet
-              if (f.fetchMapCompletionEvents(currentTime)) {
+              if (f.fetchCompletionEvents(currentTime, true)) {
                 fetchAgain = true;
               }
             } catch (Exception e) {
@@ -1007,6 +1155,26 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
               break;
             }
           }
+
+          for (FetchStatus f : fReduceList) {
+            long currentTime = System.currentTimeMillis();
+            try {
+              //the method below will return true when we have not
+              //fetched all available events yet
+              if (f.fetchCompletionEvents(currentTime, false)) {
+                fetchAgain = true;
+              }
+            } catch (Exception e) {
+              LOG.warn(
+                       "Ignoring exception that fetch for reduce completion" +
+                       " events threw for " + f.jobId + " threw: " +
+                       StringUtils.stringifyException(e));
+            }
+            if (!running) {
+              break;
+            }
+          }
+
           synchronized (waitingOn) {
             try {
               if (!fetchAgain) {
@@ -1028,7 +1196,7 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
     /** The next event ID that we will start querying the JobTracker from*/
     private IntWritable fromEventId;
     /** This is the cache of map events for a given job */ 
-    private List<TaskCompletionEvent> allMapEvents;
+    private List<TaskCompletionEvent> allEvents;
     /** What jobid this fetchstatus object is for*/
     private JobID jobId;
     private long lastFetchTime;
@@ -1037,33 +1205,50 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
     public FetchStatus(JobID jobId, int numMaps) {
       this.fromEventId = new IntWritable(0);
       this.jobId = jobId;
-      this.allMapEvents = new ArrayList<TaskCompletionEvent>(numMaps);
+      this.allEvents = new ArrayList<TaskCompletionEvent>(numMaps);
     }
       
     /**
      * Reset the events obtained so far.
      */
     public void reset() {
-      // Note that the sync is first on fromEventId and then on allMapEvents
+      // Note that the sync is first on fromEventId and then on allEvents
       synchronized (fromEventId) {
-        synchronized (allMapEvents) {
+        synchronized (allEvents) {
           fromEventId.set(0); // set the new index for TCE
-          allMapEvents.clear();
+          allEvents.clear();
+        }
+      }
+    }
+
+    /*
+     * Check if the number of events that are obtained are more than required.
+     * If yes then purge the extra ones.
+     */
+    public void purgeEvents(int lastKnownIndex) {
+      // Note that the sync is first on fromEventId and then on allEvents
+      synchronized (fromEventId) {
+        synchronized (allEvents) {
+          int index = 0;
+          if (allEvents.size() > lastKnownIndex) {
+            fromEventId.set(lastKnownIndex);
+            allEvents = allEvents.subList(0, lastKnownIndex);
+          }
         }
       }
     }
     
-    public TaskCompletionEvent[] getMapEvents(int fromId, int max) {
+    public TaskCompletionEvent[] getEvents(int fromId, int max) {
         
-      TaskCompletionEvent[] mapEvents = 
+      TaskCompletionEvent[] events = 
         TaskCompletionEvent.EMPTY_ARRAY;
       boolean notifyFetcher = false; 
-      synchronized (allMapEvents) {
-        if (allMapEvents.size() > fromId) {
-          int actualMax = Math.min(max, (allMapEvents.size() - fromId));
+      synchronized (allEvents) {
+        if (allEvents.size() > fromId) {
+          int actualMax = Math.min(max, (allEvents.size() - fromId));
           List <TaskCompletionEvent> eventSublist = 
-            allMapEvents.subList(fromId, actualMax + fromId);
-          mapEvents = eventSublist.toArray(mapEvents);
+            allEvents.subList(fromId, actualMax + fromId);
+          events = eventSublist.toArray(events);
         } else {
           // Notify Fetcher thread. 
           notifyFetcher = true;
@@ -1074,20 +1259,25 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
           waitingOn.notify();
         }
       }
-      return mapEvents;
+      return events;
     }
       
-    public boolean fetchMapCompletionEvents(long currTime) throws IOException {
+    public boolean fetchCompletionEvents(long currTime, boolean isMap) throws IOException {
       if (!fetchAgain && (currTime - lastFetchTime) < heartbeatInterval) {
         return false;
       }
       int currFromEventId = 0;
       synchronized (fromEventId) {
         currFromEventId = fromEventId.get();
-        List <TaskCompletionEvent> recentMapEvents = 
+        List <TaskCompletionEvent> recentEvents = 
           queryJobTracker(fromEventId, jobId, jobClient);
-        synchronized (allMapEvents) {
-          allMapEvents.addAll(recentMapEvents);
+        synchronized (allEvents) {
+          //allEvents.addAll(recentMapEvents);
+          for (TaskCompletionEvent e : recentEvents) {
+            if (e.isMap == isMap) {
+              allEvents.add(e);
+            }
+          }
         }
         lastFetchTime = currTime;
         if (fromEventId.get() - currFromEventId >= probe_sample_size) {
@@ -1105,6 +1295,14 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
 
   private static LocalDirAllocator lDirAlloc = 
                               new LocalDirAllocator("mapred.local.dir");
+
+  public JobConf getJobConf(JobID jobid) throws IOException {
+    Path localJobFile =
+              lDirAlloc.getLocalPathToRead(getLocalJobDir(jobid.toString()) +
+                                           Path.SEPARATOR + "job.xml", fConf);
+
+    return new JobConf(localJobFile);
+  }
 
   // intialize the job directory
   RunningJob localizeJob(TaskInProgress tip) 
@@ -1336,6 +1534,7 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
   public synchronized void shutdown() throws IOException, InterruptedException {
     shuttingDown = true;
     close();
+    bufferController.close();
     if (this.server != null) {
       try {
         LOG.info("Shutting down StatusHttpServer");
@@ -1508,7 +1707,7 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
 
     server.setAttribute("shuffleExceptionTracking", shuffleExceptionTracking);
 
-    server.addInternalServlet("mapOutput", "/mapOutput", MapOutputServlet.class);
+    //server.addInternalServlet("mapOutput", "/mapOutput", MapOutputServlet.class);
     server.addServlet("taskLog", "/tasklog", TaskLogServlet.class);
     server.start();
     this.httpPort = server.getPort();
@@ -1575,15 +1774,16 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
                                                                 probe_sample_size);
     //we are interested in map task completion events only. So store
     //only those
-    List <TaskCompletionEvent> recentMapEvents = 
+    List <TaskCompletionEvent> recentEvents = 
       new ArrayList<TaskCompletionEvent>();
     for (int i = 0; i < t.length; i++) {
-      if (t[i].isMap) {
-        recentMapEvents.add(t[i]);
-      }
+      recentEvents.add(t[i]);
+      //if (t[i].isMap) {
+      //  recentMapEvents.add(t[i]);
+      //}
     }
     fromEventId.set(fromEventId.get() + t.length);
-    return recentMapEvents;
+    return recentEvents;
   }
 
   private long getHeartbeatInterval(int numFinishedTasks) {
@@ -1678,7 +1878,7 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
                 rjob = runningJobs.get(job);          
                 if (rjob != null) {
                   synchronized (rjob) {
-                    FetchStatus f = rjob.getFetchStatus();
+                    FetchStatus f = rjob.getMapFetchStatus();
                     if (f != null) {
                       f.reset();
                     }
@@ -2086,6 +2286,7 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
         // Delete the job directory for this  
         // task if the job is done/failed
         if (!rjob.keepJobFiles) {
+          bufferController.free(jobId);
           removeJobFiles(rjob.ugi.getShortUserName(), rjob.getJobID());
         }
         // add job to user log manager
@@ -3211,10 +3412,11 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
      * i.e. &lt;taskid&gt;/work is cleaned up.
      */
     void cleanup(boolean needCleanup) throws IOException {
+      
       TaskAttemptID taskId = task.getTaskID();
       LOG.debug("Cleaning up " + taskId);
 
-
+      if (task.isPipeline()) return;
       synchronized (TaskTracker.this) {
         if (needCleanup) {
           // see if tasks data structure is holding this tip.
@@ -3566,15 +3768,47 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
       rjob = runningJobs.get(jobId);          
       if (rjob != null) {
         synchronized (rjob) {
-          FetchStatus f = rjob.getFetchStatus();
+          FetchStatus f = rjob.getMapFetchStatus();
           if (f != null) {
-            mapEvents = f.getMapEvents(fromEventId, maxLocs);
+            mapEvents = f.getEvents(fromEventId, maxLocs);
           }
         }
       }
     }
     return new MapTaskCompletionEventsUpdate(mapEvents, false);
   }
+
+  public synchronized MapTaskCompletionEventsUpdate getReduceCompletionEvents(
+      JobID jobId, int fromEventId, int maxLocs, TaskAttemptID id,
+      JvmContext jvmContext) throws IOException {
+    TaskInProgress tip = runningTasks.get(id);
+    if (tip == null) {
+      throw new IOException("Unknown task; " + id
+          + ". Ignoring getMapCompletionEvents Request");
+    }
+    validateJVM(tip, jvmContext, id);
+    authorizeJVM(jobId);
+    TaskCompletionEvent[] reduceEvents = TaskCompletionEvent.EMPTY_ARRAY;
+    synchronized (shouldReset) {
+      if (shouldReset.remove(id)) {
+        return new ReduceTaskCompletionEventsUpdate(reduceEvents, true);
+      }
+    }
+    RunningJob rjob;
+    synchronized (runningJobs) {
+      rjob = runningJobs.get(jobId);
+      if (rjob != null) {
+        synchronized (rjob) {
+          FetchStatus f = rjob.getReduceFetchStatus();
+          if (f != null) {
+            reduceEvents = f.getEvents(fromEventId, maxLocs);
+          }
+        }
+      }
+    }
+    return new ReduceTaskCompletionEventsUpdate(reduceEvents, false);
+  }
+
     
   /////////////////////////////////////////////////////
   //  Called by TaskTracker thread after task process ends
@@ -3624,7 +3858,8 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
     boolean localizing;
     boolean keepJobFiles;
     UserGroupInformation ugi;
-    FetchStatus f;
+    FetchStatus mapf;
+    FetchStatus reducef;
     TaskDistributedCacheManager distCacheMgr;
     
     RunningJob(JobID jobid) {
@@ -3643,12 +3878,20 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
       return ugi;
     }
 
-    void setFetchStatus(FetchStatus f) {
-      this.f = f;
+    void setMapFetchStatus(FetchStatus f) {
+      this.mapf = f;
     }
       
-    FetchStatus getFetchStatus() {
-      return f;
+    void setReduceFetchStatus(FetchStatus f) {
+      this.reducef = f;
+    }
+      
+    FetchStatus getMapFetchStatus() {
+      return mapf;
+    }
+
+    FetchStatus getReduceFetchStatus() {
+      return reducef;
     }
 
     JobConf getJobConf() {

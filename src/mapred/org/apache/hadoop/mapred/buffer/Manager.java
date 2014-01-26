@@ -653,6 +653,7 @@ public class Manager implements BufferUmbilicalProtocol {
 	
 	@Override
 	public void request(BufferRequest request) throws IOException {
+    LOG.info("Servicing buffer request: " + request.toString());
 		if (!request.srcHost().equals(hostname)) {
 			requestTransfer.transfer(request); // request is remote.
 		}

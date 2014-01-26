@@ -38,7 +38,7 @@ public abstract class TaskStatus implements Writable, Cloneable {
     LogFactory.getLog(TaskStatus.class.getName());
   
   //enumeration for reporting current phase of a task. 
-  public static enum Phase{STARTING, MAP, SHUFFLE, SORT, REDUCE, CLEANUP}
+  public static enum Phase{STARTING, MAP, SHUFFLE, SORT, REDUCE, CLEANUP, PIPELINE}
 
   // what state is the task in?
   public static enum State {RUNNING, SUCCEEDED, FAILED, UNASSIGNED, KILLED, 

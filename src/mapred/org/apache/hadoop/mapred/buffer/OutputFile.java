@@ -26,6 +26,9 @@ import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeSet;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -352,6 +355,9 @@ public class OutputFile implements Comparable<OutputFile>, Writable {
 	
 	private transient Set<TaskAttemptID> serviced = new HashSet<TaskAttemptID>();
 
+  private static final Log LOG = LogFactory.getLog(OutputFile.class.getName());
+
+
 	public OutputFile() { 	}
 	
 	public OutputFile(TaskAttemptID owner, long sequence, Path data, Path index, int partitions) {
@@ -433,6 +439,7 @@ public class OutputFile implements Comparable<OutputFile>, Writable {
 	}
 	
 	public void delete(FileSystem fs) throws IOException {
+    LOG.info("In OutputFile, attempting to delete file: " + this.data);
 		if (this.data != null && fs.exists(this.data)) {
 			fs.delete(this.data, true);
 		}
@@ -447,10 +454,12 @@ public class OutputFile implements Comparable<OutputFile>, Writable {
 			this.dataIn = fs.open(data());
 			this.indexIn = fs.open(index());
 		}
+    LOG.info("In OutputFile, opening file: " + data());
 	}
 
 	public void close() throws IOException {
 		if (this.dataIn != null) {
+      LOG.info("In OutputFile, closing file: " + data());
 			this.dataIn.close();
 			this.dataIn = null;
 		}
@@ -511,7 +520,4 @@ public class OutputFile implements Comparable<OutputFile>, Writable {
 		WritableUtils.writeString(out, this.data.toString());
 		WritableUtils.writeString(out, this.index.toString());
 	}
-
-
-
 }

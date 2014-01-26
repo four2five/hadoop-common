@@ -119,7 +119,6 @@ extends Buffer<K, V> implements InputCollector<K, V> {
 		boolean inMemory;
 		long compressedSize;
 
-		//public JInput(TaskID taskid, Path file, long compressedLength) {
 		public JInput(TaskAttemptID taskattemptid, Path file, long compressedLength) {
 			this.taskattemptid = taskattemptid;
 
@@ -131,7 +130,6 @@ extends Buffer<K, V> implements InputCollector<K, V> {
 			this.inMemory = false;
 		}
 
-		//public JInput(TaskID taskid, byte[] data, int compressedLength) {
 		public JInput(TaskAttemptID taskattemptid, byte[] data, int compressedLength) {
 			this.taskattemptid = taskattemptid;
 
@@ -282,6 +280,9 @@ extends Buffer<K, V> implements InputCollector<K, V> {
 						// More than "mapred.inmem.merge.threshold" map outputs
 						// have been fetched into memory
 						(maxInMemOutputs <= 0 || numClosed < maxInMemOutputs)) {
+          LOG.info("closed: " + closed + " getPercentUsed() " + getPercentUsed() +
+                   " maxInMemCopyPer " + maxInMemCopyPer + " numClosed " + numClosed + 
+                   " maxInMemOutputs " + maxInMemOutputs);
 					dataAvailable.wait();
 				}
 				done = closed;
@@ -865,7 +866,7 @@ extends Buffer<K, V> implements InputCollector<K, V> {
 	 * first.
 	 */
 	@SuppressWarnings("unchecked")
-	private RawKeyValueIterator 
+	public RawKeyValueIterator 
 	createKVIterator(JobConf job, FileSystem fs, Reporter reporter) throws IOException {
 		
 		final Path tmpDir = new Path(task.getTaskID().toString());

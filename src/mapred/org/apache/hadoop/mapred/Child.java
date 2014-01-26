@@ -22,6 +22,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.PrintStream;
+import java.net.ConnectException;
 import java.net.InetSocketAddress;
 import java.security.PrivilegedExceptionAction;
 import java.util.Arrays;
@@ -32,6 +33,8 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.LocalDirAllocator;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.ipc.RPC;
+import org.apache.hadoop.mapred.buffer.BufferUmbilicalProtocol;
+import org.apache.hadoop.mapred.buffer.Manager;
 import org.apache.hadoop.mapreduce.security.TokenCache;
 import org.apache.hadoop.mapreduce.security.token.JobTokenIdentifier;
 import org.apache.hadoop.mapreduce.security.token.JobTokenSecretManager;
@@ -116,6 +119,31 @@ class Child {
               defaultConf);
         }
     });
+
+    BufferUmbilicalProtocol tempBufUmb = null;
+
+    int attempts = 5;
+    while (tempBufUmb == null) {
+      try {
+        tempBufUmb = (BufferUmbilicalProtocol)RPC.getProxy(BufferUmbilicalProtocol.class,
+            BufferUmbilicalProtocol.versionID,
+            Manager.getServerAddress(defaultConf),
+            defaultConf);
+      } catch (ConnectException e) {
+        if (--attempts > 0) {
+          Thread.sleep(1000);
+        } else {
+          throw e;
+        }
+      }
+    }
+
+    // not sure what to do if tempBufUmb is null here.....
+    final BufferUmbilicalProtocol bufferUmbilical =  tempBufUmb;
+    if (bufferUmbilical == null) { 
+      // freak out ? 
+      LOG.error("bufferUmbilical is null in child.java. Yikes");  
+    }
     
     int numTasksToExecute = -1; //-1 signifies "no limit"
     int numTasksExecuted = 0;
@@ -252,7 +280,7 @@ class Child {
             try {
               // use job-specified working directory
               FileSystem.get(job).setWorkingDirectory(job.getWorkingDirectory());
-              taskFinal.run(job, umbilical);        // run the task
+              taskFinal.run(job, umbilical, bufferUmbilical);        // run the task // -jbuck add the BufferUmb here
             } finally {
               TaskLog.syncLogs
                 (logLocation, taskid, isCleanup, logIsSegmented(job));
