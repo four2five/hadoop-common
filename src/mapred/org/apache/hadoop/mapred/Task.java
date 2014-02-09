@@ -48,8 +48,9 @@ import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.hadoop.io.serializer.Deserializer;
 import org.apache.hadoop.io.serializer.SerializationFactory;
-import org.apache.hadoop.mapred.buffer.BufferUmbilicalProtocol;
-import org.apache.hadoop.mapred.buffer.impl.JSnapshotBuffer;
+//import org.apache.hadoop.mapred.buffer.BufferUmbilicalProtocol;
+import org.apache.hadoop.mapred.buffer.InMemoryBufferUmbilicalProtocol;
+//import org.apache.hadoop.mapred.buffer.impl.JSnapshotBuffer;
 import org.apache.hadoop.mapred.buffer.impl.ValuesIterator;
 import org.apache.hadoop.mapred.IFile.Writer;
 import org.apache.hadoop.mapred.TaskTracker.TaskInProgress;
@@ -496,7 +497,7 @@ abstract public class Task implements Writable, Configurable {
    * child process and is what invokes user-supplied map, reduce, etc. methods.
    * @param umbilical for progress reports
    */
-  public abstract void run(JobConf job, TaskUmbilicalProtocol umbilical, BufferUmbilicalProtocol bufferUmb)
+  public abstract void run(JobConf job, TaskUmbilicalProtocol umbilical, InMemoryBufferUmbilicalProtocol bufferUmb)
       throws IOException, ClassNotFoundException, InterruptedException;
 
   /** Return an approprate thread runner for this task. 

@@ -19,6 +19,7 @@
 package org.apache.hadoop.io;
 
 import java.io.*;
+import java.nio.ByteBuffer;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.util.ReflectionUtils;
@@ -416,4 +417,43 @@ public final class WritableUtils  {
     }
     return out.getData();
   }
+
+
+  // lifted from apache cassandra codebase
+  public static void writeByteBufferWithLength(ByteBuffer bytes, DataOutput out) throws IOException
+  {
+      out.writeInt(bytes.remaining());
+      writeByteBuffer(bytes, out); // writing data bytes to output source
+  }
+
+  public static void writeByteBuffer(ByteBuffer buffer, DataOutput out) throws IOException
+  {
+      if (buffer.hasArray()) {
+          out.write(buffer.array(), buffer.arrayOffset() + buffer.position(), buffer.remaining());
+      } else {
+          for (int i = buffer.position(); i < buffer.limit(); i++)
+          {
+              out.writeByte(buffer.get(i));
+          }
+      }
+  }
+
+
+  public static ByteBuffer readByteBufferWithLength(DataInput in) throws IOException
+  {
+    int length = in.readInt();
+    if (length < 0) {
+      throw new IOException("Corrupt (negative) value length encountered");
+    }
+
+    return readByteBuffer(in, length);
+  }
+
+  private static ByteBuffer readByteBuffer(DataInput in, int length) throws IOException
+  {
+    byte[] buff = new byte[length];
+    in.readFully(buff);
+    return ByteBuffer.wrap(buff);
+  }
+
 }

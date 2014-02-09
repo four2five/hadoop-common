@@ -17,6 +17,8 @@
  */
 package org.apache.hadoop.mapred;
 
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
 import java.io.EOFException;
 import java.io.File;
 import java.io.FileOutputStream;
@@ -24,7 +26,7 @@ import java.io.IOException;
 import java.io.InputStream;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.FSDataInputStream;
+//import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -54,10 +56,12 @@ public class IFile {
    * <code>IFile.Writer</code> to write out intermediate map-outputs. 
    */
   public static class Writer<K extends Object, V extends Object> {
-    FSDataOutputStream out;
+    //FSDataOutputStream out;
+    DataOutputStream out;
     boolean ownOutputStream = false;
     long start = 0;
-    FSDataOutputStream rawOut;
+    //FSDataOutputStream rawOut;
+    DataOutputStream rawOut;
     
     CompressionOutputStream compressedOut;
     Compressor compressor;
@@ -89,14 +93,15 @@ public class IFile {
       ownOutputStream = true;
     }
     
-    public Writer(Configuration conf, FSDataOutputStream out, 
+    public Writer(Configuration conf, DataOutputStream out, 
         Class<K> keyClass, Class<V> valueClass,
         CompressionCodec codec, Counters.Counter writesCounter)
         throws IOException {
       this.writtenRecordsCounter = writesCounter;
       this.checksumOut = new IFileOutputStream(out);
       this.rawOut = out;
-      this.start = this.rawOut.getPos();
+      //this.start = this.rawOut.getPos();
+      this.start = this.rawOut.size();
       
       if (codec != null) {
         this.compressor = CodecPool.getCompressor(codec);
@@ -146,7 +151,8 @@ public class IFile {
         checksumOut.finish();
       }
 
-      compressedBytesWritten = rawOut.getPos() - start;
+      //compressedBytesWritten = rawOut.getPos() - start;
+      compressedBytesWritten = rawOut.size() - start;
 
       if (compressOutput) {
         // Return back the compressor
@@ -326,7 +332,7 @@ public class IFile {
      * @param readsCounter Counter for records read from disk
      * @throws IOException
      */
-    public Reader(Configuration conf, FSDataInputStream in, long length, 
+    public Reader(Configuration conf, DataInputStream in, long length, 
                   CompressionCodec codec,
                   Counters.Counter readsCounter) throws IOException {
       readRecordsCounter = readsCounter;

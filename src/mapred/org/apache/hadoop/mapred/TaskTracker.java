@@ -75,13 +75,13 @@ import org.apache.hadoop.io.SecureIOUtils;
 import org.apache.hadoop.ipc.RPC;
 import org.apache.hadoop.ipc.RemoteException;
 import org.apache.hadoop.ipc.Server;
-import org.apache.hadoop.mapred.buffer.Manager;
 import org.apache.hadoop.mapred.CleanupQueue.PathDeletionContext;
 import org.apache.hadoop.mapred.TaskLog.LogFileDetail;
 import org.apache.hadoop.mapred.TaskLog.LogName;
 import org.apache.hadoop.mapred.TaskStatus.Phase;
 import org.apache.hadoop.mapred.TaskTrackerStatus.TaskTrackerHealthStatus;
-import org.apache.hadoop.mapred.buffer.Manager;
+//import org.apache.hadoop.mapred.buffer.Manager;
+import org.apache.hadoop.mapred.buffer.InMemoryManager;
 import org.apache.hadoop.mapred.pipes.Submitter;
 import org.apache.hadoop.mapreduce.TaskType;
 import org.apache.hadoop.mapreduce.security.SecureShuffleUtils;
@@ -268,7 +268,7 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
     
   volatile boolean shuttingDown = false;
 
-  Manager bufferController = null;
+  InMemoryManager bufferController = null;
     
   Map<TaskAttemptID, TaskInProgress> tasks = new HashMap<TaskAttemptID, TaskInProgress>();
   /**
@@ -778,7 +778,7 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
 
     createInstrumentation();
 
-    this.bufferController = new Manager(this);
+    this.bufferController = new InMemoryManager(this);
     this.bufferController.open();
 
     // bind address

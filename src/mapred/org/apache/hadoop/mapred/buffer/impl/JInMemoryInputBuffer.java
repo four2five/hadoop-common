@@ -1,6 +1,8 @@
 package org.apache.hadoop.mapred.buffer.impl;
 
+import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
+import java.io.DataOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
@@ -52,9 +54,9 @@ import org.apache.hadoop.metrics.Updater;
 import org.apache.hadoop.util.Progress;
 import org.apache.hadoop.util.StringUtils;
 
-public class JInputBuffer<K extends Object, V extends Object>
+public class JInMemoryInputBuffer<K extends Object, V extends Object>
 extends Buffer<K, V> implements InputCollector<K, V> {
-	private static final Log LOG = LogFactory.getLog(JInputBuffer.class.getName());
+	private static final Log LOG = LogFactory.getLog(JInMemoryInputBuffer.class.getName());
 
 	/**
 	 * This class contains the methods that should be used for metrics-reporting
@@ -109,47 +111,35 @@ extends Buffer<K, V> implements InputCollector<K, V> {
 		}
 	}
 
-	/** Describes an input file; could either be on disk or in-memory. */
+	/** Describes an input file; can only be in-memory. */
 	private class JInput {
 		//final TaskID taskid;
 		final TaskAttemptID taskattemptid;
 
-		Path file;
+		//Path file;
 
 		byte[] data;
-		boolean inMemory;
+		//boolean inMemory;
 		long compressedSize;
-
-		public JInput(TaskAttemptID taskattemptid, Path file, long compressedLength) {
-			this.taskattemptid = taskattemptid;
-
-			this.file = file;
-			this.compressedSize = compressedLength;
-
-			this.data = null;
-
-			this.inMemory = false;
-		}
 
 		public JInput(TaskAttemptID taskattemptid, byte[] data, int compressedLength) {
 			this.taskattemptid = taskattemptid;
-
-			this.file = null;
-
 			this.data = data;
 			this.compressedSize = compressedLength;
-
-			this.inMemory = true;
 		}
 
 		public void discard() throws IOException {
+      /*
 			if (inMemory) {
 				data = null;
 			} else {
 				localFileSys.delete(file, true);
 			}
+      */
+			data = null;
 		}
 
+    /*
 		public void replace(Path file) throws IOException {
 			if (inMemory || file == null) {
 				this.file = file;
@@ -159,8 +149,10 @@ extends Buffer<K, V> implements InputCollector<K, V> {
 				localFileSys.rename(file, this.file);
 			}
 		}
+    */
 
 		public FileStatus status() {
+      /*
 			if (inMemory) {
 				return null;
 			}
@@ -171,13 +163,15 @@ extends Buffer<K, V> implements InputCollector<K, V> {
 				e.printStackTrace();
 				return null;
 			}
+      */
+			return null;
 		}
 	}
 
 	class ShuffleRamManager implements RamManager {
 		/* Maximum percentage of the in-memory limit that a single shuffle can 
 		 * consume*/ 
-		private static final float MAX_SINGLE_SHUFFLE_SEGMENT_FRACTION = 0.25f;
+		private static final float MAX_SINGLE_SHUFFLE_SEGMENT_FRACTION = 0.99f;
 
 		/* Maximum percentage of shuffle-threads which can be stalled 
 		 * simultaneously after which a merge is triggered. */ 
@@ -222,12 +216,16 @@ extends Buffer<K, V> implements InputCollector<K, V> {
 			// Wait till the request can be fulfilled...
 			while ((size + requestedSize) > maxSize) {
 
+        LOG.info("In reserve. size: " + size +  
+                 " requestedSize: " + requestedSize +  
+                 " maxSize: " + maxSize);
+
         // Close the input...
         if (in != null) {
           try {
             in.close();
           } catch (IOException ie) {
-            LOG.info("Failed to close connection with: " + ie);
+            LOG.error("Failed to close connection with: " + ie);
           } finally {
             in = null;
           }
@@ -242,6 +240,7 @@ extends Buffer<K, V> implements InputCollector<K, V> {
 				try {
 					wait();
 				} catch (InterruptedException e) {
+          LOG.error("IE in reserve: " + e.toString());
 					return false;
 				} finally {
 					// Track pending requests
@@ -251,13 +250,13 @@ extends Buffer<K, V> implements InputCollector<K, V> {
 				}
 			}
 			size += requestedSize;
-			LOG.debug("JInputBuffer: reserve. size = " + size);
+			LOG.info("JInMemoryInputBuffer: reserve. size = " + size);
 			return (in != null);
 		}
 
 		public synchronized void unreserve(int requestedSize) {
 			size -= requestedSize;
-			LOG.debug("JInputBuffer: unreserve. size = " + size);
+			LOG.debug("JInMemoryInputBuffer: unreserve. size = " + size);
 
 			synchronized (dataAvailable) {
 				fullSize -= requestedSize;
@@ -295,7 +294,7 @@ extends Buffer<K, V> implements InputCollector<K, V> {
 			synchronized (dataAvailable) {
 				fullSize += requestedSize;
 				++numClosed;
-				LOG.debug("JInputBuffer: closeInMemoryFile. percent used = " + getPercentUsed());
+				LOG.debug("JInMemoryInputBuffer: closeInMemoryFile. percent used = " + getPercentUsed());
 				dataAvailable.notify();
 			}
 		}
@@ -317,8 +316,10 @@ extends Buffer<K, V> implements InputCollector<K, V> {
 		}
 
 		boolean canFitInMemory(long requestedSize) {
-			return (requestedSize < Integer.MAX_VALUE && 
+      boolean retVal =  (requestedSize < Integer.MAX_VALUE && 
 					requestedSize < maxSingleShuffleLimit);
+      LOG.info("canFitInMemory: " + retVal);
+      return retVal;
 		}
 	}
 	
@@ -327,9 +328,9 @@ extends Buffer<K, V> implements InputCollector<K, V> {
 	private ShuffleRamManager ramManager;
 
 	/* A reference to the local file system for writing the map outputs to. */
-	private FileSystem localFileSys;
+	//private FileSystem localFileSys;
 	
-	private FileSystem rfs;
+	//private FileSystem rfs;
 
 	/* Number of files to merge at a time */
 	private int ioSortFactor;
@@ -369,6 +370,7 @@ extends Buffer<K, V> implements InputCollector<K, V> {
 	// by the file's size and path. In case of files with same size and different
 	// file paths, the first parameter is considered smaller than the second one.
 	// In case of files with same size and path are considered equal.
+  /*
 	private Comparator<JInput> inputFileComparator = 
 		new Comparator<JInput>() {
 		public int compare(JInput a, JInput b) {
@@ -382,21 +384,22 @@ extends Buffer<K, V> implements InputCollector<K, V> {
 				return 1;
 		}
 	};
+  */
 
 	// A sorted set for keeping a set of map output files on disk
-	private final SortedSet<JInput> inputFilesOnDisk = 
-		new TreeSet<JInput>(inputFileComparator);
+	//private final SortedSet<JInput> inputFilesOnDisk = 
+	//	new TreeSet<JInput>(inputFileComparator);
 
-	private FileHandle outputHandle = null;
+	//private FileHandle outputHandle = null;
 
 
-    private LocalFSMerger localFSMergerThread = null;
+    //private LocalFSMerger localFSMergerThread = null;
     private InMemFSMergeThread inMemFSMergeThread = null;
     
     private boolean open = true;
 
 
-    public JInputBuffer(JobConf conf, Task task, 
+    public JInMemoryInputBuffer(JobConf conf, Task task, 
     		Reporter reporter, Progress progress,
     		Class<K> keyClass, Class<V> valClass, 
     		Class<? extends CompressionCodec> codecClass)
@@ -406,8 +409,8 @@ extends Buffer<K, V> implements InputCollector<K, V> {
     	this.spills = 0;
 
     	this.shuffleClientMetrics = new ShuffleClientMetrics(conf);
-    	this.outputHandle = new FileHandle(task.getJobID());
-    	this.outputHandle.setConf(conf);
+    	//this.outputHandle = new FileHandle(task.getJobID());
+    	//this.outputHandle.setConf(conf);
 
     	this.ioSortFactor = conf.getInt("io.sort.factor", 10);
     	this.maxInMemOutputs = conf.getInt("mapred.inmem.merge.threshold", 1000);
@@ -424,26 +427,28 @@ extends Buffer<K, V> implements InputCollector<K, V> {
     	// Setup the RamManager
     	ramManager = new ShuffleRamManager(conf);
 
-    	this.localFileSys = FileSystem.getLocal(conf);
-    	this.rfs = ((LocalFileSystem)this.localFileSys).getRaw();
+    	//this.localFileSys = FileSystem.getLocal(conf);
+    	//this.rfs = ((LocalFileSystem)this.localFileSys).getRaw();
 
     	//start the on-disk-merge thread
-    	localFSMergerThread = new LocalFSMerger((LocalFileSystem)localFileSys, conf);
-    	localFSMergerThread.start();
+    	//localFSMergerThread = new LocalFSMerger((LocalFileSystem)localFileSys, conf);
+    	//localFSMergerThread.start();
 
     	//start the in memory merger thread
     	inMemFSMergeThread = new InMemFSMergeThread();
     	inMemFSMergeThread.start();
     }
+
+    // TODO --jbuck pick up here
     
 	@Override
 	public void close() {
 		this.open = false;
 		this.ramManager.close();
-		this.localFSMergerThread.interrupt();
+		//this.localFSMergerThread.interrupt();
 		
 		try {
-			this.localFSMergerThread.join();
+			//this.localFSMergerThread.join();
 			this.inMemFSMergeThread.join();
 		} catch (InterruptedException e) {
 			e.printStackTrace();
@@ -462,6 +467,7 @@ extends Buffer<K, V> implements InputCollector<K, V> {
 				e.printStackTrace();
 			}
 		}
+    /*
 		for (JInput dskInput : inputFilesOnDisk) {
 			try {
 				dskInput.discard();
@@ -469,9 +475,10 @@ extends Buffer<K, V> implements InputCollector<K, V> {
 				e.printStackTrace();
 			}
 		}
+    */
 		
 		inputFilesInMemory.clear();
-		inputFilesOnDisk.clear();
+		//inputFilesOnDisk.clear();
 	}
 	
 	public void flush() throws IOException {
@@ -502,10 +509,15 @@ extends Buffer<K, V> implements InputCollector<K, V> {
 			mergeOutputSize = createInMemorySegments(inMemorySegments, leaveBytes);
 		}
 
-		Path outputPath = outputHandle.getInputFileForWrite(task.getTaskID(), taskattemptid.getTaskID(), spills++, mergeOutputSize);
+		//Path outputPath = outputHandle.getInputFileForWrite(task.getTaskID(), taskattemptid.getTaskID(), spills++, mergeOutputSize);
 
-		Writer writer = 
-			new Writer(conf, localFileSys, outputPath,
+    //ByteArrayOutputStream baIndexOut = new ByteArrayOutputStream(partitions * MAP_OUTPUT_INDEX_RECORD_LENGTH);
+    //DataOutputStream indexOut = new DataOutputStream(baIndexOut);
+    ByteArrayOutputStream baOut =  new ByteArrayOutputStream((int)mergeOutputSize);
+    DataOutputStream out = new DataOutputStream(baOut);
+
+		IFile.Writer writer = 
+			new IFile.Writer(conf, out,
 					keyClass, valClass, codec, null);
 
 		RawKeyValueIterator rIter = null;
@@ -515,10 +527,12 @@ extends Buffer<K, V> implements InputCollector<K, V> {
 					segments +
 					" segments... total size = " + mergeOutputSize);
 
-			rIter = Merger.merge(conf, localFileSys,
+
+			rIter = Merger.merge(conf, null,
 					keyClass, valClass,
 					inMemorySegments, inMemorySegments.size(),
-					new Path(task.getTaskID().toString()),
+          null,
+					//new Path(task.getTaskID().toString()),
 					conf.getOutputKeyComparator(), reporter,
 					null, null);
 
@@ -533,36 +547,38 @@ extends Buffer<K, V> implements InputCollector<K, V> {
 			
 			LOG.info(task.getTaskID() + 
 					" Merge of the " + segments +
-					" files in-memory complete." +
-					" Local file is " + outputPath + " of size " + 
-					localFileSys.getFileStatus(outputPath).getLen());
+					" files in-memory complete.");
 			
-			inMemorySegments.clear();
+			//inMemorySegments.clear();
 		} catch (Exception e) { 
 			//make sure that we delete the ondisk file that we created 
 			//earlier when we invoked cloneFileAttributes
-			localFileSys.delete(outputPath, true);
+			//localFileSys.delete(outputPath, true);
 			throw (IOException)new IOException
 			("Intermediate merge failed").initCause(e);
 		}
 
 		// Note the output of the merge
-		FileStatus status = localFileSys.getFileStatus(outputPath);
-		addInputFilesOnDisk(new JInput(taskattemptid, outputPath, status.getLen()));
+		//FileStatus status = localFileSys.getFileStatus(outputPath);
+		//addInputFilesOnDisk(new JInput(taskattemptid, outputPath, status.getLen()));
 
-		LOG.info("FLUSH: Merged " + inMemorySegments.size() + " segments, " +
-				mergeOutputSize + " bytes to disk to satisfy " + "reduce memory limit");
+		LOG.info("FLUSH: Merged " + inMemorySegments.size() + " segments, merged " +
+				mergeOutputSize + " bytes to satisfy reduce memory limit");
 	}
 	
 	@Override
 	public ValuesIterator<K, V> valuesIterator() throws IOException {
-		RawKeyValueIterator kvIter = this.createKVIterator(conf, rfs, reporter);
+		RawKeyValueIterator kvIter = this.createKVIterator(conf, reporter);
 		return new ValuesIterator<K, V>(kvIter, comparator, keyClass, valClass, conf, reporter);
 	}
 	
 	@Override
 	public synchronized boolean read(DataInputStream istream, OutputInMemoryBuffer.Header header)
 	throws IOException {
+    LOG.info("in read()");
+    if (null == istream) { 
+      LOG.error("in read(), istream is NULL. Bad news");
+    }
 		//TaskID taskid = header.owner().getTaskID();
 		TaskAttemptID taskattemptid = header.owner();
 		long compressedLength = header.compressed();
@@ -583,15 +599,24 @@ extends Buffer<K, V> implements InputCollector<K, V> {
 		// Check if this map-output can be saved in-memory
 		boolean shuffleInMemory = ramManager.canFitInMemory(decompressedLength); 
 
+
 		// Shuffle
-		if (shuffleInMemory &&
-			shuffleInMemory(taskattemptid, istream,
-					(int)decompressedLength,
-					(int)compressedLength)) {
-			LOG.info("Shuffeled " + decompressedLength + " bytes (" + 
-					compressedLength + " raw bytes) " + 
-					"into RAM from " + taskattemptid);
+		if (shuffleInMemory ) {  
+      boolean successfulShuffle = shuffleInMemory(taskattemptid, istream,
+					                  (int)decompressedLength,
+					                  (int)compressedLength); 
+      if ( successfulShuffle) { 
+			  LOG.info("Shuffeled " + decompressedLength + " bytes (" + 
+					  compressedLength + " raw bytes) " +  "into RAM from " + taskattemptid);
+      } else  {
+			  LOG.error("Shuffle failed for header " + taskattemptid);
+      }
 		} else {
+      LOG.error("Cannot shuffle " + decompressedLength + " in memory. This is bad.");
+    }
+
+    /*
+    else {
 			LOG.info("Shuffling " + decompressedLength + " bytes (" + 
 					compressedLength + " raw bytes) " + 
 					"into Local-FS from " + taskattemptid);
@@ -601,6 +626,7 @@ extends Buffer<K, V> implements InputCollector<K, V> {
 
 			shuffleToDisk(taskattemptid, istream, filename, compressedLength);
 		}
+    */
 		return true;
 	}
 	
@@ -610,10 +636,15 @@ extends Buffer<K, V> implements InputCollector<K, V> {
 			int decompressedLength,
 			int compressedLength)
 	throws IOException {
+
+    if (null == ins) { 
+      LOG.error("In shuffleInMemory and the passed in ins is null. Bad monkey");
+    }
 		// Reserve ram for the map-output
-		boolean createdNow = ramManager.reserve(decompressedLength, null);
+		boolean createdNow = ramManager.reserve(decompressedLength, ins);
 		
 		if (!createdNow) {
+      LOG.error("Reserve failed, returning false from shuffleInMemory");
 			return false;
 		}
 
@@ -626,7 +657,7 @@ extends Buffer<K, V> implements InputCollector<K, V> {
 			ins = codec.createInputStream(ins, decompressor);
 		}
 
-		LOG.debug("JBufferInput: copy compressed " + compressedLength + 
+		LOG.info("JInMemoryInputBuffer input: copy compressed " + compressedLength + 
 				" (decompressed " + decompressedLength + ") bytes from map " + taskattemptid);
 		// Copy map-output into an in-memory buffer
 		byte[] shuffleData = new byte[decompressedLength];
@@ -644,7 +675,7 @@ extends Buffer<K, V> implements InputCollector<K, V> {
 				n = ins.read(shuffleData, bytesRead, shuffleData.length-bytesRead);
 			}
 
-			LOG.debug("Read " + bytesRead + " bytes from map-output for " + taskattemptid);
+			LOG.info("Read " + bytesRead + " bytes from map-output for " + taskattemptid);
 		} catch (IOException ioe) {
 			LOG.info("Failed to shuffle from " + taskattemptid, 
 					ioe);
@@ -668,6 +699,7 @@ extends Buffer<K, V> implements InputCollector<K, V> {
 			// Re-throw
 			throw ioe;
 		} catch (Throwable t) {
+      LOG.info("Caught a throwable, returning false from shuffleInMemory()");
 			t.printStackTrace();
 			LOG.error(t);
 			input = null;
@@ -704,11 +736,14 @@ extends Buffer<K, V> implements InputCollector<K, V> {
 			synchronized (inputFilesInMemory) {
 				inputFilesInMemory.add(input);
 			}
+      LOG.info("Returning true from shuffleInMemory()");
 			return true;
 		}
+    LOG.info("Returning false from shuffleInMemory()");
 		return false;
-	}
+	} // shuffleInMemory
 
+  /*
 	private void shuffleToDisk(
 			//TaskID taskid,
 			TaskAttemptID taskattemptid,
@@ -781,6 +816,7 @@ extends Buffer<K, V> implements InputCollector<K, V> {
 
 		if (input != null) addInputFilesOnDisk(input);
 	}
+  */
 
 	private void configureClasspath(JobConf conf)
 	throws IOException {
@@ -844,9 +880,11 @@ extends Buffer<K, V> implements InputCollector<K, V> {
 
 	private Path[] getFiles(FileSystem fs)  throws IOException {
 		List<Path> fileList = new ArrayList<Path>();
+    /*
 		for (JInput input : inputFilesOnDisk) {
 			fileList.add(input.file);
 		}
+    */
 		return fileList.toArray(new Path[0]);
 	}
 
@@ -868,26 +906,32 @@ extends Buffer<K, V> implements InputCollector<K, V> {
 	 */
 	@SuppressWarnings("unchecked")
 	public RawKeyValueIterator 
-	createKVIterator(JobConf job, FileSystem fs, Reporter reporter) throws IOException {
+	//createKVIterator(JobConf job, FileSystem fs, Reporter reporter) throws IOException {
+	createKVIterator(JobConf job, Reporter reporter) throws IOException {
 		
-		final Path tmpDir = new Path(task.getTaskID().toString());
+		//final Path tmpDir = new Path(task.getTaskID().toString());
 		TaskAttemptID taskattemptid = null;
 		
+    /*
 		if (!open && inputFilesInMemory.size() > 0) {
 			flush(maxInMemMerge);
-		}
-		else if (open) {
+		} else 
+    */
+    if (open) {
 			if (inputFilesInMemory.size() > 0) {
 				taskattemptid = inputFilesInMemory.get(0).taskattemptid;
-			} else if (inputFilesOnDisk.size() > 0) {
+			} 
+      /*else if (inputFilesOnDisk.size() > 0) {
 				taskattemptid = inputFilesOnDisk.first().taskattemptid;
 			}
+      */
 		}
 		
 		
 		// Get all segments on disk
-		List<Segment<K,V>> diskSegments = new ArrayList<Segment<K,V>>();
+		//List<Segment<K,V>> diskSegments = new ArrayList<Segment<K,V>>();
 		long onDiskBytes = 0;
+    /*
 		synchronized (inputFilesOnDisk) {
 			Path[] onDisk = getFiles(fs);
 			for (Path file : onDisk) {
@@ -896,7 +940,6 @@ extends Buffer<K, V> implements InputCollector<K, V> {
 			}
 			inputFilesOnDisk.clear();
 		}
-		
 		LOG.info("Merging " + diskSegments.size() + " files, " +
 				onDiskBytes + " bytes from disk");
 		Collections.sort(diskSegments, new Comparator<Segment<K,V>>() {
@@ -907,6 +950,7 @@ extends Buffer<K, V> implements InputCollector<K, V> {
 				return o1.getLength() < o2.getLength() ? -1 : 1;
 			}
 		});
+    */
 
 		// Get all in-memory segments
 		List<Segment<K,V>> finalSegments = new ArrayList<Segment<K,V>>();
@@ -916,6 +960,7 @@ extends Buffer<K, V> implements InputCollector<K, V> {
 		RawKeyValueIterator riter = null;
 		
 		// Create and return a merger
+/*
 		if (0 != onDiskBytes) {
 			// build final list of segments from merged backed by disk + in-mem
 			final int numInMemSegments = finalSegments.size();
@@ -927,18 +972,19 @@ extends Buffer<K, V> implements InputCollector<K, V> {
 					job, fs, keyClass, valClass, codec, finalSegments,
 					ioSortFactor, numInMemSegments, tmpDir, comparator,
 					reporter, false, null, null);
-		}
-		else {
-			// All that remains is in-memory segments
-			LOG.info("Merging " + finalSegments.size() + " segments, " +
-					inMemBytes + " bytes from memory");
-			riter = Merger.merge(job, fs, keyClass, valClass,
-					finalSegments, finalSegments.size(), tmpDir,
-					comparator, reporter, null, null);
-		}
+		} else {
+*/
+ 	  // All that remains is in-memory segments // TODO -jbuck make sure that this works with no file system passed in
+		LOG.info("Merging " + finalSegments.size() + " segments, " +
+				inMemBytes + " bytes from memory");
+		riter = Merger.merge(job, null, keyClass, valClass,
+		 	  finalSegments, finalSegments.size(), null,
+				comparator, reporter, null, null);
+		//}
 		
 		if (open && taskattemptid != null) {
-			return new RawKVIteratorWriter(riter, taskattemptid, inMemBytes + onDiskBytes);
+			//return new RawKVIteratorWriter(riter, taskattemptid, inMemBytes + onDiskBytes);
+			return new RawKVIteratorWriter(riter, taskattemptid, inMemBytes);
 		}
 		return riter;
 	}
@@ -959,7 +1005,9 @@ extends Buffer<K, V> implements InputCollector<K, V> {
 		
 		private IFile.Writer<K, V> writer;
 		
-		private Path outputPath;
+		//private Path outputPath;
+    ByteArrayOutputStream baOut;
+    DataOutputStream out;
 		
 		//private TaskID taskid;
 		private TaskAttemptID taskattemptid;
@@ -969,9 +1017,12 @@ extends Buffer<K, V> implements InputCollector<K, V> {
                                long bytes) throws IOException {
 			this.riter = riter;
 			this.taskattemptid = taskattemptid;
-			this.outputPath = outputHandle.getInputFileForWrite(task.getTaskID(), taskattemptid.getTaskID(), 
-                                                          spills++, bytes);
-			this.writer = new IFile.Writer(conf, localFileSys, outputPath,
+			//this.outputPath = outputHandle.getInputFileForWrite(task.getTaskID(), taskattemptid.getTaskID(), 
+      //                                                    spills++, bytes);
+      this.baOut =  new ByteArrayOutputStream((int)bytes);
+      this.out = new DataOutputStream(baOut);
+
+			this.writer = new IFile.Writer(conf, out, 
 					                       keyClass, valClass, codec, null);;
 		}
 
@@ -979,9 +1030,17 @@ extends Buffer<K, V> implements InputCollector<K, V> {
 		public void close() throws IOException {
 			writer.close();
 			
+      // TODO --jbuck here
 			// Register the output of the merge iterator
-			FileStatus status = localFileSys.getFileStatus(outputPath);
-			addInputFilesOnDisk(new JInput(taskattemptid, outputPath, status.getLen()));
+      byte[] outputBytes = this.baOut.toByteArray();
+      if (outputBytes.length > 0) { 
+			  synchronized (inputFilesInMemory) {
+		      JInput input = new JInput(this.taskattemptid, outputBytes, outputBytes.length);
+				  inputFilesInMemory.add(input);
+			  }
+      } else { 
+        LOG.info("I would have added a JInput, but there was zero data");
+      }
 		}
 
 		@Override
@@ -1051,6 +1110,7 @@ extends Buffer<K, V> implements InputCollector<K, V> {
 	}
 	*/
 
+  /*
 	private void addInputFilesOnDisk(JInput input) throws IOException {
 		synchronized (inputFilesOnDisk) {
 			inputFilesOnDisk.add(input);
@@ -1058,6 +1118,7 @@ extends Buffer<K, V> implements InputCollector<K, V> {
 			LOG.info("Total input files on disk " + inputFilesOnDisk.size());
 		}
 	}
+  */
 
 
 
@@ -1065,6 +1126,7 @@ extends Buffer<K, V> implements InputCollector<K, V> {
 	 * most of the reducer's input is sorted i.e overlapping shuffle
 	 * and merge phases.
 	 */
+   /*
 	private class LocalFSMerger extends Thread {
 		private LocalFileSystem localFileSys;
 		private LocalDirAllocator lDirAlloc;
@@ -1135,8 +1197,8 @@ extends Buffer<K, V> implements InputCollector<K, V> {
 					}
 
 					// add the checksum length
-					approxOutputSize += 
-						ChecksumFileSystem.getChecksumLength(approxOutputSize, bytesPerSum);
+					//approxOutputSize += 
+					//	ChecksumFileSystem.getChecksumLength(approxOutputSize, bytesPerSum);
 
 					// 2. Start the on-disk merge process
 					Path outputPath = 
@@ -1175,6 +1237,7 @@ extends Buffer<K, V> implements InputCollector<K, V> {
 							approxOutputSize + "." + 
 							" Local output file is " + last.file + " of size " +
 							localFileSys.getFileStatus(last.file).getLen());
+          
 				}
 			} catch (Exception e) {
 				LOG.warn(task.getTaskID()
@@ -1191,6 +1254,7 @@ extends Buffer<K, V> implements InputCollector<K, V> {
 			}
 		}
 	}
+  */
 
 	private class InMemFSMergeThread extends Thread {
 

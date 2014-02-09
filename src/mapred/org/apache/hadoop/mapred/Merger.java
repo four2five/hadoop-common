@@ -415,6 +415,7 @@ public class Merger {
       int origFactor = factor;
       int passNo = 1;
       do {
+        LOG.info("in merge, inMem: " + inMem + " non-Mem " + (numSegments - inMem));
         //get the factor for this pass of merge. We assume in-memory segments
         //are the first entries in the segment list and that the pass factor
         //doesn't apply to them

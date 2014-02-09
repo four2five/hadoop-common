@@ -5,5 +5,5 @@ public interface BufferExchange {
 	
 	public static enum Transfer{READY, IGNORE, SUCCESS, RETRY, TERMINATE};
 	
-	public static enum BufferType{FILE, SNAPSHOT, STREAM};
+	public static enum BufferType{FILE, SNAPSHOT, STREAM, INMEMORY};
 }

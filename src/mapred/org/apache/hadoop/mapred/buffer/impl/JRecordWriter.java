@@ -9,8 +9,10 @@ import org.apache.hadoop.io.compress.CompressionCodec;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.Task;
-import org.apache.hadoop.mapred.buffer.BufferUmbilicalProtocol;
-import org.apache.hadoop.mapred.buffer.OutputFile;
+//import org.apache.hadoop.mapred.buffer.BufferUmbilicalProtocol;
+import org.apache.hadoop.mapred.buffer.InMemoryBufferUmbilicalProtocol;
+//import org.apache.hadoop.mapred.buffer.OutputFile;
+import org.apache.hadoop.mapred.buffer.OutputInMemoryBuffer;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.hadoop.util.Progress;
 import org.apache.hadoop.util.ReflectionUtils;
@@ -20,18 +22,18 @@ public class JRecordWriter<K, V>
 
 
   private static final Log LOG = LogFactory.getLog(JRecordWriter.class);
-  private JOutputBuffer buffer;
+  private JInMemOutputBuffer buffer;
   private org.apache.hadoop.mapreduce.Partitioner<K,V> partitioner;
   int partitions;
 
 
   public JRecordWriter(org.apache.hadoop.mapreduce.JobContext jobContext,
-                       BufferUmbilicalProtocol umbilical, Task task, JobConf job,
+                       InMemoryBufferUmbilicalProtocol umbilical, Task task, JobConf job,
           Reporter reporter, Progress progress, boolean pipeline,
              Class<K> keyClass, Class<V> valClass,
              Class<? extends CompressionCodec> codecClass) throws IOException {
 
-    this.buffer = new JOutputBuffer(umbilical, task, job, reporter, progress, 
+    this.buffer = new JInMemOutputBuffer(umbilical, task, job, reporter, progress, 
                                     pipeline, keyClass, valClass, codecClass);
     this.partitions = jobContext.getNumReduceTasks();
     try { 
@@ -55,10 +57,10 @@ public class JRecordWriter<K, V>
     this.buffer.close(); // should we be calling flush() here ? TODO --jbuck
   }
 
-  public OutputFile oldClose(TaskAttemptContext context) throws IOException, InterruptedException { 
-    OutputFile retFile = this.buffer.oldClose();
+  public OutputInMemoryBuffer oldClose(TaskAttemptContext context) throws IOException, InterruptedException { 
+    OutputInMemoryBuffer buffer = this.buffer.oldClose();
     close(context);
-    return retFile;
+    return buffer;
   }
 
   public synchronized void free() { 

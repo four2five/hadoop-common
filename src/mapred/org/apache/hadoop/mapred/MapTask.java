@@ -63,13 +63,16 @@ import org.apache.hadoop.mapred.IFile.Writer;
 import org.apache.hadoop.mapred.Merger.Segment;
 import org.apache.hadoop.mapred.SortedRanges.SkipRangeIterator;
 import org.apache.hadoop.mapred.FileInputFormat;
-import org.apache.hadoop.mapred.buffer.BufferUmbilicalProtocol;
-import org.apache.hadoop.mapred.buffer.OutputFile;
+//import org.apache.hadoop.mapred.buffer.BufferUmbilicalProtocol;
+import org.apache.hadoop.mapred.buffer.InMemoryBufferUmbilicalProtocol;
+//import org.apache.hadoop.mapred.buffer.OutputFile;
+import org.apache.hadoop.mapred.buffer.OutputInMemoryBuffer;
 import org.apache.hadoop.mapred.buffer.impl.Buffer;
-import org.apache.hadoop.mapred.buffer.impl.JOutputBuffer;
+//import org.apache.hadoop.mapred.buffer.impl.JOutputBuffer;
+import org.apache.hadoop.mapred.buffer.impl.JInMemOutputBuffer;
 import org.apache.hadoop.mapred.buffer.impl.JRecordWriter;
 import org.apache.hadoop.mapred.buffer.net.BufferRequest;
-import org.apache.hadoop.mapred.buffer.net.BufferExchangeSink;
+import org.apache.hadoop.mapred.buffer.net.InMemoryBufferExchangeSink;
 import org.apache.hadoop.mapreduce.split.JobSplit;
 import org.apache.hadoop.mapreduce.split.JobSplit.SplitMetaInfo;
 import org.apache.hadoop.mapreduce.split.JobSplit.TaskSplitIndex;
@@ -353,7 +356,7 @@ public class MapTask extends Task {
 
   @Override
   public void run(final JobConf job, final TaskUmbilicalProtocol umbilical, 
-                  final BufferUmbilicalProtocol bufferUmbilical) 
+                  final InMemoryBufferUmbilicalProtocol bufferUmbilical) 
     throws IOException, ClassNotFoundException, InterruptedException {
     this.umbilical = umbilical;
 
@@ -452,7 +455,7 @@ public class MapTask extends Task {
   void runOldMapper(final JobConf job,
                     final TaskSplitIndex splitIndex,
                     final TaskUmbilicalProtocol umbilical,
-                    final BufferUmbilicalProtocol bufferUmbilical,
+                    final InMemoryBufferUmbilicalProtocol bufferUmbilical,
                     TaskReporter reporter
                     ) throws IOException, InterruptedException,
                              ClassNotFoundException {
@@ -488,9 +491,11 @@ public class MapTask extends Task {
       if (conf.getCompressMapOutput()) {
         codecClass = conf.getMapOutputCompressorClass(DefaultCodec.class);
       }
-      JOutputBuffer buffer = new JOutputBuffer(bufferUmbilical, this, job,
+      JInMemOutputBuffer buffer = new JInMemOutputBuffer(bufferUmbilical, this, job,
           reporter, getProgress(), pipeline,
           keyClass, valClass, codecClass);
+      //JInMemOutputBuffer buffer = new JInMemOutputBuffer(job, this, reporter, getProgress(), 
+      //                                keyClass, valClass, codecClass);
       collector = buffer;
 
     } else { 
@@ -530,11 +535,11 @@ public class MapTask extends Task {
 
     try {
       runner.run(in, new OldOutputCollector(collector, conf), reporter);
-      LOG.info("Map task complete. Perform final close.");
+      LOG.info("Map task complete. Perform final close. (oldMapper)");
 
-      if (collector instanceof JOutputBuffer) {
-        JOutputBuffer buffer = (JOutputBuffer) collector;
-        OutputFile finalOut = buffer.oldClose();
+      if (collector instanceof JInMemOutputBuffer) {
+        JInMemOutputBuffer buffer = (JInMemOutputBuffer) collector;
+        OutputInMemoryBuffer finalOut = buffer.oldClose();
         buffer.free();
         if (finalOut != null) {
           LOG.debug("Register final output");
@@ -840,7 +845,7 @@ public class MapTask extends Task {
   void runNewMapper(final JobConf job,
                     final TaskSplitIndex splitIndex,
                     final TaskUmbilicalProtocol umbilical,
-                    final BufferUmbilicalProtocol bufferUmbilical,
+                    final InMemoryBufferUmbilicalProtocol bufferUmbilical,
                     TaskReporter reporter
                     ) throws IOException, ClassNotFoundException,
                              InterruptedException {
@@ -916,12 +921,13 @@ public class MapTask extends Task {
       input.initialize(split, mapperContext);
       mapper.run(mapperContext);
       getProgress().complete();
-      LOG.info("Map task complete. Perform final close.");
+      LOG.info("Map task complete. Perform final close. (newMapper)");
 
       //output.close(mapperContext);
       if (output instanceof JRecordWriter) {
+        LOG.info("Doing a close in a JRecordWriter");
         JRecordWriter jRecordWriter = (JRecordWriter) output;
-        OutputFile finalOut = jRecordWriter.oldClose(mapperContext);
+        OutputInMemoryBuffer finalOut = jRecordWriter.oldClose(mapperContext);
         jRecordWriter.free();
         if (finalOut != null) {
           LOG.info("Register final output");
@@ -931,6 +937,7 @@ public class MapTask extends Task {
         }
       }
       else {
+        LOG.info("Doing a close in a non-JRecordWriter");
         output.close(mapperContext);
       }
 

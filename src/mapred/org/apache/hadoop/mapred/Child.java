@@ -33,7 +33,7 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.LocalDirAllocator;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.ipc.RPC;
-import org.apache.hadoop.mapred.buffer.BufferUmbilicalProtocol;
+import org.apache.hadoop.mapred.buffer.InMemoryBufferUmbilicalProtocol;
 import org.apache.hadoop.mapred.buffer.Manager;
 import org.apache.hadoop.mapreduce.security.TokenCache;
 import org.apache.hadoop.mapreduce.security.token.JobTokenIdentifier;
@@ -120,13 +120,13 @@ class Child {
         }
     });
 
-    BufferUmbilicalProtocol tempBufUmb = null;
+    InMemoryBufferUmbilicalProtocol tempBufUmb = null;
 
     int attempts = 5;
     while (tempBufUmb == null) {
       try {
-        tempBufUmb = (BufferUmbilicalProtocol)RPC.getProxy(BufferUmbilicalProtocol.class,
-            BufferUmbilicalProtocol.versionID,
+        tempBufUmb = (InMemoryBufferUmbilicalProtocol)RPC.getProxy(InMemoryBufferUmbilicalProtocol.class,
+            InMemoryBufferUmbilicalProtocol.versionID,
             Manager.getServerAddress(defaultConf),
             defaultConf);
       } catch (ConnectException e) {
@@ -139,7 +139,7 @@ class Child {
     }
 
     // not sure what to do if tempBufUmb is null here.....
-    final BufferUmbilicalProtocol bufferUmbilical =  tempBufUmb;
+    final InMemoryBufferUmbilicalProtocol bufferUmbilical =  tempBufUmb;
     if (bufferUmbilical == null) { 
       // freak out ? 
       LOG.error("bufferUmbilical is null in child.java. Yikes");  
