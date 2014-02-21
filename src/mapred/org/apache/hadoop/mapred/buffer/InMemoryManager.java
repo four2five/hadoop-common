@@ -201,6 +201,7 @@ public class InMemoryManager implements InMemoryBufferUmbilicalProtocol {
 	 * @author tcondie
 	 */
 	private class BufferManager implements Runnable {
+
 		/* Am I active and busy? */
 		private boolean open;
 		private boolean busy;
@@ -227,6 +228,7 @@ public class InMemoryManager implements InMemoryBufferUmbilicalProtocol {
 			this.open = true;
 			this.busy = false;
 			this.somethingToSend = false;
+      LOG.info("Creating a BufferManager for task " + this.taskid);
 		}
 
 		@Override
@@ -330,6 +332,7 @@ public class InMemoryManager implements InMemoryBufferUmbilicalProtocol {
 		 */
 		private void add(InMemoryBufferExchangeSource source) throws IOException {
 			synchronized (this) {
+        LOG.info("Adding source " + source + " to manager for " + this.taskid);
 				this.sources.add(source);
 				somethingToSend = true;
 				this.notifyAll();
@@ -344,6 +347,7 @@ public class InMemoryManager implements InMemoryBufferUmbilicalProtocol {
 		 */
 		private void add(OutputInMemoryBuffer buffer) throws IOException {
 			synchronized (this) {
+        LOG.info("Adding buffer " + buffer + " to manager for " + this.taskid);
 				this.outputs.add(buffer);
 				somethingToSend = true;
 				this.notifyAll();
@@ -524,8 +528,7 @@ public class InMemoryManager implements InMemoryBufferUmbilicalProtocol {
 							BufferRequest request = BufferRequest.read(in);
 							if (request instanceof ReduceBufferRequest) {
 								add((ReduceBufferRequest) request);
-							}
-							else if (request instanceof MapBufferRequest) {
+							} else if (request instanceof MapBufferRequest) {
 								add((MapBufferRequest) request);
 							}
 						}
@@ -661,7 +664,9 @@ public class InMemoryManager implements InMemoryBufferUmbilicalProtocol {
 		if (buffer != null) {
       LOG.info("just received buffer: " + buffer.header().owner().toString() + 
                " eof: " + buffer.header().eof() + 
-               " progress " + buffer.header().progress());
+               " progress " + buffer.header().progress() + 
+               " data size " + buffer.data().capacity() + 
+               " index size " + buffer.index().capacity());
 			this.queue.add(buffer);
 		} else { 
       LOG.info("Just received a null Buffer. That's not good");
@@ -691,12 +696,13 @@ public class InMemoryManager implements InMemoryBufferUmbilicalProtocol {
 		TaskAttemptID taskid = buffer.header().owner();
 		JobID jobid = taskid.getJobID();
 		if (!bufferManagers.containsKey(jobid)) {
+			LOG.info("Creating entry in bufferManagers for job " + jobid);
 			bufferManagers.put(jobid, new ConcurrentHashMap<TaskAttemptID, BufferManager>());
 		}
 		
 		Map<TaskAttemptID, BufferManager> bufferManager = bufferManagers.get(jobid);
 		if (!bufferManager.containsKey(taskid)) {
-			LOG.debug("Create new BufferManager for task " + taskid);
+			LOG.info("Create new BufferManager for task " + taskid);
 			synchronized (this) {
 				BufferManager bm = new BufferManager(taskid);
 				bufferManager.put(taskid, bm);
@@ -738,10 +744,11 @@ public class InMemoryManager implements InMemoryBufferUmbilicalProtocol {
 		//JobConf job = tracker.getJobConf(jobid);
 		InMemoryBufferExchangeSource source = InMemoryBufferExchangeSource.factory(job, request);
 		if (!this.mapSources.containsKey(jobid)) {
+      LOG.info("Adding first map source for job " + jobid);
 			this.mapSources.put(jobid, new HashSet<InMemoryBufferExchangeSource>());
 			this.mapSources.get(jobid).add(source);
-		}
-		else if (!this.mapSources.get(jobid).contains(source)) {
+		} else if (!this.mapSources.get(jobid).contains(source)) {
+      LOG.info("Adding map source for job " + jobid);
 			this.mapSources.get(jobid).add(source);
 		}
 		else {
@@ -751,6 +758,7 @@ public class InMemoryManager implements InMemoryBufferUmbilicalProtocol {
 
 		if (source != null) {
 			if (this.bufferManagers.containsKey(jobid)) {
+			  LOG.info("Adding source " + source + " for all BufferManagers for job " + jobid);
 				for (BufferManager bm : this.bufferManagers.get(jobid).values()) {
 					bm.add(source);
 				}
@@ -759,7 +767,7 @@ public class InMemoryManager implements InMemoryBufferUmbilicalProtocol {
 	}
 
 	private void register(ReduceBufferRequest request) throws IOException {
-		LOG.debug("BufferController register reduce request " + request);
+		LOG.info("BufferController register reduce request " + request);
 
 		TaskID taskid = request.reduceTaskId();
 		JobConf job = tracker.getJobConf("buck", taskid.getJobID());
@@ -793,6 +801,7 @@ public class InMemoryManager implements InMemoryBufferUmbilicalProtocol {
 		JobID jobid = bm.taskid.getJobID();
 		if (bm.taskid.isMap()) {
 			if (this.mapSources.containsKey(jobid)) {
+        LOG.info("register() adding buffermanager for maps for job " + jobid);
 				for (InMemoryBufferExchangeSource source : this.mapSources.get(jobid)) {
 					bm.add(source);
 				}
@@ -800,6 +809,7 @@ public class InMemoryManager implements InMemoryBufferUmbilicalProtocol {
 		}
 		else {
 			TaskID taskid = bm.taskid.getTaskID();
+      LOG.info("register() adding buffermanager for reduces for job " + jobid);
 			if (this.reduceSources.containsKey(taskid)) {
 				for (InMemoryBufferExchangeSource source : this.reduceSources.get(taskid)) {
 					bm.add(source);

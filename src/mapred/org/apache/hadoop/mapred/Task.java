@@ -167,7 +167,8 @@ abstract public class Task implements Writable, Configurable {
 
   protected JobConf conf;
   //protected MapOutputFile mapOutputFile = new MapOutputFile();
-  protected FileHandle mapOutputFile = new FileHandle();
+  //protected FileHandle mapOutputFile = new FileHandle();
+  protected long taskBytesWritten = (long)-1;
   protected LocalDirAllocator lDirAlloc;
   private final static int MAX_RETRIES = 10;
   protected JobContext jobContext;
@@ -1008,7 +1009,7 @@ abstract public class Task implements Writable, Configurable {
    */
   private void sendLastUpdate(TaskUmbilicalProtocol umbilical) 
   throws IOException {
-    //taskStatus.setOutputSize(calculateOutputSize());
+    taskStatus.setOutputSize(calculateOutputSize());
     // send a final status report
     taskStatus.statusUpdate(taskProgress.get(),
                             taskProgress.toString(), 
@@ -1021,24 +1022,24 @@ abstract public class Task implements Writable, Configurable {
    * 
    * @return -1 if it can't be found.
    */
-/*
    private long calculateOutputSize() throws IOException {
     if (!isMapOrReduce()) {
       return -1;
     }
 
     if (isMapTask() && conf.getNumReduceTasks() > 0) {
-      try {
-        Path mapOutput =  mapOutputFile.getOutputFile();
-        FileSystem localFS = FileSystem.getLocal(conf);
-        return localFS.getFileStatus(mapOutput).getLen();
-      } catch (IOException e) {
-        LOG.warn ("Could not find output size " , e);
-      }
+      //try {
+        //Path mapOutput =  mapOutputFile.getOutputFile();
+        //FileSystem localFS = FileSystem.getLocal(conf);
+        //return localFS.getFileStatus(mapOutput).getLen();
+      //} catch (IOException e) {
+      //  LOG.warn ("Could not find output size " , e);
+      //}
+
+      return taskBytesWritten;
     }
     return -1;
   }
-  */
 
   private void sendDone(TaskUmbilicalProtocol umbilical) throws IOException {
     int retries = MAX_RETRIES;
@@ -1206,7 +1207,7 @@ abstract public class Task implements Writable, Configurable {
     } else {
       this.conf = new JobConf(conf);
     }
-    this.mapOutputFile.setConf(this.conf);
+    //this.mapOutputFile.setConf(this.conf);
     this.lDirAlloc = new LocalDirAllocator("mapred.local.dir");
     // add the static resolutions (this is required for the junit to
     // work on testcases that simulate multiple nodes on a single physical

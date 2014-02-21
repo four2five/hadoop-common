@@ -80,7 +80,7 @@ public class ByteBufferInputStream extends InputStream {
   /** Returns the next non-empty buffer.
    * @throws EOFException if EOF is reached before reading all the bytes.
    */
-  private ByteBuffer getBuffer() throws IOException {
+  public ByteBuffer getBuffer() throws IOException {
     /*
     while (current < buffers.size()) {
       ByteBuffer buffer = buffers.get(current);

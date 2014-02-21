@@ -542,8 +542,11 @@ public class MapTask extends Task {
         OutputInMemoryBuffer finalOut = buffer.oldClose();
         buffer.free();
         if (finalOut != null) {
-          LOG.debug("Register final output");
+          LOG.info("Register final output, size: " + finalOut.header().compressed() + 
+                   " / " + finalOut.header().decompressed());
           bufferUmbilical.output(finalOut);
+        } else { 
+          LOG.info("Final output is null, ignoring it");
         }
       } else {
         ((DirectMapOutputCollector)collector).flush();
@@ -930,13 +933,14 @@ public class MapTask extends Task {
         OutputInMemoryBuffer finalOut = jRecordWriter.oldClose(mapperContext);
         jRecordWriter.free();
         if (finalOut != null) {
+          LOG.info("Updating task.java() taskBytesWriten to " + finalOut.data().capacity());
+          super.taskBytesWritten = finalOut.data().capacity();
           LOG.info("Register final output");
           bufferUmbilical.output(finalOut);
         } else { 
           LOG.info("Not registering final output");
         }
-      }
-      else {
+      } else {
         LOG.info("Doing a close in a non-JRecordWriter");
         output.close(mapperContext);
       }

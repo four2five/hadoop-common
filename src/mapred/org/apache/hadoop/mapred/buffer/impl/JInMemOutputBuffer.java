@@ -18,12 +18,13 @@
 
 package org.apache.hadoop.mapred.buffer.impl;
 
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
-//import java.nio.ByteBuffer;
+import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.ArrayList;
 import java.util.List;
@@ -66,39 +67,45 @@ public class JInMemOutputBuffer<K extends Object, V extends Object>
        extends Buffer<K, V>
 	   implements MapTask.MapOutputCollector<K, V>, IndexedSortable {
 
-  /*
 	//private class PartitionBufferMerger
 	private class InMemoryPartitionBufferMerger {
 
-		//private int snapshots;
-
 		public InMemoryPartitionBufferMerger() throws IOException {
-			//this.snapshots = 0;
 		}
 
 		//
-		 // Create the final output file from all spill buffers.
-		 // @throws IOException
-		 //
+		// Create the final output file from all spill buffers.
+		// @throws IOException
+		//
 		//public synchronized OutputFile mergeFinal() throws IOException 
-		public synchronized byte[] mergeFinal() throws IOException {
-			List<PartitionBufferFile> finalSpills = new ArrayList<PartitionBufferFile>();
+		public synchronized OutputInMemoryBuffer mergeFinal() throws IOException {
+			List<InMemoryPartitionBuffer> finalSpills = new ArrayList<InMemoryPartitionBuffer>();
 			long finalDataSize = 0;
 			long indexFileSize = partitions * MAP_OUTPUT_INDEX_RECORD_LENGTH;
 
-			for (PartitionBufferFile spill : spills) {
+			for (InMemoryPartitionBuffer spill : spills) {
 				if (spill.valid()) {
 					finalSpills.add(spill);
 					finalDataSize += spill.dataSize();
 				}
 			}
-			LOG.info("PartitionBufferMerger: final merge size " + finalDataSize + ". Spill files: " + finalSpills.toString());
+			LOG.info("InMemoryPartitionBufferMerger: final merge size " + finalDataSize + 
+               ". Spill files: " + finalSpills.toString());
 
-			Path dataFile = outputHandle.getOutputFileForWrite(taskid, finalDataSize);
-			Path indexFile = outputHandle.getOutputIndexFileForWrite(taskid, indexFileSize);
-			PartitionBufferFile finalOutput = new PartitionBufferFile(0, dataFile, indexFile, 1f, true);
+      ByteArrayOutputStream baOut = new ByteArrayOutputStream();
+      ByteArrayOutputStream baIndexOut = new ByteArrayOutputStream();
+			DataOutputStream out = new DataOutputStream(baOut);
+			DataOutputStream indexOut = new DataOutputStream(baIndexOut);
+			InMemoryPartitionBuffer finalOutput = new InMemoryPartitionBuffer(0, baOut, baIndexOut, 1f, true);
+			//Path dataFile = outputHandle.getOutputFileForWrite(taskid, finalDataSize);
+			//Path indexFile = outputHandle.getOutputIndexFileForWrite(taskid, indexFileSize);
+			//PartitionBufferFile finalOutput = new PartitionBufferFile(0, dataFile, indexFile, 1f, true);
 			merge(finalSpills, finalOutput);
-			return new OutputFile(taskid, -1, 1f, finalOutput.data, finalOutput.index, true, partitions);
+      LOG.info("post-merge, finalOutput.data is length " + finalOutput.data.size());
+      LOG.info("post-merge, finalOutput.data is also length " + finalOutput.data.toByteArray().length);
+			return new OutputInMemoryBuffer(taskid, -1, 1f,
+					       finalOutput.data.toByteArray(), finalOutput.index.toByteArray(), true, partitions);
+			//return new OutputFile(taskid, -1, 1f, finalOutput.data, finalOutput.index, true, partitions);
 		}
 
 		//
@@ -106,8 +113,10 @@ public class JInMemOutputBuffer<K extends Object, V extends Object>
 		 // from growing too large.
 		 // @throws IOException
 		 ///
-		public synchronized SortedSet<OutputFile> mergeSpill(int start, int end) throws IOException {
-			List<PartitionBufferFile> mergeSpills = new ArrayList<PartitionBufferFile>();
+
+		//public synchronized SortedSet<OutputFile> mergeSpill(int start, int end) throws IOException {
+		public synchronized SortedSet<OutputInMemoryBuffer> mergeSpill(int start, int end) throws IOException {
+			List<InMemoryPartitionBuffer> mergeSpills = new ArrayList<InMemoryPartitionBuffer>();
 			long dataFileSize = 0;
 			long indexFileSize = partitions * MAP_OUTPUT_INDEX_RECORD_LENGTH;
 
@@ -123,23 +132,37 @@ public class JInMemOutputBuffer<K extends Object, V extends Object>
 					spillids.add(i);
 				}
 			}
-			LOG.info("PartitionBufferMerger: intermediate merge. Total size " + 
+			LOG.info("InMemoryPartitionBufferMerger: intermediate merge. Total size " + 
 					dataFileSize + ". Total spill files: " + mergeSpills.toString());
 
 
-			int snapshotId = snapshots++;
-			Path dataFile = outputHandle.getOutputSnapshotFileForWrite(taskid, snapshotId, dataFileSize);
-			Path indexFile = outputHandle.getOutputSnapshotIndexFileForWrite(taskid, snapshotId, indexFileSize);
-			PartitionBufferFile snapshot = new PartitionBufferFile(-1, dataFile, indexFile, progress, eof);
+      ByteArrayOutputStream baOut = new ByteArrayOutputStream((int)dataFileSize);
+      ByteArrayOutputStream baIndexOut = new ByteArrayOutputStream((int)indexFileSize);
+			DataOutputStream out = new DataOutputStream(baOut);
+			DataOutputStream indexOut = new DataOutputStream(baIndexOut);
+			InMemoryPartitionBuffer curBuffer = new InMemoryPartitionBuffer(-1, baOut, baIndexOut, progress, eof);  
+			//int snapshotId = snapshots++;
+			//Path dataFile = outputHandle.getOutputSnapshotFileForWrite(taskid, snapshotId, dataFileSize);
+			//Path indexFile = outputHandle.getOutputSnapshotIndexFileForWrite(taskid, snapshotId, indexFileSize);
+			//PartitionBufferFile snapshot = new PartitionBufferFile(-1, dataFile, indexFile, progress, eof);
 
-			merge(mergeSpills, snapshot);
+			merge(mergeSpills, curBuffer);
 			
-			SortedSet<OutputFile> outputs = new TreeSet<OutputFile>();
-			outputs.add(new OutputFile(taskid, spillids, progress, snapshot.data, snapshot.index, eof, partitions));
-			for (PartitionBufferFile spill : mergeSpills) {
-				OutputFile file = new OutputFile(taskid, spill.id, spill.progress,
-						                        spill.data, spill.index, spill.eof, partitions);
-				outputs.add(file);
+			SortedSet<OutputInMemoryBuffer> outputs = new TreeSet<OutputInMemoryBuffer>();
+			//outputs.add(new OutputFile(taskid, spillids, progress, snapshot.data, snapshot.index, eof, partitions));
+			outputs.add(new OutputInMemoryBuffer(taskid, spillids, progress, 
+                      curBuffer.data.toByteArray(), curBuffer.index.toByteArray(), 
+                      eof, partitions));
+		 // OutputInMemoryBuffer buffer = new OutputInMemoryBuffer(taskid, -1, 1f,
+		 // 		       finalOutput.data.toByteArray(), finalOutput.index.toByteArray(), true, partitions);
+			for (InMemoryPartitionBuffer spill : mergeSpills) {
+				//OutputFile file = new OutputFile(taskid, spill.id, spill.progress,
+				//		                        spill.data, spill.index, spill.eof, partitions);
+			  OutputInMemoryBuffer buffer = new OutputInMemoryBuffer(taskid, spill.id, spill.progress, 
+                          spill.data.toByteArray(), spill.index.toByteArray(), 
+                          spill.eof, partitions);
+				//outputs.add(file);
+				outputs.add(buffer);
 			}
 			
 			return outputs;
@@ -150,6 +173,7 @@ public class JInMemOutputBuffer<K extends Object, V extends Object>
 		 // @return The snapshot output file.
 		 // @throws IOException
 		 //
+     /*
 		public synchronized OutputFile mergeSnapshot() throws IOException {
 			List<PartitionBufferFile> mergeSpills = new ArrayList<PartitionBufferFile>();
 			long dataSize = 0;
@@ -176,7 +200,9 @@ public class JInMemOutputBuffer<K extends Object, V extends Object>
 			reset(true);
 			return new OutputFile(taskid, progress, snapshot.data, snapshot.index, partitions);
 		}
+    */
 		
+    /*
 		public synchronized OutputFile mergeStream(long sequence) throws IOException {
 			List<PartitionBufferFile> mergeSpills = new ArrayList<PartitionBufferFile>();
 			long dataSize = 0;
@@ -208,37 +234,60 @@ public class JInMemOutputBuffer<K extends Object, V extends Object>
 			LOG.info("Stream snapshot size " + snapshot.dataSize());
 			return new OutputFile(taskid, sequence, snapshot.data, snapshot.index, partitions);
 		}
+    */
 
-		private void merge(List<PartitionBufferFile> spills, PartitionBufferFile output) throws IOException {
+			  //OutputInMemoryBuffer buffer = new OutputInMemoryBuffer(taskid, spill.id, spill.progress, 
+         //                 spill.data.toByteArray(), spill.index.toByteArray(), 
+          //                spill.eof, partitions);
+		private void merge(List<InMemoryPartitionBuffer> spills, InMemoryPartitionBuffer output) throws IOException {
 			if (spills.size() == 1) {
+        LOG.info("spills.size() == 1, just copying the one spill and returning it");
 				output.copy(spills.get(0));
 				return;
 			}
 
-			FSDataOutputStream dataOut = localFs.create(output.data, true);
-			FSDataOutputStream indexOut = localFs.create(output.index, true);
+			//FSDataOutputStream dataOut = localFs.create(output.data, true);
+			//FSDataOutputStream indexOut = localFs.create(output.index, true);
+      ByteArrayOutputStream baDataOut = new ByteArrayOutputStream(output.data.size()); 
+      ByteArrayOutputStream baIndexOut = new ByteArrayOutputStream(output.index.size());
+			DataOutputStream dataOut = new DataOutputStream(baDataOut);
+			DataOutputStream indexOut = new DataOutputStream(baIndexOut);
+			//InMemoryPartitionBuffer curBuffer = new InMemoryPartitionBuffer(-1, baOut, baIndexOut, progress, eof);  
 
 			if (spills.size() == 0) {
+        LOG.info("spills.size() == 0, creating an empty output");
 				//create dummy files
 				writeEmptyOutput(dataOut, indexOut);
 				dataOut.close();
 				indexOut.close();
 			} else {
+        LOG.info("spills.size() == " + spills.size());
 				for (int parts = 0; parts < partitions; parts++){
 					//create the segments to be merged
 					List<Segment<K, V>> segmentList =
 						new ArrayList<Segment<K, V>>(spills.size());
-					for(PartitionBufferFile spill : spills) {
-						FSDataInputStream indexIn = localFs.open(spill.index);
-						indexIn.seek(parts * MAP_OUTPUT_INDEX_RECORD_LENGTH);
-						long segmentOffset = indexIn.readLong();
-						long rawSegmentLength = indexIn.readLong();
-						long segmentLength = indexIn.readLong();
-						indexIn.close();
-						FSDataInputStream in = localFs.open(spill.data);
-						in.seek(segmentOffset);
+					for(InMemoryPartitionBuffer spill : spills) {
+						//FSDataInputStream indexIn = localFs.open(spill.index); // --jbuck
+            ByteBuffer indexIn = ByteBuffer.wrap(spill.index.toByteArray()); 
+						//indexIn.seek(parts * MAP_OUTPUT_INDEX_RECORD_LENGTH);
+						indexIn.position((int)(parts * MAP_OUTPUT_INDEX_RECORD_LENGTH));
+						//long segmentOffset = indexIn.readLong();
+						//long rawSegmentLength = indexIn.readLong();
+						//long segmentLength = indexIn.readLong();
+						long segmentOffset = indexIn.getLong();
+						long rawSegmentLength = indexIn.getLong();
+						long segmentLength = indexIn.getLong();
+						//indexIn.close(); // unneeded for ByteBuffer
+						//FSDataInputStream in = localFs.open(spill.data);
+            //ByteBuffer dataIn = spill.data.getBuffer();
+      //ByteArrayOutputStream baIndexOut = new ByteArrayOutputStream(indexFileSize);
+			//DataOutputStream out = new DataOutputStream(baOut);
+			//DataOutputStream indexOut = new DataOutputStream(baIndexOut);
+            ByteArrayInputStream baDataIn = new ByteArrayInputStream(spill.data.toByteArray());
+            DataInputStream dataIn = new DataInputStream(baDataIn);
+						dataIn.skipBytes((int)segmentOffset);
 						Segment<K, V> s =
-							new Segment<K, V>(new IFile.Reader<K, V>(job, in, 
+							new Segment<K, V>(new IFile.Reader<K, V>(job, dataIn, 
 									          segmentLength, codec, null), true);
 						segmentList.add(s);
 					}
@@ -246,14 +295,19 @@ public class JInMemOutputBuffer<K extends Object, V extends Object>
 					//merge
 					@SuppressWarnings("unchecked")
 					RawKeyValueIterator kvIter =
-						Merger.merge(job, localFs,
+						//Merger.merge(job, localFs,
+						//		keyClass, valClass,
+						//		segmentList, job.getInt("io.sort.factor", 100),
+						//		new Path(taskid.toString()),
+						//		job.getOutputKeyComparator(), reporter, null, null);
+						Merger.merge(job, null,
 								keyClass, valClass,
 								segmentList, job.getInt("io.sort.factor", 100),
-								new Path(taskid.toString()),
+								new Path(taskid.toString()), // use this as a differentiating name for telling output apart
 								job.getOutputKeyComparator(), reporter, null, null);
 
 					//write merged output to disk
-					long segmentStart = dataOut.getPos();
+					long segmentStart = dataOut.size(); // TODO --jbuck is this right?
 					IFile.Writer<K, V> writer =
 						new IFile.Writer<K, V>(job, dataOut, keyClass, valClass, codec, null);
 					if (null == combinerClass || spills.size() < minSpillsForCombine) {
@@ -274,9 +328,8 @@ public class JInMemOutputBuffer<K extends Object, V extends Object>
 				indexOut.close();
 			}
 		}
-
 	}
-  */
+  
 
 	private class SpillThread extends Thread {
 		// Indicates that a spill needs to be performed. 
@@ -343,13 +396,11 @@ public class JInMemOutputBuffer<K extends Object, V extends Object>
             out = new DataOutputStream(baOut);
             indexOut = new DataOutputStream(baIndexOut);
 
-            /*
-						Path data = outputHandle.getSpillFileForWrite(taskid, spills.size(), dataSize);
-						FSDataOutputStream dataOut = localFs.create(data, false);
-						Path index = outputHandle.getSpillIndexFileForWrite(
-								taskid, spills.size(), partitions * MAP_OUTPUT_INDEX_RECORD_LENGTH);
-						FSDataOutputStream indexOut = localFs.create(index, false);
-            */
+						//Path data = outputHandle.getSpillFileForWrite(taskid, spills.size(), dataSize);
+						//FSDataOutputStream dataOut = localFs.create(data, false);
+						//Path index = outputHandle.getSpillIndexFileForWrite(
+						//		taskid, spills.size(), partitions * MAP_OUTPUT_INDEX_RECORD_LENGTH);
+						//FSDataOutputStream indexOut = localFs.create(index, false);
 						writeEmptyOutput(out, indexOut);
 						InMemoryPartitionBuffer spillFile = new InMemoryPartitionBuffer(spills.size(), baOut, baIndexOut, 1f, true);
 						LOG.debug("Finished spill sentinal. id = " + spills.size());
@@ -405,13 +456,13 @@ public class JInMemOutputBuffer<K extends Object, V extends Object>
 				nextPipelineSpill++;
 			} else if (numSpillFiles > 1) {
 				int lastPipelineSpill = spills.size() - 1;
-				LOG.debug("Merging spills " + nextPipelineSpill + " - " +
+				LOG.info("Merging spills " + nextPipelineSpill + " - " +
 						  lastPipelineSpill + " before pipelining. Progress = " + progress.get());
 				//SortedSet<OutputFile> files = merger.mergeSpill(nextPipelineSpill, lastPipelineSpill);
 				//for (OutputFile file : files) {
         int numSpills = spills.size();
         int counter = 0;
-				for (InMemoryPartitionBuffer spill : spills) { // TODO --jbuck here
+				for (InMemoryPartitionBuffer spill : spills) { 
 					LOG.info(taskid + " pipelining spill " + spill.index + 
                    " with " + partitions + " partitions and eof: " + spill.eof); 
           OutputInMemoryBuffer buffer = null;
@@ -531,6 +582,8 @@ public class JInMemOutputBuffer<K extends Object, V extends Object>
 			this.valid = true;
       this.data = buffer.data; // can we assign or should we be making copies of data and index?
       this.index = buffer.index;
+
+      LOG.info("atthe end of copy, data length: " + this.data.size());
 			
 		}
 
@@ -617,7 +670,7 @@ public class JInMemOutputBuffer<K extends Object, V extends Object>
 	//private FileHandle outputHandle = null;
 
 	private SpillThread spillThread;
-	//private PartitionBufferMerger merger;
+	private InMemoryPartitionBufferMerger merger;
 
 	private boolean pipeline = false;
 	
@@ -636,13 +689,13 @@ public class JInMemOutputBuffer<K extends Object, V extends Object>
 		this.job = job;
 		//this.outputHandle = new FileHandle(taskid.getJobID());
 		//this.outputHandle.setConf(job);
-		this.pipeline = pipeline;
+		//this.pipeline = pipeline; // leave pipeline as always false
 
 		this.spillThread = new SpillThread();
 		this.spillThread.setDaemon(true);
 		this.spillThread.start();
 
-		//this.merger = new PartitionBufferMerger();
+		this.merger = new InMemoryPartitionBufferMerger();
 
 		//localFs = FileSystem.getLocal(job);
 		partitions = taskid.isMap() ? job.getNumReduceTasks() : 1;
@@ -723,7 +776,7 @@ public class JInMemOutputBuffer<K extends Object, V extends Object>
 	private void reset(boolean restart) {
 		try {
 			if (spillThread != null) {
-				LOG.debug("Close spill thread.");
+				LOG.info("Close spill thread.");
 				spillThread.close();
 				spillThread = null;
 				LOG.debug("Spill thread closed.");
@@ -796,11 +849,13 @@ public class JInMemOutputBuffer<K extends Object, V extends Object>
   */
 
 	public synchronized void malloc() {
+    LOG.debug("in malloc, allocating " + kvbufferSize + " bytes");
 		kvbuffer = new byte[(int)kvbufferSize];
 		reset(true);
 	}
 	
 	public synchronized void free() {
+    LOG.debug("in free, releasing " + kvbuffer.length + " bytes");
 		reset(false);
 		kvbuffer = null;
 	}
@@ -1152,9 +1207,10 @@ public class JInMemOutputBuffer<K extends Object, V extends Object>
 		//LOG.debug("spill thread closed. total time = " + (System.currentTimeMillis() - timestamp) + " ms.");
 
 		timestamp = System.currentTimeMillis();
-		OutputInMemoryBuffer finalOut = null; 
-		//OutputInMemoryBuffer finalOut = pipeline ? null : merger.mergeFinal(); // TODO --jbuck figure out how to dump remaining data
-		//LOG.info("Final merge done. total time = " + (System.currentTimeMillis() - timestamp) + " ms.");
+		//OutputInMemoryBuffer finalOut = null; 
+		OutputInMemoryBuffer finalOut = merger.mergeFinal(); 
+		LOG.info("Final merge done. total time = " + (System.currentTimeMillis() - timestamp) + " ms.");
+    LOG.info("Final outout has " + finalOut.data().capacity() + " data bytes");
 		return finalOut;
 	}
 
@@ -1162,6 +1218,8 @@ public class JInMemOutputBuffer<K extends Object, V extends Object>
 		//approximate the length of the output file to be the length of the
 		//buffer + header lengths for the partitions
 		synchronized (mergeLock) {
+      LOG.info("in sortAndSpill and there are " + spills.size() + " spills and " + 
+               partitions + " partitions"); 
 			long rawDataSize = bufend >= bufstart ? 
 								bufend - bufstart : 
 								(bufvoid - bufend) + bufstart;
@@ -1202,6 +1260,7 @@ public class JInMemOutputBuffer<K extends Object, V extends Object>
 				int spindex = kvstart;
 				InMemValBytes value = new InMemValBytes();
 				for (int i = 0; i < partitions; ++i) {
+          LOG.info("  on partition " + i);
 					IFile.Writer<K, V> writer = null;
 					try {
 						long segmentStart = out.size();
@@ -1245,7 +1304,7 @@ public class JInMemOutputBuffer<K extends Object, V extends Object>
 
 						// write the index as <offset, raw-length,
 						// compressed-length>
-						LOG.debug("PartitionBuffer: " + taskid + " spill " + spills.size() + 
+						LOG.info("PartitionBuffer: " + taskid + " spill " + spills.size() + 
 								  " partition " + i + " segment start " + segmentStart);
 						writeIndexRecord(indexOut, out, segmentStart, writer);
 						writer = null;
@@ -1256,7 +1315,9 @@ public class JInMemOutputBuffer<K extends Object, V extends Object>
 						}
 					}
 				}
-				InMemoryPartitionBuffer spill = new InMemoryPartitionBuffer(spills.size(), baOut, baIndexOut, progress.get(), this.eof);
+				InMemoryPartitionBuffer spill = new InMemoryPartitionBuffer(spills.size(), 
+                                            baOut, baIndexOut, 
+                                            progress.get(), this.eof);
 				LOG.info("Finished spill " + spills.size());
 				spills.add(spill);
 				//return combinerClass != null && rawDataSize > 0 ? 

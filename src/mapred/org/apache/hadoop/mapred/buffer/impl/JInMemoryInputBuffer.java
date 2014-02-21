@@ -286,6 +286,9 @@ extends Buffer<K, V> implements InputCollector<K, V> {
 					dataAvailable.wait();
 				}
 				done = closed;
+        LOG.info("closed: " + closed + " getPercentUsed() " + getPercentUsed() +
+                 " maxInMemCopyPer " + maxInMemCopyPer + " numClosed " + numClosed + 
+                 " maxInMemOutputs " + maxInMemOutputs);
 			}
 			return done;
 		}

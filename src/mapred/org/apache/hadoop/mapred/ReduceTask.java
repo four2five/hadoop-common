@@ -173,17 +173,24 @@ class ReduceTask extends Task {
 		            URI u = URI.create(event.getTaskTrackerHttp());
 		            String host = u.getHost();
 		            TaskAttemptID mapTaskId = event.getTaskAttemptId();
-		            if (!mapTasks.contains(mapTaskId)) {
+
+                // --jbuck this is where we filter out Map tasks that we do not care about
+		            if (!mapTasks.contains(mapTaskId) && 
+                    ( thisReducerCaresAboutThisOutput(mapTaskId.getTaskID(), mapTaskDependencies) || 
+                      !startReducersDynamically)
+                   ) {
 		              BufferExchange.BufferType type = BufferExchange.BufferType.FILE;
 		              //if (inputSnapshots) type = BufferExchange.BufferType.SNAPSHOT;
 		              //if (stream) type = BufferExchange.BufferType.STREAM;
 		
 		              BufferRequest request =
-		                new MapBufferRequest(host, getTaskID(), sink.getAddress(), type, mapTaskId.getJobID(), getPartition());
+		                new MapBufferRequest(host, getTaskID(), sink.getAddress(), 
+                                         type, mapTaskId.getJobID(), getPartition());
 		              try {
                     LOG.info("Requesting buffer from " + event.getTaskAttemptId().toString());
 		                bufferUmbilical.request(request);
 		                mapTasks.add(mapTaskId);
+                    LOG.info("mapTasks.size() " + mapTasks.size() + " numInputs: " + getNumberOfInputs());
 		                if (mapTasks.size() == getNumberOfInputs()) {
 		                  LOG.info("ReduceTask " + getTaskID() + " has requested all map buffers. " +
 		                        mapTasks.size() + " map buffers.");
@@ -191,7 +198,17 @@ class ReduceTask extends Task {
 		              } catch (IOException e) {
 		                LOG.warn("InMemoryBufferUmbilical problem in taking request " + request + ". " + e);
 		              }
-		            }
+		            } else { 
+                  if (mapTasks.contains(mapTaskId)) { 
+                    LOG.info("  JB, Map task " + mapTaskId + " already in mapTasks");
+                  } else if (!startReducersDynamically) { 
+                    LOG.info("  JB, Not starting tasks dynamically for");
+                  } else if (!thisReducerCaresAboutThisOutput(mapTaskId.getTaskID(), mapTaskDependencies)) { 
+                    LOG.info("  JB, This reduce tasks does not care about map task " + mapTaskId);
+                  } else {
+                    LOG.info("  JB, I'm confoosed");
+                  }
+                }
               }
 	          }
           }
@@ -218,7 +235,7 @@ class ReduceTask extends Task {
   }
   
   private static final Log LOG = LogFactory.getLog(ReduceTask.class.getName());
-  protected JInMemOutputBuffer outputBuffer = null;
+  //protected JInMemOutputBuffer outputBuffer = null;
 
   private int numMaps;
   //private ReduceCopier reduceCopier;
@@ -496,7 +513,7 @@ class ReduceTask extends Task {
     }
     
     public void informReduceProgress() {
-      reducePhase.set(super.in.getProgress().get()); // update progress
+      //reducePhase.set(super.in.getProgress().get()); // update progress
       reporter.progress();
     }
   }
@@ -641,7 +658,7 @@ class ReduceTask extends Task {
       }
       */
     }
-    copyPhase.complete();                         // copy is already complete
+    //copyPhase.complete();                         // copy is already complete
     setPhase(TaskStatus.Phase.SORT);
     statusUpdate(umbilical);
 
@@ -662,9 +679,11 @@ class ReduceTask extends Task {
     //mapOutputFilesOnDisk.clear();
     //mapOutputBuffers.clear();
 
+    /*
     sortPhase.complete();                         // sort is complete
     setPhase(TaskStatus.Phase.REDUCE); 
     statusUpdate(umbilical);
+    */
     Class keyClass = job.getMapOutputKeyClass();
     Class valueClass = job.getMapOutputValueClass();
     RawComparator comparator = job.getOutputValueGroupingComparator();
@@ -867,6 +886,37 @@ class ReduceTask extends Task {
   }
 
   protected <INKEY,INVALUE,OUTKEY,OUTVALUE>
+  void copy2(JobConf job, 
+      JInMemoryInputBuffer jInputBuffer,
+      //RawKeyValueIterator rawIter,
+      InMemoryBufferExchangeSink sink, TaskReporter reporter,
+      InMemoryBufferUmbilicalProtocol bufferUmbilical,
+      final FileSystem rfs,
+      RawComparator<INKEY> comparator,
+      Class<INKEY> keyClass,
+      Class<INVALUE> valueClass
+    ) throws IOException {
+
+    long starttime = System.currentTimeMillis();
+    synchronized (this) {
+      LOG.info("ReduceTask " + getTaskID() + ": In copy function.");
+      sink.open();
+      while(!sink.complete()) {
+        LOG.info("ReduceTask: " + getTaskID() + " in copy loop. comlpete: " + sink.getProgress().get());
+        copyPhase.set(sink.getProgress().get());
+
+        try { 
+          this.wait();
+        } catch (InterruptedException e) { }
+      }
+
+      LOG.info("ReduceTask " + getTaskID() + " copy phase completed in " +
+           (System.currentTimeMillis() - starttime) + " ms.");
+      sink.close();
+    }
+  }
+
+  protected <INKEY,INVALUE,OUTKEY,OUTVALUE>
   void copy(JobConf job, 
       JInMemoryInputBuffer jInputBuffer,
       //RawKeyValueIterator rawIter,
@@ -884,14 +934,13 @@ class ReduceTask extends Task {
       LOG.info("ReduceTask " + getTaskID() + ": In copy function.");
       sink.open();
       while(!sink.complete()) {
+        LOG.info("ReduceTask: " + getTaskID() + " in copy loop. comlpete: " + sink.getProgress().get());
         copyPhase.set(sink.getProgress().get());
         //reporter.setProgressFlag();
 
         if (sink.getProgress().get() > snapshotThreshold &&
              sink.getProgress().get() < maxSnapshotProgress) {
             snapshotThreshold += snapshotFreq;
-            LOG.info("ReduceTask: " + getTaskID() + 
-                     " perform snapshot. progress " + (snapshotThreshold - snapshotFreq));
             //reduce(job, reporter, inputCollector, bufferUmbilical, sink.getProgress(), null);
             //reduce(job, reporter, rawIter, bufferUmbilical, sink.getProgress(), null);
             try {
@@ -924,7 +973,7 @@ class ReduceTask extends Task {
                      final TaskUmbilicalProtocol umbilical,
                      final InMemoryBufferUmbilicalProtocol bufferUmbilical,
                      final TaskReporter reporter,
-                     RawKeyValueIterator rIter,
+                     RawKeyValueIterator notUsed,
                      RawComparator<INKEY> comparator,
                      Class<INKEY> keyClass,
                      Class<INVALUE> valueClass,
@@ -943,34 +992,6 @@ class ReduceTask extends Task {
 
     Class<? extends CompressionCodec> codecClass = null;
 
-
-    /*
-    rIter = new RawKeyValueIterator() {
-      public void close() throws IOException {
-        rawIter.close();
-      }
-      public DataInputBuffer getKey() throws IOException {
-        return rawIter.getKey();
-      }
-      public Progress getProgress() {
-        return rawIter.getProgress();
-      }
-      public DataInputBuffer getValue() throws IOException {
-        return rawIter.getValue();
-      }
-      public int getNumRecordsRepresented() throws IOException {
-        return rawIter.getNumRecordsRepresented();
-      }
-      public boolean next() throws IOException {
-        boolean ret = rawIter.next();
-        reducePhase.set(rawIter.getProgress().get());
-        reporter.progress();
-        return ret;
-      }
-    };
-    */
-
-
     if (job.getCompressMapOutput()) {
       codecClass = conf.getMapOutputCompressorClass(DefaultCodec.class);
     }
@@ -986,40 +1007,56 @@ class ReduceTask extends Task {
 
     InMemoryBufferExchangeSink sink = new InMemoryBufferExchangeSink(job, jInputBuffer, this);
 
+    // update the number of expected results for the sink if mapTaskDependencies is set
+    if (mapTaskDependencies.length > 0) { 
+      sink.setNumInputs(mapTaskDependencies.length);
+    }
+
     MapOutputFetcher fetcher = new MapOutputFetcher(umbilical, bufferUmbilical, reporter, sink);
     fetcher.setDaemon(true);
     fetcher.start();
 
     setPhase(TaskStatus.Phase.SHUFFLE);
-    stream = job.getBoolean("mapred.stream", false) ||
-         job.getBoolean("mapred.job.monitor", false);
 
     job.setBoolean("mapred.skip.on", isSkipping());
 
     TaskReporter tempReporter = new TaskReporter(sink.getProgress(), umbilical,
                                                  jvmContext);
+    //InMemFSMergeThread inMemFSMergeThread = new InMemFSMergeThread();
+
     //if (stream) {
     //  stream(job, inputCollector, sink, reporter, bufferUmbilical);
     //}
     //else {
     //copy(job, jInputBuffer, sink, reporter, bufferUmbilical, rfs, comparator, keyClass, valueClass);
-    copy(job, jInputBuffer, sink, tempReporter, bufferUmbilical, rfs, comparator, keyClass, valueClass);
     // -jbuck
 
     //}
+
+    // Let's try to just do one applyReducer() and see how that goes.
+    // The intent is to have all the input merge-sorted into on authoritative list
+    //copy2(job, jInputBuffer, sink, tempReporter, bufferUmbilical, rfs, comparator, keyClass, valueClass);
+    copy2(job, jInputBuffer, sink, tempReporter, bufferUmbilical, rfs, comparator, keyClass, valueClass);
     fetcher.interrupt();
 
+    copyPhase.complete();
+    reporter.setProgressFlag();
+    sortPhase.complete();                         // we set this to complete since it happens as part of the shuffle
+    reporter.setProgressFlag();
+    setPhase(TaskStatus.Phase.REDUCE); 
+    statusUpdate(umbilical);
+    applyReduce(job, tempReporter, jInputBuffer.createKVIterator(job, tempReporter), 
+                comparator, keyClass, valueClass);
+
+    /*
     try { 
-      //applyReduce(job, reporter, jInputBuffer.createKVIterator(job,rfs, sink.getProgress()), comparator, keyClass, valueClass);
-      //applyReduce(job, tempReporter, jInputBuffer.createKVIterator(job,rfs, tempReporter), comparator, keyClass, valueClass);
-      applyReduce(job, tempReporter, jInputBuffer.createKVIterator(job, tempReporter), comparator, keyClass, valueClass);
+      // not sure that this is necessary. Try without it.
     } catch (IOException ioe) {
       LOG.error("Caught an ioe: " + ioe.toString());
     } catch (Exception e) {
       LOG.error("Caught an e: " + e.toString());
     }
-
-
+    */
   }
 
   public <INKEY,INVALUE,OUTKEY,OUTVALUE>
@@ -3270,8 +3307,8 @@ class ReduceTask extends Task {
         long mergeOutputSize = createInMemorySegments(inMemorySegments, 0);
         int noInMemorySegments = inMemorySegments.size();
 
-        Path outputPath =
-            mapOutputFile.getInputFileForWrite(mapId, mergeOutputSize);
+        //Path outputPath =
+         //   mapOutputFile.getInputFileForWrite(mapId, mergeOutputSize);
 
         Writer writer = 
           new Writer(conf, rfs, outputPath,
@@ -3411,7 +3448,7 @@ class ReduceTask extends Task {
               //LOG.info("\tcalling thisReducerCaresAboutThisOutput for task: " + taskId.getTaskID() + " with mapTaskDependencies.length: " + mapTaskDependencies.length);
               //boolean startReducersDynamically = DamascUtils.startReducerDynamically(job);
 
-              if( thisReducerCaresAboutThisOutput( taskId.getTaskID(), mapTaskDependencies) || !startReducersDynamically) {
+              if( thisReducerCaresAboutThisOutput(taskId.getTaskID(), mapTaskDependencies) || !startReducersDynamically) {
 
                 URL mapOutputLocation = new URL(event.getTaskTrackerHttp() + 
                                       "/mapOutput?job=" + taskId.getJobID() +
@@ -3452,19 +3489,6 @@ class ReduceTask extends Task {
         return numNewMaps;
       }
     }
-
-    //if( thisReducerCaresAboutThisOutput( taskId.getTaskID(),mapTaskDependencies )) {
-    private boolean thisReducerCaresAboutThisOutput( TaskID task, int[] mapTaskDependencies ) { 
-      boolean retBool = false;
-
-      for( int i=0; i<mapTaskDependencies.length; i++) { 
-        if( task.getId() == mapTaskDependencies[i]) { 
-          retBool = true;
-        }
-      }
-
-      return retBool;
-    }
   }
 
   class FileSize { 
@@ -3502,6 +3526,28 @@ class ReduceTask extends Task {
       (((hob >>> 1) & value) == 0 ? 0 : 1);
   }
 
-  public int getNumberOfInputs() { return numMaps; }
+  public int getNumberOfInputs() { 
+    if (mapTaskDependencies.length > 0) { 
+      return mapTaskDependencies.length;
+    } else { 
+      return numMaps; 
+    }
+  }
+
+  // TODO --jbuck could make this faster with a hashset of the mapTaskDependencies
+  protected boolean thisReducerCaresAboutThisOutput( TaskID task, int[] mapTaskDependencies ) { 
+    boolean retBool = false;
+
+    for( int i=0; i<mapTaskDependencies.length; i++) { 
+
+      if( task.getId() == mapTaskDependencies[i]) { 
+        retBool = true;
+        LOG.info("task.getId() " + task.getId() + " == mtd[] " + mapTaskDependencies[i]);
+      } else { 
+        LOG.info("task.getId() " + task.getId() + " != mtd[] " + mapTaskDependencies[i]);
+      }
+    }
+    return retBool;
+  }
 
 }

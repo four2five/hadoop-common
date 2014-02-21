@@ -1856,7 +1856,7 @@ public class JobInProgressDependency extends JobInProgress {
     // -jbuck here
   //ArrayList<ArrayList<TaskInProgress>> reducerToMapperDependencies = null;  
 
-    LOG.debug("JB, this reducer depends on " + this.reducerToMapperDependencies.get(target).size() + " mappers");
+    LOG.info("JB, this reducer depends on " + this.reducerToMapperDependencies.get(target).size() + " mappers");
     ArrayList<TaskInProgress> tempList = this.reducerToMapperDependencies.get(target);
     //int mySize = this.reducerToMapperDependencies.get(target).size();
     //org.apache.hadoop.mapred.TaskTracker.TaskInProgress[] tips = new org.apache.hadoop.mapred.TaskTracker.TaskInProgress[mySize];

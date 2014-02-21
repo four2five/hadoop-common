@@ -231,8 +231,9 @@ public abstract class InMemoryBufferExchangeSource<H extends OutputInMemoryBuffe
 	
 	//////////////////////////////////////////////////////////////////////////////////////
 	
-  /*
-	private static class InMemoryBufferSource extends InMemoryBufferExchangeSource<OutputInMemoryBuffer.InMemoryHeader> {
+  
+	private static class InMemoryBufferSource 
+      extends InMemoryBufferExchangeSource<OutputInMemoryBuffer.InMemoryHeader> {
 		// Store position for each source task. 
 		private Map<TaskID, Integer> cursor;
 
@@ -295,8 +296,8 @@ public abstract class InMemoryBufferExchangeSource<H extends OutputInMemoryBuffe
 			}
 		}
 	}
-  */
-	
+
+  /*
 	private static class InMemoryBufferSource extends InMemoryBufferExchangeSource<OutputInMemoryBuffer.InMemoryHeader> {
 		private Map<TaskID, Long> cursor;
 		
@@ -320,7 +321,7 @@ public abstract class InMemoryBufferExchangeSource<H extends OutputInMemoryBuffe
 						return Transfer.TERMINATE;
 					}
 
-					/* Update my next cursor position. */
+					// Update my next cursor position. 
 					long position = header.sequence() + 1;
 					try { 
 						long next = istream.readLong();
@@ -352,6 +353,7 @@ public abstract class InMemoryBufferExchangeSource<H extends OutputInMemoryBuffe
 			}
 		}
 	}
+  */
 	
   /*
 	private static class SnapshotSource extends InMemoryBufferExchangeSource<OutputFile.SnapshotHeader> {

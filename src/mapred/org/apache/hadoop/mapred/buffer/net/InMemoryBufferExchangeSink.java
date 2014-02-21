@@ -119,7 +119,7 @@ public class InMemoryBufferExchangeSink<K extends Object, V extends Object> impl
 	
 	/* The total number of inputs we expect. e.g., number of maps in
 	   the case that the owner is a reduce task. */
-	private final int numInputs;
+	private int numInputs;
 	private Map<TaskID, Float> inputProgress;
 	private float progressSum = 0f;
 	
@@ -180,35 +180,23 @@ public class InMemoryBufferExchangeSink<K extends Object, V extends Object> impl
 						channel.configureBlocking(true);
 						/* Note: no buffered input stream due to memory pressure. */
 						DataInputStream  istream = new DataInputStream(channel.socket().getInputStream());
-						DataOutputStream ostream = new DataOutputStream(new BufferedOutputStream(channel.socket().getOutputStream()));
+						DataOutputStream ostream = 
+                new DataOutputStream(new BufferedOutputStream(channel.socket().getOutputStream()));
 						
 						if (complete()) {
 							WritableUtils.writeEnum(ostream, Connect.BUFFER_COMPLETE);
 							ostream.close();
-						}
-						else if (handlers.size() > maxConnections) {
+						} else if (handlers.size() > maxConnections) {
 							LOG.info("Connections full. connections = " + handlers.size() + 
 									 ", max allowed " + maxConnections);
 							WritableUtils.writeEnum(ostream, Connect.CONNECTIONS_FULL);
 							ostream.close();
-						}
-						else {
+						} else {
 							WritableUtils.writeEnum(ostream, Connect.OPEN);
 							ostream.flush();
 							
 							BufferExchange.BufferType type = WritableUtils.readEnum(istream, BufferExchange.BufferType.class);
 							Handler handler = null;
-              /*
-							if (BufferType.FILE == type) {
-                LOG.info("hander is FileHandler");
-								handler = new FileHandler(collector, istream, ostream);
-							} else if (BufferType.SNAPSHOT == type) {
-                LOG.info("hander is SnapshotHandler");
-								handler = new SnapshotHandler(collector, istream, ostream);
-							} else if (BufferType.STREAM == type) {
-                LOG.info("hander is StreamHandler");
-								handler = new StreamHandler(collector, istream, ostream);
-							} */ 
 
               if (BufferType.INMEMORY == type) {
                 LOG.info("hander is InMemoryHandler");
@@ -293,8 +281,7 @@ public class InMemoryBufferExchangeSink<K extends Object, V extends Object> impl
 		if (complete()) {
 			this.progress.complete();
 			this.collector.close();
-		}
-		else {
+		} else {
 			LOG.info("Task " + taskid + " total copy progress = " + (progressSum / (float) numInputs));
 			this.progress.set(progressSum / (float) numInputs);
 		}
@@ -363,61 +350,21 @@ public class InMemoryBufferExchangeSink<K extends Object, V extends Object> impl
 				done(this);
 				close();
 			}
-			
 		}
 		
 		protected abstract void receive(H header) throws IOException;
 		
 	}
 	
-  /*
-	final class SnapshotHandler extends Handler<OutputInMemoryBuffer.SnapshotHeader> {
-		public SnapshotHandler(InputCollector<K, V> collector,
-				DataInputStream istream, DataOutputStream ostream) { 
-			super(collector, istream, ostream);
-		}
+	final class InMemoryHandler extends Handler<OutputInMemoryBuffer.InMemoryHeader> {
 
-		public void receive(OutputInMemoryBuffer.SnapshotHeader header) throws IOException {
-			Position position = null;
-			TaskID inputTaskID = header.owner().getTaskID();
-			synchronized (cursor) {
-				if (!cursor.containsKey(inputTaskID)) {
-					cursor.put(inputTaskID, new Position(0));
-				}
-				position = cursor.get(inputTaskID);
-			}
-
-			if (position.floatValue() < header.progress()) {
-				synchronized (task) {
-					WritableUtils.writeEnum(ostream, Transfer.READY);
-					ostream.flush();
-					LOG.debug("TaskConnectionHandler " + this + " received header -- " + header);
-					if (collector.read(istream, header)) {
-						updateProgress(header);
-						task.notifyAll();
-					}
-					position.set(header.progress());
-				}
-			}
-			else {
-				WritableUtils.writeEnum(ostream, Transfer.IGNORE);
-			}
-
-			// Indicate my current position. 
-			ostream.writeFloat(position.floatValue());
-			ostream.flush();
-		}
-	}
-  */
-	
-  /*
-	final class FileHandler extends Handler<OutputInMemoryBuffer.FileHeader> {
-		public FileHandler(InputCollector<K, V> collector,
+		public InMemoryHandler(InputCollector<K, V> collector,
 				           DataInputStream istream, DataOutputStream ostream) {
 			super(collector, istream, ostream);
 		}
 		
-		public void receive(OutputInMemoryBuffer.FileHeader header) throws IOException {
+	//	public void receive(OutputInMemoryBuffer.FileHeader header) throws IOException {
+		public void receive(OutputInMemoryBuffer.InMemoryHeader header) throws IOException {
       LOG.info("In InMemoryBufferExchangeSink.receive()");
 			// Get my position for this source taskid. 
 			Position position = null;
@@ -435,7 +382,7 @@ public class InMemoryBufferExchangeSink<K extends Object, V extends Object> impl
 				if (header.ids().first() == pos) {
 					WritableUtils.writeEnum(ostream, BufferExchange.Transfer.READY);
 					ostream.flush();
-					LOG.info("File handler " + hashCode() + " ready to receive -- " + header);
+					LOG.info("InMemoryBuffer handler " + hashCode() + " ready to receive -- " + header);
 					if (collector.read(istream, header)) {
 						updateProgress(header);
 						synchronized (task) {
@@ -443,9 +390,8 @@ public class InMemoryBufferExchangeSink<K extends Object, V extends Object> impl
 						}
 					}
 					position.set(header.ids().last() + 1);
-					LOG.info("File handler " + " done receiving up to position " + position.intValue());
-				}
-				else {
+					LOG.info("InMemoryBuffer handler " + " done receiving up to position " + position.intValue());
+				} else {
 					LOG.info(this + " ignoring -- " + header);
 					WritableUtils.writeEnum(ostream, BufferExchange.Transfer.IGNORE);
 				}
@@ -457,104 +403,9 @@ public class InMemoryBufferExchangeSink<K extends Object, V extends Object> impl
 			ostream.flush();
 		}
 	}
-  */
 	
-  /*
-	final class StreamHandler extends Handler<OutputInMemoryBuffer.StreamHeader> {
-		public StreamHandler(InputCollector<K, V> collector,
-				           DataInputStream istream, DataOutputStream ostream) {
-			super(collector, istream, ostream);
-		}
-		
-		public void receive(OutputInMemoryBuffer.StreamHeader header) throws IOException {
-			// Get my position for this source taskid. 
-			Position position = null;
-			TaskID inputTaskID = header.owner().getTaskID();
-			synchronized (cursor) {
-				if (!cursor.containsKey(inputTaskID)) {
-					cursor.put(inputTaskID, new Position(-1));
-				}
-				position = cursor.get(inputTaskID);
-			}
-
-			// I'm the only one that should be updating this position. 
-			synchronized (task) {
-				long pos = position.longValue() < 0 ? header.sequence() : position.longValue(); 
-				if (pos <= header.sequence()) {
-					WritableUtils.writeEnum(ostream, BufferExchange.Transfer.READY);
-					ostream.flush();
-					LOG.debug("Stream handler " + hashCode() + " ready to receive -- " + header);
-					if (collector.read(istream, header)) {
-						updateProgress(header);
-						synchronized (task) {
-							task.notifyAll();
-						}
-					}
-					position.set(header.sequence() + 1);
-					LOG.debug("Stream handler " + " done receiving up to position " + position.longValue());
-				}
-				else {
-					LOG.debug(this + " ignoring -- " + header);
-					WritableUtils.writeEnum(ostream, BufferExchange.Transfer.IGNORE);
-				}
-				// Indicate the next spill file that I expect. 
-				pos = position.longValue();
-				LOG.debug("Updating source position to " + pos);
-				ostream.writeLong(pos);
-				ostream.flush();
-			}
-		}
-	}
-  */
-
-	final class InMemoryHandler extends Handler<OutputInMemoryBuffer.InMemoryHeader> {
-
-		public InMemoryHandler(InputCollector<K, V> collector,
-				           DataInputStream istream, DataOutputStream ostream) {
-			super(collector, istream, ostream);
-		}
-		
-		public void receive(OutputInMemoryBuffer.InMemoryHeader header) throws IOException {
-			/* Get my position for this source taskid. */
-			Position position = null;
-			TaskID inputTaskID = header.owner().getTaskID();
-			synchronized (cursor) {
-				if (!cursor.containsKey(inputTaskID)) {
-					cursor.put(inputTaskID, new Position(-1));
-				} else {
-          LOG.info("cursor already contains the key, skipping");
-        }
-				position = cursor.get(inputTaskID);
-			}
-
-			/* I'm the only one that should be updating this position. */
-			synchronized (task) {
-				long pos = position.longValue() < 0 ? header.sequence() : position.longValue(); 
-				if (pos <= header.sequence()) {
-					WritableUtils.writeEnum(ostream, BufferExchange.Transfer.READY);
-					ostream.flush();
-					LOG.info("Stream handler " + hashCode() + " ready to receive -- " + header);
-					if (collector.read(istream, header)) {
-            LOG.info("Updating progress");
-						updateProgress(header);
-						synchronized (task) {
-							task.notifyAll();
-						}
-					} else { 
-            LOG.info("Not updating progress");
-          }
-					position.set(header.sequence() + 1);
-					LOG.info("Stream handler " + " done receiving up to position " + position.longValue());
-				} else {
-					LOG.info(this + " ignoring -- " + header);
-					WritableUtils.writeEnum(ostream, BufferExchange.Transfer.IGNORE);
-				}
-				/* Indicate the next spill file that I expect. */
-				pos = position.longValue();
-				LOG.info("Updating source position to " + pos);
-				ostream.writeLong(pos);
-				ostream.flush();
-			}
-		}
-	}
+  public void setNumInputs(int numInputs) { 
+    LOG.info("Setting numInputs to " + numInputs);
+    this.numInputs = numInputs;
+  }
 }

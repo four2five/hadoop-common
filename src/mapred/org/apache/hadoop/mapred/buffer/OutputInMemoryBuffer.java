@@ -140,34 +140,73 @@ public class OutputInMemoryBuffer implements Comparable<OutputInMemoryBuffer>, W
 
 	public static class InMemoryHeader extends Header {
 		
-		private long sequence;
+		//private long sequence;
+    private SortedSet<Integer> idlist; // may need this for merging outputs
+		private String code;
 		
 		public InMemoryHeader() { super(null, 0f, false); }
 		
+    /*
 		public InMemoryHeader(TaskAttemptID owner, long sequence, float progress, boolean complete) {
 			super(owner, progress, complete);
 			//super(owner, 0f, false);
 			this.sequence = sequence;
+      this.idlist = null;
+      init();
+		}
+    */
+		
+		public InMemoryHeader(TaskAttemptID owner, float progress, boolean complete, 
+                          SortedSet<Integer> idlist) {
+			super(owner, progress, complete);
+			//super(owner, 0f, false);
+      this.idlist = idlist;
+      init();
 		}
 		
-		public long sequence() {
-			return this.sequence;
+		private void init() {
+			code = owner.toString();
+		  for (Integer id : this.idlist){
+		   code += ":" + id;
+		  }
+		}
+		
+		public SortedSet<Integer> ids() {
+	 	  return this.idlist;
+		}
+
+		@Override
+		public String toString() {
+			return "InMemoryHeader -- " + code + ". EOF? " + eof();
 		}
 		
 		public int compareTo(Header header) {
-		  InMemoryHeader other = (InMemoryHeader) header;
-		  if (owner.equals(other.owner)) {
-			 	if (sequence < other.sequence) {
-			 		return -1;
-			 	} else if (sequence > other.sequence) {
-			 		return 1;
-			 	} else { 
-          return 0;
-        }
-			}
-      return -1;
+		  InMemoryHeader otherHeader = (InMemoryHeader) header;
+			TaskID me = owner().getTaskID();
+			TaskID other = otherHeader.owner().getTaskID();
+		  if (me.equals(other)) {
+		 		Integer me_min = idlist.first();
+		 		Integer o_min = otherHeader.ids().first();
+		 		Integer me_max = idlist.last();
+		 		Integer o_max = otherHeader.ids().last();
+					
+		 		if (me_max.compareTo(o_min) < 0) {
+		 			return -1;
+		 		} else if (me_min.compareTo(o_max) > 0) {
+		 			return 1;
+		 		} else {
+		 			// Okay, basically one is a subset of the
+		 			 // other. I want the superset to fall before
+		 			 // the subset. 
+		 			return me_min.compareTo(o_min) == 0 ? 
+		 					o_max.compareTo(me_max) : 
+		 						me_min.compareTo(o_min);
+		 		}
+			} else { // if (null != sequence)
+			 	return me.compareTo(other);
+      }
 		}
-		
+
 		@Override
 		public boolean equals(Object o) {
 			if (o instanceof InMemoryHeader) {
@@ -178,19 +217,50 @@ public class OutputInMemoryBuffer implements Comparable<OutputInMemoryBuffer>, W
 		
 		@Override
 		public int hashCode() {
-			return Long.toString(this.sequence).hashCode();
+			return this.code.hashCode();
 		}
 
+    /*
 		@Override
 		public void readFields(DataInput in) throws IOException {
 			super.readFields(in);
+      // need to indicate if we're sending a sequenceID or a list of ids
+      if (null == this.sequence) { 
+        this
 			this.sequence = in.readLong();
 		}
 
 		@Override
 		public void write(DataOutput out) throws IOException {
 			super.write(out);
+      if (null == this.sequence) { 
+        out.writeBoolean(true);
+      } else { 
+        out.writeBoolean(false);
+      }
+
 			out.writeLong(this.sequence);
+		}
+    */
+
+		@Override
+		public void readFields(DataInput in) throws IOException {
+			super.readFields(in);
+			int length = in.readInt();
+			this.idlist = new TreeSet<Integer>();
+			for (int i = 0; i < length; i++) {
+				this.idlist.add(in.readInt());
+			}
+			init();
+		}
+
+		@Override
+		public void write(DataOutput out) throws IOException {
+			super.write(out);
+			out.writeInt(this.idlist.size());
+			for (Integer id : idlist) {
+				out.writeInt(id);
+			}
 		}
 		
 	}
@@ -466,11 +536,24 @@ public class OutputInMemoryBuffer implements Comparable<OutputInMemoryBuffer>, W
 		
 		this.data = ByteBuffer.wrap(data);
 		this.index = ByteBuffer.wrap(index);
+
+    LOG.info("in constructor, passed-in data size is " + data.length);
+    LOG.info("in constructor, internal data size is " + this.data.capacity());
 		
-		//SortedSet<Integer> idlist = new TreeSet<Integer>();
-		//idlist.add(id);
-		this.header = new InMemoryHeader(owner, id, progress, complete);
+		SortedSet<Integer> idlist = new TreeSet<Integer>();
+		idlist.add(id);
+		this.header = new InMemoryHeader(owner, progress, complete, idlist);
 		//this.header = new FileHeader(owner, progress, complete, idlist);
+		this.partitions = partitions;
+	}
+
+	public OutputInMemoryBuffer(TaskAttemptID owner, SortedSet<Integer> idlist, float progress, 
+                              byte[] data, byte[] index, 
+                              boolean complete, int partitions) {
+		//this.type = Type.FILE;
+		this.data     = ByteBuffer.wrap(data);
+		this.index    = ByteBuffer.wrap(index);
+		this.header = new InMemoryHeader(owner, progress, complete, idlist);
 		this.partitions = partitions;
 	}
 
