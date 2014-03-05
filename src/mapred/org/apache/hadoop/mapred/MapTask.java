@@ -34,6 +34,7 @@ import java.io.OutputStream;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
@@ -63,12 +64,9 @@ import org.apache.hadoop.mapred.IFile.Writer;
 import org.apache.hadoop.mapred.Merger.Segment;
 import org.apache.hadoop.mapred.SortedRanges.SkipRangeIterator;
 import org.apache.hadoop.mapred.FileInputFormat;
-//import org.apache.hadoop.mapred.buffer.BufferUmbilicalProtocol;
 import org.apache.hadoop.mapred.buffer.InMemoryBufferUmbilicalProtocol;
-//import org.apache.hadoop.mapred.buffer.OutputFile;
 import org.apache.hadoop.mapred.buffer.OutputInMemoryBuffer;
 import org.apache.hadoop.mapred.buffer.impl.Buffer;
-//import org.apache.hadoop.mapred.buffer.impl.JOutputBuffer;
 import org.apache.hadoop.mapred.buffer.impl.JInMemOutputBuffer;
 import org.apache.hadoop.mapred.buffer.impl.JRecordWriter;
 import org.apache.hadoop.mapred.buffer.net.BufferRequest;
@@ -99,6 +97,8 @@ public class MapTask extends Task {
   private final static int APPROX_HEADER_LENGTH = 150;
 
   private static final Log LOG = LogFactory.getLog(MapTask.class.getName());
+  private int[] reduceTaskDependencies;
+
 
   {   // set phase for this task
     setPhase(TaskStatus.Phase.MAP); 
@@ -106,6 +106,7 @@ public class MapTask extends Task {
 
   public MapTask() {
     super();
+    reduceTaskDependencies = new int[0];
   }
 
   public MapTask(String jobFile, TaskAttemptID taskId, 
@@ -113,11 +114,25 @@ public class MapTask extends Task {
                  int numSlotsRequired) {
     super(jobFile, taskId, partition, numSlotsRequired);
     this.splitMetaInfo = splitIndex;
+    reduceTaskDependencies = new int[0];
   }
 
   @Override
   public boolean isMapTask() {
     return true;
+  }
+
+  @Override
+  public int[] getDependencies() { 
+    return reduceTaskDependencies;
+  }
+
+  @Override
+  //public void setDependencies( org.apache.hadoop.mapred.TaskInProgress[] dependencies) { 
+  public void setDependencies( int[] dependencies) {
+    LOG.info("Setting a dependency of length: " + dependencies.length + 
+             " for Map task. " + Arrays.toString(dependencies));
+    reduceTaskDependencies = dependencies;
   }
 
   @Override
@@ -154,11 +169,24 @@ public class MapTask extends Task {
   public void write(DataOutput out) throws IOException {
     super.write(out);
     if (isMapOrReduce()) {
+      if (reduceTaskDependencies == null) { 
+        LOG.error("in write(), reduceTaskDependencies is null");
+        reduceTaskDependencies = new int[0];
+      } 
+      LOG.info("in write(), reduceTaskDependencies is len " + reduceTaskDependencies.length);
+
+      // send the Reduce task dependencies //-jbuck
+      out.writeInt(reduceTaskDependencies.length);
+      for (int i=0; i<reduceTaskDependencies.length; i++) { 
+        out.writeInt(reduceTaskDependencies[i]);
+      }
+
       if (splitMetaInfo != null) {
         splitMetaInfo.write(out);
       } else {
         new TaskSplitIndex().write(out);
       }
+
       //TODO do we really need to set this to null?
       splitMetaInfo = null;
     }
@@ -168,10 +196,16 @@ public class MapTask extends Task {
   public void readFields(DataInput in) throws IOException {
     super.readFields(in);
     if (isMapOrReduce()) {
+      int numReduceTaskDependencies = in.readInt();
+      reduceTaskDependencies = new int[numReduceTaskDependencies];
+      for (int i=0; i<numReduceTaskDependencies; i++) { 
+        reduceTaskDependencies[i] = in.readInt();
+      }
       splitMetaInfo.readFields(in);
+      LOG.info("in MapTask.readFields. Is scitask? " + this.isSciTask() );
+    } else { 
+      LOG.info("Neither a map nor a reduce task");
     }
-    
-    System.out.println("in MapTask.readFields. Is scitask? " + this.isSciTask() );
   }
 
   /**
@@ -419,6 +453,7 @@ public class MapTask extends Task {
       runOldMapper(job, splitMetaInfo, umbilical, bufferUmbilical, reporter);
     }
 
+    LOG.info("calling done");
     done(umbilical, reporter);
   }
 
@@ -475,6 +510,7 @@ public class MapTask extends Task {
     LOG.info("numReduceTasks: " + numReduceTasks);
     MapOutputCollector collector = null;
     //InputSplit instantiatedSplit = null;
+    //private int[] reduceTaskDependencies;
 
     boolean pipeline = job.getBoolean("mapred.map.pipeline", false);
 
@@ -540,6 +576,13 @@ public class MapTask extends Task {
       if (collector instanceof JInMemOutputBuffer) {
         JInMemOutputBuffer buffer = (JInMemOutputBuffer) collector;
         OutputInMemoryBuffer finalOut = buffer.oldClose();
+        // set the reduce task dependencies for this OutputInMemoryBuffer (inherited from this task)
+        /*
+        LOG.info("Calling setReduceTaskDependencies with: " + 
+                 Arrays.toString(this.reduceTaskDependencies) + 
+                 " for task " + finalOut.header().owner());
+        finalOut.setReduceTaskDependencies(this.reduceTaskDependencies);
+        */
         buffer.free();
         if (finalOut != null) {
           LOG.info("Register final output, size: " + finalOut.header().compressed() + 
@@ -907,10 +950,10 @@ public class MapTask extends Task {
           codecClass = conf.getMapOutputCompressorClass(DefaultCodec.class);
         }
         LOG.info("JB, using a JRecordWriter");
-        JRecordWriter buffer = new JRecordWriter(taskContext, bufferUmbilical, this, job,
+        JRecordWriter writer = new JRecordWriter(taskContext, bufferUmbilical, this, job,
             reporter, getProgress(), pipeline,
             keyClass, valClass, codecClass);
-        output = buffer;
+        output = writer;
         //JRecordWriter jRecWriter = new JRecordWriter(bufferUmbilical, this, job, reporter,
          //                                            getProgress(), pipeline, keyClass, valClass, codecClass);
 
@@ -931,6 +974,10 @@ public class MapTask extends Task {
         LOG.info("Doing a close in a JRecordWriter");
         JRecordWriter jRecordWriter = (JRecordWriter) output;
         OutputInMemoryBuffer finalOut = jRecordWriter.oldClose(mapperContext);
+        LOG.info("Calling setReduceTaskDependencies with: " + 
+                  Arrays.toString(getDependencies()) + 
+                 " for task " + finalOut.header().owner());
+        finalOut.setReduceTaskDependencies(getDependencies());
         jRecordWriter.free();
         if (finalOut != null) {
           LOG.info("Updating task.java() taskBytesWriten to " + finalOut.data().capacity());

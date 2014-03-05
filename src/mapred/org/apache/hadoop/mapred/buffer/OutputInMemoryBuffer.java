@@ -21,10 +21,14 @@ package org.apache.hadoop.mapred.buffer;
 import java.io.DataInput;
 import java.io.DataInputStream;
 import java.io.DataOutput;
+import java.io.EOFException;
 import java.io.IOException;
+
+import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
 
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeSet;
@@ -59,7 +63,7 @@ public class OutputInMemoryBuffer implements Comparable<OutputInMemoryBuffer>, W
 
 		public Header() {}
 
-		//public Header(OutputInMemoryBuffer.Type type, TaskAttemptID owner, float progress, boolean eof) {
+		//public Header(OutputInMemoryBuffer.Type type, TaskAttemptID owner, float progress, boolean eof) 
 		public Header(TaskAttemptID owner, float progress, boolean eof) {
 			//this.type = type;
 			this.owner = owner;
@@ -97,13 +101,21 @@ public class OutputInMemoryBuffer implements Comparable<OutputInMemoryBuffer>, W
 
 		@Override
 		public void readFields(DataInput in) throws IOException {
-			this.owner = new TaskAttemptID();
-			this.owner.readFields(in);
+      try{
+			  this.owner = new TaskAttemptID();
+			  this.owner.readFields(in);
 
-			this.progress = in.readFloat();
-			this.compressedLength = in.readLong();
-			this.decompressedLength = in.readLong();
-			this.eof = in.readBoolean();
+			  this.progress = in.readFloat();
+			  this.compressedLength = in.readLong();
+			  this.decompressedLength = in.readLong();
+			  this.eof = in.readBoolean();
+      } catch(EOFException eofe) { 
+        LOG.error("Caught eofe: " + eofe.toString());
+        String fullStackTrace = 
+          org.apache.commons.lang.exception.ExceptionUtils.getFullStackTrace(eofe);
+        LOG.error(" " + fullStackTrace);
+        throw eofe;
+      }
 		}
 
 		@Override
@@ -116,23 +128,23 @@ public class OutputInMemoryBuffer implements Comparable<OutputInMemoryBuffer>, W
 		}
 
 		public static Header readHeader(DataInput in) throws IOException {
-			//OutputInMemoryBuffer.Type type = WritableUtils.readEnum(in, OutputInMemoryBuffer.Type.class);
+      if (in == null) { 
+        LOG.error("readHeader called with a null in");
+        return null;
+      }
 			Header header = null;
-      /*
-			switch (type) {
-			case FILE: header = new FileHeader(); break;
-			case SNAPSHOT: header = new SnapshotHeader(); break;
-			case STREAM: header = new StreamHeader(); break;
-			default: return null;
-			}
-      */
       header = new InMemoryHeader();
 			header.readFields(in);
 			return header;
 		}
 
 		public static void writeHeader(DataOutput out, Header header) throws IOException {
-			//WritableUtils.writeEnum(out, header.type);
+      if (null == out) {  
+        LOG.error("out is null in writeHeader");
+      }
+      if (null == header) { 
+        LOG.error("header is null in writeHeader");
+      }
 			header.write(out);
 		}
 
@@ -144,17 +156,10 @@ public class OutputInMemoryBuffer implements Comparable<OutputInMemoryBuffer>, W
     private SortedSet<Integer> idlist; // may need this for merging outputs
 		private String code;
 		
-		public InMemoryHeader() { super(null, 0f, false); }
-		
-    /*
-		public InMemoryHeader(TaskAttemptID owner, long sequence, float progress, boolean complete) {
-			super(owner, progress, complete);
-			//super(owner, 0f, false);
-			this.sequence = sequence;
-      this.idlist = null;
-      init();
-		}
-    */
+		public InMemoryHeader() { 
+      super(null, 0f, false); 
+			this.idlist = new TreeSet<Integer>();
+    }
 		
 		public InMemoryHeader(TaskAttemptID owner, float progress, boolean complete, 
                           SortedSet<Integer> idlist) {
@@ -220,265 +225,67 @@ public class OutputInMemoryBuffer implements Comparable<OutputInMemoryBuffer>, W
 			return this.code.hashCode();
 		}
 
-    /*
 		@Override
 		public void readFields(DataInput in) throws IOException {
-			super.readFields(in);
-      // need to indicate if we're sending a sequenceID or a list of ids
-      if (null == this.sequence) { 
-        this
-			this.sequence = in.readLong();
-		}
-
-		@Override
-		public void write(DataOutput out) throws IOException {
-			super.write(out);
-      if (null == this.sequence) { 
-        out.writeBoolean(true);
-      } else { 
-        out.writeBoolean(false);
+      try{ 
+			  super.readFields(in);
+			  int length = in.readInt();
+			  this.idlist = new TreeSet<Integer>();
+			  for (int i = 0; i < length; i++) {
+				  this.idlist.add(in.readInt());
+			  }
+			  init();
+      } catch(NullPointerException npe) { 
+        if (null == in) { 
+          LOG.error("Caught an NPE in readFields(). in is null");
+          String fullStackTrace = 
+            org.apache.commons.lang.exception.ExceptionUtils.getFullStackTrace(npe);
+          LOG.error(" " + fullStackTrace);
+        } else { 
+          LOG.error("Caught an NPE in readFields(). in is NOT null. ");
+          String fullStackTrace = 
+            org.apache.commons.lang.exception.ExceptionUtils.getFullStackTrace(npe);
+          LOG.error(" " + fullStackTrace);
+        }
+        throw npe;
       }
-
-			out.writeLong(this.sequence);
-		}
-    */
-
-		@Override
-		public void readFields(DataInput in) throws IOException {
-			super.readFields(in);
-			int length = in.readInt();
-			this.idlist = new TreeSet<Integer>();
-			for (int i = 0; i < length; i++) {
-				this.idlist.add(in.readInt());
-			}
-			init();
 		}
 
 		@Override
 		public void write(DataOutput out) throws IOException {
-			super.write(out);
-			out.writeInt(this.idlist.size());
-			for (Integer id : idlist) {
-				out.writeInt(id);
-			}
+      try{ 
+			  super.write(out);
+        if (out == null) { 
+          LOG.error("write() called with a null out");
+          //return null;
+        }
+        if (null == this.idlist) { 
+          LOG.error("write() called with header having a null idlist. Sending list length of 1");
+			    //out.writeInt(0);
+        }
+			  out.writeInt(this.idlist.size());
+			  for (Integer id : idlist) {
+				  out.writeInt(id);
+			  }
+      } catch (NullPointerException npe) { 
+        if (null == out) { 
+          LOG.error("Caught an npe in write(), out is null");
+          String fullStackTrace = 
+            org.apache.commons.lang.exception.ExceptionUtils.getFullStackTrace(npe);
+          LOG.error(" " + fullStackTrace);
+        } else { 
+          LOG.error("Caught an npe in write(), out is NOT null. ");
+          String fullStackTrace = 
+            org.apache.commons.lang.exception.ExceptionUtils.getFullStackTrace(npe);
+          LOG.error(" " + fullStackTrace);
+        }
+        throw npe;
+      }
 		}
 		
 	}
-	
-  /*
-	public static class StreamHeader extends Header {
-		
-		private long sequence;
-		
-		public StreamHeader() { super(Type.STREAM, null, 0f, false); }
-		
-		public StreamHeader(TaskAttemptID owner, long sequence) {
-			super(Type.STREAM, owner, 0f, false);
-			this.sequence = sequence;
-		}
-		
-		public long sequence() {
-			return this.sequence;
-		}
-		
-		public int compareTo(Header header) {
-			if (header instanceof StreamHeader) {
-				StreamHeader other = (StreamHeader) header;
-				if (owner.equals(other.owner)) {
-					if (sequence < other.sequence) {
-						return -1;
-					}
-					else if (sequence > other.sequence) {
-						return 1;
-					}
-					else return 0;
-				}
-			}
-			return -1;
-		}
-		
-		@Override
-		public boolean equals(Object o) {
-			if (o instanceof StreamHeader) {
-				return this.compareTo((StreamHeader) o) == 0;
-			}
-			return false;
-		}
-		
-		@Override
-		public int hashCode() {
-			return Long.toString(this.sequence).hashCode();
-		}
-
-		@Override
-		public void readFields(DataInput in) throws IOException {
-			super.readFields(in);
-			this.sequence = in.readLong();
-		}
-
-		@Override
-		public void write(DataOutput out) throws IOException {
-			super.write(out);
-			out.writeLong(this.sequence);
-		}
-		
-	}
-	
-	public static class FileHeader extends Header {
-		//The current position. 
-		private SortedSet<Integer> idlist;
-		
-		private String code;
-
-		public FileHeader() { super(Type.FILE, null, 0f, false); }
-
-		public FileHeader(TaskAttemptID owner, float progress,
-				          boolean complete, SortedSet<Integer> idlist) {
-			super(Type.FILE, owner, progress, complete);
-			this.idlist = idlist;
-			init();
-		}
-		
-		private void init() {
-			code = owner.toString();
-			for (Integer id : this.idlist){
-				code += ":" + id;
-			}
-		}
-		
-		public SortedSet<Integer> ids() {
-			return this.idlist;
-		}
-
-		@Override
-		public String toString() {
-			return "File -- " + code + ". EOF? " + eof();
-		}
-		
-		@Override
-		public int compareTo(Header header) {
-			if (header instanceof FileHeader) {
-				FileHeader fheader = (FileHeader) header;
-				TaskID me = owner().getTaskID();
-				TaskID other = fheader.owner().getTaskID();
-				if (me.equals(other)) {
-					Integer me_min = idlist.first();
-					Integer o_min = fheader.idlist.first();
-					Integer me_max = idlist.last();
-					Integer o_max = fheader.idlist.last();
-					
-					if (me_max.compareTo(o_min) < 0) {
-						return -1;
-					}
-					else if (me_min.compareTo(o_max) > 0) {
-						return 1;
-					}
-					else {
-						// Okay, basically one is a subset of the
-						 // other. I want the superset to fall before
-						 // the subset. 
-						return me_min.compareTo(o_min) == 0 ? 
-								o_max.compareTo(me_max) : 
-									me_min.compareTo(o_min);
-					}
-				}
-				else {
-					return me.compareTo(other);
-				}
-			}
-			return -1;
-		}
-
-		@Override
-		public boolean equals(Object o) {
-			if (o instanceof FileHeader) {
-				return this.compareTo((FileHeader) o) == 0;
-			}
-			return false;
-		}
-
-		@Override
-		public int hashCode() {
-			return code.hashCode();
-		}
-
-		@Override
-		public void readFields(DataInput in) throws IOException {
-			super.readFields(in);
-			int length = in.readInt();
-			this.idlist = new TreeSet<Integer>();
-			for (int i = 0; i < length; i++) {
-				this.idlist.add(in.readInt());
-			}
-			init();
-		}
-
-		@Override
-		public void write(DataOutput out) throws IOException {
-			super.write(out);
-			out.writeInt(this.idlist.size());
-			for (Integer id : idlist) {
-				out.writeInt(id);
-			}
-		}
-	}
-  */
-
-  /*
-	public static class SnapshotHeader extends Header {
-
-		public SnapshotHeader() { super(Type.SNAPSHOT, null, 0f, false); }
-
-		public SnapshotHeader(TaskAttemptID owner, float progress) {
-			super(Type.SNAPSHOT, owner, progress, progress == 1f);
-		}
-		
-		@Override
-		public int compareTo(Header header) {
-			if (header instanceof SnapshotHeader) {
-				SnapshotHeader sheader = (SnapshotHeader) header;
-				TaskID me = owner().getTaskID();
-				TaskID other = sheader.owner().getTaskID();
-				if (me.equals(other)) {
-					return this.progress() < sheader.progress() ? -1 :
-							this.progress() > sheader.progress() ? 1 : 0;
-				}
-				else {
-					return me.compareTo(other);
-				}
-			}
-			return -1;
-		}
-
-		@Override
-		public boolean equals(Object o) {
-			if (o instanceof SnapshotHeader) {
-				return this.compareTo((SnapshotHeader) o) == 0;
-			}
-			return false;
-		}
-
-		@Override
-		public int hashCode() {
-			return (owner().getTaskID().toString() + ":" + progress()).hashCode();
-		}
-
-		@Override
-		public void readFields(DataInput in) throws IOException {
-			super.readFields(in);
-		}
-
-		@Override
-		public void write(DataOutput out) throws IOException {
-			super.write(out);
-		}
-	}
-  */
-
 	
 	private Header header;
-	
-	//private Type type;
 	
 	//private Path data;
 	//private byte[] data;
@@ -492,44 +299,14 @@ public class OutputInMemoryBuffer implements Comparable<OutputInMemoryBuffer>, W
 	
 	private int partitions;
 	
-	private transient Set<TaskAttemptID> serviced = new HashSet<TaskAttemptID>();
+	public Set<TaskID> toService = new HashSet<TaskID>();
+	public transient Set<TaskAttemptID> serviced = new HashSet<TaskAttemptID>();
 
   private static final Log LOG = LogFactory.getLog(OutputInMemoryBuffer.class.getName());
 
 
 	public OutputInMemoryBuffer() { 	}
 	
-  /*
-	//public OutputInMemoryBuffer(TaskAttemptID owner, long sequence, Path data, Path index, int partitions) 
-	public OutputInMemoryBuffer(TaskAttemptID owner, long sequence, byte[] data, byte[] index, int partitions) {
-		//this.type = Type.STREAM;
-		this.data = ByteBuffer.wrap(data);
-		this.index = ByteBuffer.wrap(index);
-		this.header = new InMemoryHeader (owner, sequence);
-		this.partitions = partitions;
-	}
-  */
-
-  /*
-	public OutputInMemoryBuffer(TaskAttemptID owner, float progress, byte[] data, byte[] index, int partitions) {
-		//this.type = Type.SNAPSHOT;
-		this.data = data;
-		this.index = index;
-		this.header = new SnapshotHeader(owner, progress);
-		this.partitions = partitions;
-	}
-
-	public OutputInMemoryBuffer(TaskAttemptID owner, SortedSet<Integer> idlist, float progress, 
-                              byte[] data, byte[] index, 
-                              boolean complete, int partitions) {
-		//this.type = Type.FILE;
-		this.data     = data;
-		this.index    = index;
-		this.header = new FileHeader(owner, progress, complete, idlist);
-		this.partitions = partitions;
-	}
-	*/
-  
 	public OutputInMemoryBuffer(TaskAttemptID owner, Integer id, float progress, 
                               byte[] data, byte[] index, boolean complete, int partitions) {
 		//this.type = Type.FILE;
@@ -539,6 +316,8 @@ public class OutputInMemoryBuffer implements Comparable<OutputInMemoryBuffer>, W
 
     LOG.info("in constructor, passed-in data size is " + data.length);
     LOG.info("in constructor, internal data size is " + this.data.capacity());
+    LOG.info("in constructor, passed-in index size is " + index.length);
+    LOG.info("in constructor, internal index size is " + this.index.capacity());
 		
 		SortedSet<Integer> idlist = new TreeSet<Integer>();
 		idlist.add(id);
@@ -555,11 +334,17 @@ public class OutputInMemoryBuffer implements Comparable<OutputInMemoryBuffer>, W
 		this.index    = ByteBuffer.wrap(index);
 		this.header = new InMemoryHeader(owner, progress, complete, idlist);
 		this.partitions = partitions;
+
+    LOG.info("in constructor, passed-in data size is " + data.length);
+    LOG.info("in constructor, internal data size is " + this.data.capacity());
+    LOG.info("in constructor, passed-in index size is " + index.length);
+    LOG.info("in constructor, internal index size is " + this.index.capacity());
 	}
 
 	@Override
 	public String toString() {
-		return this.header.toString();
+		return this.header.toString() + 
+           " deps " + this.toService;
 	}
 	
 	@Override
@@ -575,21 +360,31 @@ public class OutputInMemoryBuffer implements Comparable<OutputInMemoryBuffer>, W
 		return this.serviced.size();
 	}
 	
+	public int toService() {
+		return this.toService.size();
+	}
+	
 	public boolean isServiced(TaskAttemptID taskid) {
 		return this.serviced.contains(taskid);
 	}
 	
 	public void serviced(TaskAttemptID taskid) {
+    LOG.info("    " + this.header.owner());
 		this.serviced.add(taskid);
+    if (this.toService.contains(taskid.getTaskID())) { 
+     LOG.info("   Serviced a task that I thought I should: " + taskid.getTaskID());
+     if (this.serviced.size() == this.toService.size()) { 
+      LOG.info("   WHELP, that should be the last task that I service");
+     }
+    } else { 
+     LOG.info("   Serviced a task that I DID NOT think I should: " + taskid.getTaskID());
+     LOG.info("     toService: " + this.toService);
+    }
 	}
 	
 	public Header header() {
 		return this.header;
 	}
-	
-	//public Type type() {
-	//	return this.type;
-	//}
 	
 	public ByteBuffer data() {
 		return this.data;
@@ -598,9 +393,25 @@ public class OutputInMemoryBuffer implements Comparable<OutputInMemoryBuffer>, W
 	public ByteBuffer index() {
 		return this.index;
 	}
+
+  public void setReduceTaskDependencies(int[] reduceTasks) { 
+    LOG.info("in setReduceTaskDependencies() with len: " + reduceTasks.length);
+	  //private transient Set<TaskID> toService = new HashSet<TaskID>();
+    // need to create a TaskID for each entry
+    for (int i=0; i<reduceTasks.length; i++) { 
+      this.toService.add(new TaskID(this.header.owner().getJobID(), 
+                               false, 
+                               reduceTasks[i]));
+      LOG.info("Adding redTasks " + (new TaskID(this.header.owner().getJobID(), 
+                               false,
+                               reduceTasks[i])) + " to toService");
+    }
+    LOG.info("exiting setReduceTaskDependencies, size: " + this.toService.size());
+  }
 	
 	public void delete() throws IOException {
-    LOG.info("In OutputInMemoryBuffer, attempting to delete data");
+    LOG.info("In OutputInMemoryBuffer, attempting to delete data for " +
+              this.header.owner());
 		if (this.data != null) { 
       this.data = null;
 		}
@@ -610,29 +421,8 @@ public class OutputInMemoryBuffer implements Comparable<OutputInMemoryBuffer>, W
 		}
 	}
 
-  /*
-	public void open(FileSystem fs) throws IOException {
-		if (this.dataIn == null) {
-			this.dataIn = fs.open(data());
-			this.indexIn = fs.open(index());
-		}
-    LOG.info("In OutputInMemoryBuffer, opening file: " + data());
-	}
-  */
-
 	public void close() throws IOException {
-    /*
-		if (this.dataIn != null) {
-      LOG.info("In OutputInMemoryBuffer, closing dataIn");
-			this.dataIn.close();
-			this.dataIn = null;
-		}
-
-		if (this.indexIn != null) {
-			this.indexIn.close();
-			this.indexIn = null;
-		}
-    */
+    //Nothing to close, since we're not using streams
 	}
 
   public DataInputStream dataInputStream() {
@@ -647,25 +437,50 @@ public class OutputInMemoryBuffer implements Comparable<OutputInMemoryBuffer>, W
 	 * @throws IOException
 	 */
 	public Header seek(int partition) throws IOException {
-		//try {
+		try {
 			//indexIn.seek(partition * JOutputBuffer.MAP_OUTPUT_INDEX_RECORD_LENGTH);
       this.index.position(partition * JOutputBuffer.MAP_OUTPUT_INDEX_RECORD_LENGTH);
 			long segmentOffset    = this.index.getLong();
 			long rawSegmentLength = this.index.getLong();
 			long segmentLength    = this.index.getLong();
 
+      if (this.data == null) { 
+        LOG.error("About to seek and data is NULL. This is bad");
+      } else { 
+        LOG.info("Seeking to " + (int)segmentOffset + " buf.pos() "  + this.data.position() + 
+                 " buf.lim " + this.data.limit() + " buf.cap " + this.data.capacity());
+      }
 			//dataIn.seek(segmentOffset);
 			this.data.position((int)segmentOffset);
 			
 			header.decompressed(rawSegmentLength);
 			header.compressed(segmentLength);
 			return header;
-    /*
-		} catch (IOException e) {
-			close();
-			throw e;
-		}
-    */
+		} catch (IllegalArgumentException iae) {
+      if (null == this.index) { 
+        LOG.error("seek failed, index is null"); 
+        String fullStackTrace = 
+          org.apache.commons.lang.exception.ExceptionUtils.getFullStackTrace(iae);
+        LOG.error(" " + fullStackTrace);
+      } else { 
+        LOG.error("seek failed, partition: " + partition + 
+                " recLen: " + JOutputBuffer.MAP_OUTPUT_INDEX_RECORD_LENGTH + 
+                " index: cap " + this.index.capacity() + 
+                " limit " + this.index.limit() + " pos: " + this.index.position());
+        String fullStackTrace = 
+          org.apache.commons.lang.exception.ExceptionUtils.getFullStackTrace(iae);
+        LOG.error(" " + fullStackTrace);
+      }
+		 // close();
+			throw iae;
+		} catch (BufferUnderflowException bue) { 
+      LOG.error("bue: " + bue.toString() + 
+                "\n\t for partition " + partition + 
+                "\n\t this.index: cap: " + this.index.capacity() + 
+                " pos: " + this.index.position() + " limit: " + this.index.limit());
+      throw bue;
+    }
+    //return null;  
 	}
 
 	@Override
@@ -677,6 +492,15 @@ public class OutputInMemoryBuffer implements Comparable<OutputInMemoryBuffer>, W
 		//this.index = WritableUtils.readCompressedByteArray(in);
 		this.data = WritableUtils.readByteBufferWithLength(in);
 		this.index = WritableUtils.readByteBufferWithLength(in);
+
+    // receive the toService data
+    int toServiceSize = in.readInt();
+    this.toService = new HashSet<TaskID>(toServiceSize);
+    for (int i=0; i<toServiceSize; i++) { 
+      TaskID tempID = new TaskID();
+      tempID.readFields(in);
+      this.toService.add(tempID);
+    }
 	}
 
 	@Override
@@ -688,5 +512,12 @@ public class OutputInMemoryBuffer implements Comparable<OutputInMemoryBuffer>, W
 		//WritableUtils.writeCompressedByteArray(out, this.index);
     WritableUtils.writeByteBufferWithLength(this.data, out);
     WritableUtils.writeByteBufferWithLength(this.index, out);
+
+    // set the toService set over one at a time
+    out.writeInt(this.toService.size());
+    Iterator<TaskID> itr = this.toService.iterator();
+    while(itr.hasNext()) { 
+      itr.next().write(out);
+    }
 	}
 }

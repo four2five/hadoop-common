@@ -40,6 +40,7 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.hadoop.mapred.InputCollector;
 import org.apache.hadoop.mapred.JobConf;
+import org.apache.hadoop.mapred.ReduceTask;
 import org.apache.hadoop.mapred.Task;
 import org.apache.hadoop.mapred.TaskAttemptID;
 import org.apache.hadoop.mapred.TaskID;
@@ -103,7 +104,7 @@ public class InMemoryBufferExchangeSink<K extends Object, V extends Object> impl
 	private Executor executor;
 
 	/* A thread for accepting new connections. */
-	private Thread acceptor;
+	private MyThread acceptor;
 
 	/* The channel used for accepting new connections. */
 	private ServerSocketChannel server;
@@ -129,6 +130,11 @@ public class InMemoryBufferExchangeSink<K extends Object, V extends Object> impl
 	/* The task that owns this sink and is receiving the input. */
 	private Task task;
 
+  /* The map task dependencies of the associated Reduce Task for this sink */
+  //int[] mapTaskDependencies;
+  protected HashSet<TaskID> mapTaskIDs;
+
+
 	public InMemoryBufferExchangeSink(JobConf conf,
 			           InputCollector<K, V> collector,
 			           Task task)
@@ -150,6 +156,27 @@ public class InMemoryBufferExchangeSink<K extends Object, V extends Object> impl
 		this.handlers = Collections.synchronizedSet(new HashSet<Handler>());
 		this.successful = Collections.synchronizedSet(new HashSet<TaskID>());
 
+    int[] mapTaskDependencies = ((ReduceTask)task).getDependencies();
+    /*
+    LOG.info("This sink depends on " + mapTaskDependencies.length + " mapTasks");
+    for (int i=0; i<mapTaskDependencies.length; i++) { 
+      LOG.info("  " + mapTaskDependencies[i]);
+    }
+    */
+    
+    // now turn those map task ids into 
+    TaskID reducerID = this.task.getTaskID().getTaskID();
+    // and then create the corresponding map TaskIDs for the dependencies 
+    this.mapTaskIDs = new HashSet<TaskID>(mapTaskDependencies.length);
+    for (int i=0; i<mapTaskDependencies.length; i++) { 
+      TaskID tempID = new TaskID(reducerID.getJobID(),true,mapTaskDependencies[i]);
+      //LOG.info("  " + tempID);
+      this.mapTaskIDs.add(tempID);
+    }
+    //LOG.info("mapTaskIDs size: " + this.mapTaskIDs.size());
+
+
+
 		/* The server socket and selector registration */
 		this.server = ServerSocketChannel.open();
 		this.server.configureBlocking(true);
@@ -169,57 +196,73 @@ public class InMemoryBufferExchangeSink<K extends Object, V extends Object> impl
 		return this.progress;
 	}
 
+	/* Create a new thread for accepting new connections. */
+	protected class MyThread extends Thread {
+    private HashSet<TaskID> mapTaskIDs = null;
+
+    public MyThread() { 
+      super();
+    }
+
+    public void setMapTaskIDs(HashSet<TaskID> mapTaskIDs) { 
+      this.mapTaskIDs = mapTaskIDs;
+    }
+
+		public void run() {
+			try {
+ 				while (server.isOpen()) {
+ 					SocketChannel channel = server.accept();
+ 					channel.configureBlocking(true);
+ 					/* Note: no buffered input stream due to memory pressure. */
+ 					DataInputStream  istream = new DataInputStream(channel.socket().getInputStream());
+ 					DataOutputStream ostream = 
+               new DataOutputStream(new BufferedOutputStream(channel.socket().getOutputStream()));
+ 					
+ 					if (complete()) {
+             LOG.info("in run, complete() is true, closing ostream");
+ 						WritableUtils.writeEnum(ostream, Connect.BUFFER_COMPLETE);
+ 						ostream.close();
+ 					} else if (handlers.size() > maxConnections) {
+ 						LOG.info("Connections full. connections = " + handlers.size() + 
+ 								 ", max allowed " + maxConnections);
+ 						WritableUtils.writeEnum(ostream, Connect.CONNECTIONS_FULL);
+ 						ostream.close();
+ 					} else {
+ 						WritableUtils.writeEnum(ostream, Connect.OPEN);
+ 						ostream.flush();
+ 						
+ 						BufferExchange.BufferType type = 
+                WritableUtils.readEnum(istream, BufferExchange.BufferType.class);
+ 						Handler handler = null;
+
+             if (BufferType.INMEMORY == type) {
+               LOG.info("hander is InMemoryHandler");
+ 							handler = new InMemoryHandler(collector, istream, ostream, this.mapTaskIDs);
+ 						} else {
+ 							LOG.error("Unknown buffer type " + type);
+ 							channel.close();
+ 							continue;
+ 						}
+ 						
+ 						LOG.debug("InMemoryBufferSink: " + ownerid + " opening connection.");
+ 						handlers.add(handler);
+ 						executor.execute(handler);
+ 					}
+ 				}
+ 				LOG.info("InMemoryBufferSink " + ownerid + " buffer response server closed.");
+ 			} catch (IOException e) { 
+ 				if (!complete()) {
+ 					e.printStackTrace();
+ 				}
+ 			}
+ 		}
+ 	}  // public MyThread
+
 	/** Open the sink for incoming connections. */
 	public void open() {
-		/* Create a new thread for accepting new connections. */
-		this.acceptor = new Thread() {
-			public void run() {
-				try {
-					while (server.isOpen()) {
-						SocketChannel channel = server.accept();
-						channel.configureBlocking(true);
-						/* Note: no buffered input stream due to memory pressure. */
-						DataInputStream  istream = new DataInputStream(channel.socket().getInputStream());
-						DataOutputStream ostream = 
-                new DataOutputStream(new BufferedOutputStream(channel.socket().getOutputStream()));
-						
-						if (complete()) {
-							WritableUtils.writeEnum(ostream, Connect.BUFFER_COMPLETE);
-							ostream.close();
-						} else if (handlers.size() > maxConnections) {
-							LOG.info("Connections full. connections = " + handlers.size() + 
-									 ", max allowed " + maxConnections);
-							WritableUtils.writeEnum(ostream, Connect.CONNECTIONS_FULL);
-							ostream.close();
-						} else {
-							WritableUtils.writeEnum(ostream, Connect.OPEN);
-							ostream.flush();
-							
-							BufferExchange.BufferType type = WritableUtils.readEnum(istream, BufferExchange.BufferType.class);
-							Handler handler = null;
 
-              if (BufferType.INMEMORY == type) {
-                LOG.info("hander is InMemoryHandler");
-								handler = new InMemoryHandler(collector, istream, ostream);
-							} else {
-								LOG.error("Unknown buffer type " + type);
-								channel.close();
-								continue;
-							}
-							
-							LOG.debug("InMemoryBufferSink: " + ownerid + " opening connection.");
-							handlers.add(handler);
-							executor.execute(handler);
-						}
-					}
-					LOG.info("InMemoryBufferSink " + ownerid + " buffer response server closed.");
-				} catch (IOException e) { 
-					if (!complete()) {
-						e.printStackTrace();
-					}
-				}
-			}
-		};
+		this.acceptor = new MyThread();
+    acceptor.setMapTaskIDs(this.mapTaskIDs);
 		acceptor.setDaemon(true);
 		acceptor.setPriority(Thread.MAX_PRIORITY);
 		acceptor.start();
@@ -247,9 +290,11 @@ public class InMemoryBufferExchangeSink<K extends Object, V extends Object> impl
 	 * @return true if all inputs have sent all their input.
 	 */
 	public boolean complete() {
-    LOG.info("in sink.complete(), size: " + this.successful.size() + 
-             " numInputs " + numInputs);
-		return this.successful.size() == numInputs;
+    synchronized(this.successful) { 
+      LOG.info("in sink.complete(), size: " + this.successful.size() + 
+              " numInputs " + numInputs);
+		  return this.successful.size() >= numInputs;
+    }
 	}
 
 	/**
@@ -262,7 +307,8 @@ public class InMemoryBufferExchangeSink<K extends Object, V extends Object> impl
 
 	private void updateProgress(OutputInMemoryBuffer.Header header) {
 		TaskID taskid = header.owner().getTaskID();
-		LOG.info("Task " + taskid + ": copy from "  + header.owner() + " progress "+ header.progress());
+		LOG.info("Task " + taskid + ": copy from "  + header.owner() + 
+             " progress "+ header.progress());
 		if (inputProgress.containsKey(taskid)) {
 			progressSum -= inputProgress.get(taskid);
 		} 
@@ -271,9 +317,11 @@ public class InMemoryBufferExchangeSink<K extends Object, V extends Object> impl
 		progressSum += header.progress();
 		
 		if (header.eof()) {
-			successful.add(header.owner().getTaskID());
-			LOG.info(successful.size() + " completed connections. " +
-					(numInputs - successful.size()) + " remaining.");
+      synchronized(successful) { 
+			  successful.add(header.owner().getTaskID());
+			  LOG.info(successful.size() + " completed connections. " +
+					  (numInputs - successful.size()) + " remaining.");
+      }
 		} else { 
       LOG.info("Header for " + taskid + " is not eof()");
     }
@@ -281,6 +329,7 @@ public class InMemoryBufferExchangeSink<K extends Object, V extends Object> impl
 		if (complete()) {
 			this.progress.complete();
 			this.collector.close();
+      LOG.info("in updateProgress, complete() is true, closing collector");
 		} else {
 			LOG.info("Task " + taskid + " total copy progress = " + (progressSum / (float) numInputs));
 			this.progress.set(progressSum / (float) numInputs);
@@ -296,12 +345,16 @@ public class InMemoryBufferExchangeSink<K extends Object, V extends Object> impl
 		protected DataInputStream istream;
 		
 		protected DataOutputStream ostream;
+
+    protected HashSet<TaskID> mapTaskIDs;
 		
 		protected Handler(InputCollector<K, V> collector,
-				          DataInputStream istream, DataOutputStream ostream) { 
+				          DataInputStream istream, DataOutputStream ostream,
+                  HashSet<TaskID> mapTaskIDs) { 
 			this.collector = collector;
 			this.istream = istream;
 			this.ostream = ostream;
+      this.mapTaskIDs = mapTaskIDs;
 		}
 		
 		public final void close() {
@@ -334,8 +387,8 @@ public class InMemoryBufferExchangeSink<K extends Object, V extends Object> impl
 						if (open == Integer.MAX_VALUE) {
               LOG.info("in run, and open == MAX_VALUE");
 							H header = (H) OutputInMemoryBuffer.Header.readHeader(istream);
-							LOG.info("Handler " + this + " receive " + header.compressed() + " bytes. header: " + header);
-							receive(header);
+							LOG.info("Handler received " + header.compressed() + " bytes. header: " + header);
+						  receive(header);
 						} else { 
               LOG.info("in run, but open != MAX_VALUE. open: " + open);
             }
@@ -359,8 +412,9 @@ public class InMemoryBufferExchangeSink<K extends Object, V extends Object> impl
 	final class InMemoryHandler extends Handler<OutputInMemoryBuffer.InMemoryHeader> {
 
 		public InMemoryHandler(InputCollector<K, V> collector,
-				           DataInputStream istream, DataOutputStream ostream) {
-			super(collector, istream, ostream);
+				           DataInputStream istream, DataOutputStream ostream,
+                   HashSet<TaskID> mapTaskIDs) {
+			super(collector, istream, ostream, mapTaskIDs);
 		}
 		
 	//	public void receive(OutputInMemoryBuffer.FileHeader header) throws IOException {
@@ -379,23 +433,29 @@ public class InMemoryBufferExchangeSink<K extends Object, V extends Object> impl
 			// I'm the only one that should be updating this position. 
 			int pos = position.intValue() < 0 ? header.ids().first() : position.intValue(); 
 			synchronized (position) {
-				if (header.ids().first() == pos) {
+				if (header.ids().first() == pos && 
+            this.mapTaskIDs.contains(header.owner().getTaskID())) { 
 					WritableUtils.writeEnum(ostream, BufferExchange.Transfer.READY);
 					ostream.flush();
-					LOG.info("InMemoryBuffer handler " + hashCode() + " ready to receive -- " + header);
+					//LOG.info("InMemoryBuffer handler ready to receive -- " + header);
 					if (collector.read(istream, header)) {
+            LOG.info("Received header " + header);
 						updateProgress(header);
 						synchronized (task) {
+              LOG.info("pre receive.notifyAll()");
 							task.notifyAll();
+              LOG.info("post receive.notifyAll()");
 						}
-					}
+					} else { 
+            LOG.info("Issue receiving " + header);
+          }
 					position.set(header.ids().last() + 1);
-					LOG.info("InMemoryBuffer handler " + " done receiving up to position " + position.intValue());
+					LOG.info("InMemoryBuffer handler done receiving up to position " + position.intValue());
 				} else {
 					LOG.info(this + " ignoring -- " + header);
 					WritableUtils.writeEnum(ostream, BufferExchange.Transfer.IGNORE);
 				}
-			}
+			} 
 			// Indicate the next spill file that I expect. 
 			pos = position.intValue();
 			LOG.info("Updating source position to " + pos);

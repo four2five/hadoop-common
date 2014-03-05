@@ -27,6 +27,7 @@ import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
+//import java.util.Arrays;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -151,11 +152,13 @@ public class InMemoryManager implements InMemoryBufferUmbilicalProtocol {
 						LOG.info("Sending " + handle.size() + " requests to " + location);
 						for (BufferRequest request : handle) {
 							BufferRequest.write(out, request); // Write the request to the socket.
-							LOG.info("Sent request " + request + " to " + location);
+							LOG.info("JB, Sent request " + request + " to " + location);
 						}
 						out.flush();
 						out.close();
 						out = null;
+            socket.close();
+            socket = null;
 
 						synchronized (transfers) {
 							/* Clear out the requests that were sent.  Other
@@ -173,7 +176,11 @@ public class InMemoryManager implements InMemoryBufferUmbilicalProtocol {
 							if (out != null) {
 								out.close();
 							}
+						} catch (Throwable t) {
+							LOG.error(t);
+						}
 
+						try {
 							if (socket != null) {
 								socket.close();
 							}
@@ -182,7 +189,6 @@ public class InMemoryManager implements InMemoryBufferUmbilicalProtocol {
 						}
 					}
 				}
-
 			}
 		}
 
@@ -287,8 +293,9 @@ public class InMemoryManager implements InMemoryBufferUmbilicalProtocol {
 				while (open) {
 					synchronized (this) {
 						while (!somethingToSend && open) {
-							LOG.debug(this + " nothing to send.");
-							try { this.wait();
+							LOG.info(this + " nothing to send.");
+							try { 
+                this.wait();
 							} catch (InterruptedException e) { }
 						}
 						
@@ -337,7 +344,6 @@ public class InMemoryManager implements InMemoryBufferUmbilicalProtocol {
 				somethingToSend = true;
 				this.notifyAll();
 			}
-
 		}
 
 		/** 
@@ -361,7 +367,8 @@ public class InMemoryManager implements InMemoryBufferUmbilicalProtocol {
 		 * @param requests The request managers.
 		 * @return Those requests that have been fully satisifed.
 		 */
-		private void flush(SortedSet<OutputInMemoryBuffer> outs, Collection<InMemoryBufferExchangeSource> srcs) {
+		private void flush(SortedSet<OutputInMemoryBuffer> outs, 
+                       Collection<InMemoryBufferExchangeSource> srcs) {
 			float stalls = 0f;
 			float src_cnt = srcs.size();
 			for (OutputInMemoryBuffer buffer : outs) {
@@ -370,7 +377,8 @@ public class InMemoryManager implements InMemoryBufferUmbilicalProtocol {
 					if (!open) return;
 					InMemoryBufferExchangeSource src = siter.next();
 					if (!buffer.isServiced(src.destination())) {
-            LOG.info("Sending buffer " + buffer.header().owner().toString() + " to " + src.destination() + 
+            LOG.info("Sending buffer " + buffer.header().owner().toString() + 
+                     " to " + src.destination() + 
                      " eof " + buffer.header().eof() + 
                      " progress " + buffer.header().progress());
 						BufferExchange.Transfer result = src.send(buffer);
@@ -384,8 +392,12 @@ public class InMemoryManager implements InMemoryBufferUmbilicalProtocol {
 							siter.remove();
 							stalls++;
 							somethingToSend = true; // Try again later.
-						} else if (BufferExchange.Transfer.IGNORE == result ||
-								BufferExchange.Transfer.SUCCESS == result) {
+						} else if (BufferExchange.Transfer.IGNORE == result) { 
+							LOG.info("Tryed to send file " + buffer.header().owner() + 
+                        " to " + src.destination() + " but receiver ignored it");
+              // Don't count an ignored buffer send as serviced
+							//buffer.serviced(src.destination()); 
+            } else if (BufferExchange.Transfer.SUCCESS == result) {
 							LOG.info("Sent file " + buffer.header().owner() + " to " + src.destination());
 							buffer.serviced(src.destination());
 						}
@@ -394,10 +406,14 @@ public class InMemoryManager implements InMemoryBufferUmbilicalProtocol {
 				
         // all outputs are now "streams" for this purpose
 				if ( //file.type() == OutputInMemoryFile.Type.STREAM && 
-						buffer.paritions() == buffer.serviced()) {
+						//buffer.paritions() == buffer.serviced()) {
+            buffer.toService() > 0 &&  // remove this later, sanity check for now
+						buffer.toService() == buffer.serviced()) {
 					/* Assume no speculations for streaming. */
 					try {
-						LOG.debug("Garbage collect output" + buffer.header());
+						LOG.info("Garbage collect output" + buffer.header());
+            LOG.info("\tServiced: " + buffer.serviced + "\n" + 
+                     "\ttoService: " + buffer.toService);
             buffer.delete(); // hopefully the GC cleans this up in short order
 						//file.delete(rfs);
 					} catch (IOException e) {
@@ -409,7 +425,6 @@ public class InMemoryManager implements InMemoryBufferUmbilicalProtocol {
 					}
 				}
 			}
-			
 			this.stallfraction = stalls / src_cnt;
 		}
 	}
@@ -462,8 +477,6 @@ public class InMemoryManager implements InMemoryBufferUmbilicalProtocol {
 
 	public InMemoryManager(TaskTracker tracker) throws IOException {
 		this.tracker   = tracker;
-		//this.localFs   = FileSystem.getLocal(tracker.conf());
-		//this.rfs       = ((LocalFileSystem)localFs).getRaw();
 		this.requestTransfer = new RequestTransfer();
 		this.executor  = Executors.newCachedThreadPool();
 		this.mapSources    = new HashMap<JobID, Set<InMemoryBufferExchangeSource>>();
@@ -475,25 +488,44 @@ public class InMemoryManager implements InMemoryBufferUmbilicalProtocol {
 	}
 
 	public static InetSocketAddress getControlAddress(Configuration conf) {
+    InetSocketAddress retVal = null;
 		try {
 			int port = conf.getInt("mapred.buffer.manager.data.port", 9021);
 			String address = InetAddress.getLocalHost().getCanonicalHostName();
 			address += ":" + port;
-			return NetUtils.createSocketAddr(address);
+			retVal = NetUtils.createSocketAddr(address);
+      LOG.info("local hostname " + InetAddress.getLocalHost());
+      LOG.info("Canonical hostname " + InetAddress.getLocalHost().getCanonicalHostName());
+      InetAddress[] allAddresses = InetAddress.getAllByName(InetAddress.getLocalHost().getCanonicalHostName());
+      for (InetAddress oneAddress : allAddresses) { 
+        LOG.info("  address: " + oneAddress);
+      }
 		} catch (Throwable t) {
-			return NetUtils.createSocketAddr("localhost:9021");
+			retVal = NetUtils.createSocketAddr("localhost:9021");
 		}
+
+    LOG.info("getControlAddress returning address " + retVal);
+    return retVal;
 	}
 
 	public static InetSocketAddress getServerAddress(Configuration conf) {
+    InetSocketAddress retVal = null;
 		try {
 			String address = InetAddress.getLocalHost().getCanonicalHostName();
 			int port = conf.getInt("mapred.buffer.manager.control.port", 9020);
 			address += ":" + port;
-			return NetUtils.createSocketAddr(address);
+		  retVal = NetUtils.createSocketAddr(address);
+      LOG.info("local hostname " + InetAddress.getLocalHost());
+      LOG.info("Canonical hostname " + InetAddress.getLocalHost().getCanonicalHostName());
+      InetAddress[] allAddresses = InetAddress.getAllByName(InetAddress.getLocalHost().getCanonicalHostName());
+      for (InetAddress oneAddress : allAddresses) { 
+        LOG.info("  address: " + oneAddress);
+      }
 		} catch (Throwable t) {
-			return NetUtils.createSocketAddr("localhost:9020");
+			retVal = NetUtils.createSocketAddr("localhost:9020");
 		}
+    LOG.info("getServerAddress returning address " + retVal);
+    return retVal;
 	}
 
 	public void open() throws IOException {
@@ -524,6 +556,7 @@ public class InMemoryManager implements InMemoryBufferUmbilicalProtocol {
 						connection = channel.accept();
 						DataInputStream in = new DataInputStream(connection.socket().getInputStream());
 						int numRequests = in.readInt();
+            LOG.info("numRequests: " + numRequests);
 						for (int i = 0; i < numRequests; i++) {
 							BufferRequest request = BufferRequest.read(in);
 							if (request instanceof ReduceBufferRequest) {
@@ -666,7 +699,8 @@ public class InMemoryManager implements InMemoryBufferUmbilicalProtocol {
                " eof: " + buffer.header().eof() + 
                " progress " + buffer.header().progress() + 
                " data size " + buffer.data().capacity() + 
-               " index size " + buffer.index().capacity());
+               " index size " + buffer.index().capacity() + 
+               " toService (size) " + buffer.toService());
 			this.queue.add(buffer);
 		} else { 
       LOG.info("Just received a null Buffer. That's not good");
@@ -678,8 +712,7 @@ public class InMemoryManager implements InMemoryBufferUmbilicalProtocol {
     LOG.info("Servicing buffer request: " + request.toString());
 		if (!request.srcHost().equals(hostname)) {
 			requestTransfer.transfer(request); // request is remote.
-		}
-		else {
+		} else {
 			if (request instanceof ReduceBufferRequest) {
 				add((ReduceBufferRequest) request);
 			}
@@ -732,8 +765,7 @@ public class InMemoryManager implements InMemoryBufferUmbilicalProtocol {
 			synchronized (this) {
 				register(request);
 			}
-		}
-		else {
+		} else {
 			LOG.error("Request is remote!");
 		}
 	}
@@ -750,8 +782,7 @@ public class InMemoryManager implements InMemoryBufferUmbilicalProtocol {
 		} else if (!this.mapSources.get(jobid).contains(source)) {
       LOG.info("Adding map source for job " + jobid);
 			this.mapSources.get(jobid).add(source);
-		}
-		else {
+		} else {
 			LOG.debug("BufferController: request manager already exists." + request);
 			source = null;
 		}
@@ -760,6 +791,7 @@ public class InMemoryManager implements InMemoryBufferUmbilicalProtocol {
 			if (this.bufferManagers.containsKey(jobid)) {
 			  LOG.info("Adding source " + source + " for all BufferManagers for job " + jobid);
 				for (BufferManager bm : this.bufferManagers.get(jobid).values()) {
+          LOG.info("    Adding bm " + bm + " for source " + source);
 					bm.add(source);
 				}
 			}
@@ -806,8 +838,7 @@ public class InMemoryManager implements InMemoryBufferUmbilicalProtocol {
 					bm.add(source);
 				}
 			}
-		}
-		else {
+		} else {
 			TaskID taskid = bm.taskid.getTaskID();
       LOG.info("register() adding buffermanager for reduces for job " + jobid);
 			if (this.reduceSources.containsKey(taskid)) {

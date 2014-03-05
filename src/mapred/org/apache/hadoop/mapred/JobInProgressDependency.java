@@ -106,6 +106,7 @@ public class JobInProgressDependency extends JobInProgress {
   TaskInProgress cleanup[] = new TaskInProgress[0];
   TaskInProgress setup[] = new TaskInProgress[0];
   ArrayList<ArrayList<TaskInProgress>> reducerToMapperDependencies = null;  
+  ArrayList<ArrayList<TaskInProgress>> mapperToReducerDependencies = null;  
   int numMapTasks = 0;
   int numReduceTasks = 0;
   final long memoryPerMap;
@@ -821,14 +822,14 @@ public class JobInProgressDependency extends JobInProgress {
     //debugger
     for( int i=0; i<reducerToMapperDependencies.size(); i++) { 
       List<TaskInProgress> tempList = reducerToMapperDependencies.get(i);
-      System.out.println("Reducer[" + i + "]:" + "\n");
+      LOG.info("Reducer[" + i + "]:" + "\n");
       for( int j=0; j<tempList.size(); j++) { 
         //System.out.println("\t" + tempList.get(j));
         TaskInProgress tempTask = tempList.get(j);
         // figure out which map task this is
         for( int k =0; k<maps.length; k++) { 
           if( maps[k] == tempTask )  {
-            System.out.println("\tmap: " + k);
+            LOG.info("\tmap: " + k);
             totalConnections++;
             break;
           }
@@ -836,7 +837,7 @@ public class JobInProgressDependency extends JobInProgress {
       }
     }
 
-    System.out.println("Total network connecions: " + totalConnections);
+    LOG.info("Total network connecions: " + totalConnections);
     //
     // Create reduce tasks
     //
@@ -848,6 +849,12 @@ public class JobInProgressDependency extends JobInProgress {
                                       reducerToMapperDependencies.get(i));
       nonRunningReduces.add(reduces[i]);
     }
+
+    //create the map task -> reducer mapping here
+    LOG.info("creating m->r dependencies");
+    this.mapperToReducerDependencies = 
+      createMapperToReducerArray(maps, reduces);
+    LOG.info("done creating m->r dependencies");
 
 
     // Calculate the minimum number of maps to be complete before 
@@ -952,6 +959,43 @@ public class JobInProgressDependency extends JobInProgress {
         LOG.info("\t" + reducerDeps[j]);
         tempList = retListList.get(reducerDeps[j]);
         tempList.add(maps[i]);
+      }
+    }
+
+    return retListList;
+  }
+
+  private ArrayList<ArrayList<TaskInProgress>>  
+  createMapperToReducerArray(TaskInProgress[] maps, TaskInProgress[] reduces)  {
+    ArrayList<ArrayList<TaskInProgress>> retListList = 
+      new ArrayList<ArrayList<TaskInProgress>>(maps.length);
+
+    // seed it
+    for( int i=0; i<numMapTasks; i++) { 
+      retListList.add( new ArrayList<TaskInProgress>());
+    }
+
+    TaskSplitMetaInfo tempTSMI;
+    int[] reducerDeps;
+    ArrayList<TaskInProgress> tempList;
+
+    for( int i=0; i<maps.length; i++) { 
+      tempTSMI = maps[i].getWrappedSplit();
+      if( null == tempTSMI) { 
+        LOG.info("called getWrappedSplit() and it returned a NULL value. Nerds...");
+        continue;
+      }
+      reducerDeps = tempTSMI.getReducerDependencyInfo();
+      tempList = retListList.get(i);
+      //LOG.info("Map task[" + i + "]: " + maps[i]);
+      for (int j=0; j<reducerDeps.length; j++) { 
+        if( reducerDeps[j] >= numMapTasks) { 
+          LOG.warn("reducerDep: " + reducerDeps[j] + " > numMapTasks: " + numMapTasks + 
+                   " BAD JB");
+          continue;
+        }
+        //LOG.info("\t" + reducerDeps[j]);
+        tempList.add(reduces[reducerDeps[j]]);
       }
     }
 
@@ -1462,7 +1506,7 @@ public class JobInProgressDependency extends JobInProgress {
                                             int clusterSize, 
                                             int numUniqueHosts
                                            ) throws IOException {
-    //LOG.info("JB, call into obtainNewMapTask");
+    LOG.info("JB, call into obtainNewMapTask");
     if (status.getRunState() != JobStatus.RUNNING) {
       LOG.info("Cannot create task split for " + profile.getJobID());
       try { throw new IOException("state = " + status.getRunState()); }
@@ -1471,7 +1515,7 @@ public class JobInProgressDependency extends JobInProgress {
     }
 
     if (!scheduleMappers()) { 
-      LOG.debug("JB, scheduleMappers returned false");
+      LOG.info("JB, scheduleMappers returned false");
       return null;
     }
         
@@ -1484,8 +1528,20 @@ public class JobInProgressDependency extends JobInProgress {
     
     Task result = maps[target].getTaskToRun(tts.getTrackerName());
     if (result != null) {
+      LOG.info("JB, this mapper generates data for " + 
+        this.mapperToReducerDependencies.get(target).size() + " reducers");
+      ArrayList<TaskInProgress> tempList = this.mapperToReducerDependencies.get(target);
+      int[] reduces = new int[tempList.size()];
+      for( int i=0; i<tempList.size(); i++) {
+        reduces[i] = tempList.get(i).getTIPId().getId();
+      }
+      //result.setDependencies( this.reducerToMapperDependencies.get(target).toArray(tips));
+      result.setDependencies(reduces);
+
       addRunningTaskToTIP(maps[target], result.getTaskID(), tts, true);
       resetSchedulingOpportunities();
+    } else { 
+      LOG.info("maps[target].getTaskToRun() returned NULL. Whoops");
     }
 
     return result;
@@ -1533,6 +1589,7 @@ public class JobInProgressDependency extends JobInProgress {
                                                      int clusterSize,
                                                      int numUniqueHosts)
   throws IOException {
+    LOG.info("JB, call into obtainNewNodeLocalMapTask");
     if (!tasksInited) {
       LOG.info("Cannot create task split for " + profile.getJobID());
       try { throw new IOException("state = " + status.getRunState()); }
@@ -1548,8 +1605,20 @@ public class JobInProgressDependency extends JobInProgress {
 
     Task result = maps[target].getTaskToRun(tts.getTrackerName());
     if (result != null) {
+      LOG.info("JB, this mapper generates data for " + 
+        this.mapperToReducerDependencies.get(target).size() + " reducers");
+      ArrayList<TaskInProgress> tempList = this.mapperToReducerDependencies.get(target);
+      int[] reduces = new int[tempList.size()];
+      for( int i=0; i<tempList.size(); i++) {
+        reduces[i] = tempList.get(i).getTIPId().getId();
+      }
+      //result.setDependencies( this.reducerToMapperDependencies.get(target).toArray(tips));
+      result.setDependencies(reduces);
+
       addRunningTaskToTIP(maps[target], result.getTaskID(), tts, true);
       resetSchedulingOpportunities();
+    } else { 
+      LOG.info("maps[target].getTaskToRun() returned NULL. Whoops");
     }
 
     return result;
@@ -1558,6 +1627,7 @@ public class JobInProgressDependency extends JobInProgress {
   public synchronized Task obtainNewNodeOrRackLocalMapTask(
       TaskTrackerStatus tts, int clusterSize, int numUniqueHosts)
   throws IOException {
+    LOG.info("JB, call into obtainNewNodeOrRackLocalMapTask");
     if (!tasksInited) {
       LOG.info("Cannot create task split for " + profile.getJobID());
       try { throw new IOException("state = " + status.getRunState()); }
@@ -1573,8 +1643,20 @@ public class JobInProgressDependency extends JobInProgress {
 
     Task result = maps[target].getTaskToRun(tts.getTrackerName());
     if (result != null) {
+      LOG.info("JB, this mapper generates data for " + 
+        this.mapperToReducerDependencies.get(target).size() + " reducers");
+      ArrayList<TaskInProgress> tempList = this.mapperToReducerDependencies.get(target);
+      int[] reduces = new int[tempList.size()];
+      for( int i=0; i<tempList.size(); i++) {
+        reduces[i] = tempList.get(i).getTIPId().getId();
+      }
+      //result.setDependencies( this.reducerToMapperDependencies.get(target).toArray(tips));
+      result.setDependencies(reduces);
+
       addRunningTaskToTIP(maps[target], result.getTaskID(), tts, true);
       resetSchedulingOpportunities();
+    } else { 
+      LOG.info("maps[target].getTaskToRun() returned NULL. Whoops");
     }
 
     return result;
@@ -1584,6 +1666,7 @@ public class JobInProgressDependency extends JobInProgress {
                                                     int clusterSize, 
                                                     int numUniqueHosts)
   throws IOException {
+    LOG.info("JB, call into obtainNewNonLocalMapTask");
     if (!tasksInited) {
       LOG.info("Cannot create task split for " + profile.getJobID());
       try { throw new IOException("state = " + status.getRunState()); }
@@ -1599,8 +1682,21 @@ public class JobInProgressDependency extends JobInProgress {
 
     Task result = maps[target].getTaskToRun(tts.getTrackerName());
     if (result != null) {
+      LOG.info("JB, this mapper generates data for " + 
+        this.mapperToReducerDependencies.get(target).size() + " reducers");
+      ArrayList<TaskInProgress> tempList = this.mapperToReducerDependencies.get(target);
+      int[] reduces = new int[tempList.size()];
+      for( int i=0; i<tempList.size(); i++) {
+        reduces[i] = tempList.get(i).getTIPId().getId();
+      }
+      //result.setDependencies( this.reducerToMapperDependencies.get(target).toArray(tips));
+      result.setDependencies(reduces);
+
       addRunningTaskToTIP(maps[target], result.getTaskID(), tts, true);
       // DO NOT reset for off-switch!
+      //resetSchedulingOpportunities();
+    } else { 
+      LOG.info("maps[target].getTaskToRun() returned NULL. Whoops");
     }
 
     return result;
@@ -1767,13 +1863,17 @@ public class JobInProgressDependency extends JobInProgress {
       TaskInProgress tip = findTaskFromList(setupTaskList,
                              tts, numUniqueHosts, false);
       if (tip == null) {
+        LOG.error("tip is null, bailing");
         return null;
       }
       
       // Now launch the setupTask
       Task result = tip.getTaskToRun(tts.getTrackerName());
       if (result != null) {
+        LOG.info("result is " + result + " running it");
         addRunningTaskToTIP(tip, result.getTaskID(), tts, true);
+      } else { 
+        LOG.error("result is NULL, bad news");
       }
       return result;
     }

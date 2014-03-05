@@ -186,7 +186,7 @@ public class Reducer<KEYIN,VALUEIN,KEYOUT,VALUEOUT> {
   public void run(Context context) throws IOException, InterruptedException {
     setup(context);
     while (context.nextKey()) {
-      LOG.info("  JB, processing key: " + context.getCurrentKey());
+      //LOG.info("  JB, processing key: " + context.getCurrentKey());
       reduce(context.getCurrentKey(), context.getValues(), context);
     }
     cleanup(context);

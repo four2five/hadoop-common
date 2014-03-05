@@ -67,4 +67,10 @@ public class JRecordWriter<K, V>
     this.buffer.free();
   }
 
+  // add a method to reserve memory
+  /*
+  public boolean reservedMemory(int numBytes) { 
+    this.buffer.
+  }
+  */ 
 }

@@ -139,31 +139,7 @@ extends Buffer<K, V> implements InputCollector<K, V> {
 			data = null;
 		}
 
-    /*
-		public void replace(Path file) throws IOException {
-			if (inMemory || file == null) {
-				this.file = file;
-				this.inMemory = false;
-			}
-			else {
-				localFileSys.rename(file, this.file);
-			}
-		}
-    */
-
 		public FileStatus status() {
-      /*
-			if (inMemory) {
-				return null;
-			}
-			try {
-				return localFileSys.getFileStatus(file);
-			} catch (IOException e) {
-				LOG.error(e);
-				e.printStackTrace();
-				return null;
-			}
-      */
 			return null;
 		}
 	}
@@ -213,12 +189,12 @@ extends Buffer<K, V> implements InputCollector<K, V> {
 		}
 
 		public synchronized boolean reserve(int requestedSize, InputStream in) { 
+      LOG.info("In reserve. size: " + size +  
+               " requestedSize: " + requestedSize +  
+               " maxSize: " + maxSize);
+
 			// Wait till the request can be fulfilled...
 			while ((size + requestedSize) > maxSize) {
-
-        LOG.info("In reserve. size: " + size +  
-                 " requestedSize: " + requestedSize +  
-                 " maxSize: " + maxSize);
 
         // Close the input...
         if (in != null) {
@@ -470,18 +446,8 @@ extends Buffer<K, V> implements InputCollector<K, V> {
 				e.printStackTrace();
 			}
 		}
-    /*
-		for (JInput dskInput : inputFilesOnDisk) {
-			try {
-				dskInput.discard();
-			} catch (IOException e) {
-				e.printStackTrace();
-			}
-		}
-    */
 		
 		inputFilesInMemory.clear();
-		//inputFilesOnDisk.clear();
 	}
 	
 	public void flush() throws IOException {
@@ -516,6 +482,7 @@ extends Buffer<K, V> implements InputCollector<K, V> {
 
     //ByteArrayOutputStream baIndexOut = new ByteArrayOutputStream(partitions * MAP_OUTPUT_INDEX_RECORD_LENGTH);
     //DataOutputStream indexOut = new DataOutputStream(baIndexOut);
+    LOG.info("Allocating a BAOS size " + (int)mergeOutputSize);
     ByteArrayOutputStream baOut =  new ByteArrayOutputStream((int)mergeOutputSize);
     DataOutputStream out = new DataOutputStream(baOut);
 
@@ -618,18 +585,6 @@ extends Buffer<K, V> implements InputCollector<K, V> {
       LOG.error("Cannot shuffle " + decompressedLength + " in memory. This is bad.");
     }
 
-    /*
-    else {
-			LOG.info("Shuffling " + decompressedLength + " bytes (" + 
-					compressedLength + " raw bytes) " + 
-					"into Local-FS from " + taskattemptid);
-
-			Path filename = outputHandle.getInputFileForWrite(task.getTaskID(), taskattemptid.getTaskID(), 
-                                                        spills++, decompressedLength);
-
-			shuffleToDisk(taskattemptid, istream, filename, compressedLength);
-		}
-    */
 		return true;
 	}
 	
@@ -745,81 +700,6 @@ extends Buffer<K, V> implements InputCollector<K, V> {
     LOG.info("Returning false from shuffleInMemory()");
 		return false;
 	} // shuffleInMemory
-
-  /*
-	private void shuffleToDisk(
-			//TaskID taskid,
-			TaskAttemptID taskattemptid,
-			InputStream ins,
-			Path filename,
-			long mapOutputLength) 
-	throws IOException {
-		JInput input = new JInput(taskattemptid, filename, mapOutputLength);
-
-		// Copy data to local-disk
-		OutputStream outs = null;
-		int bytesRead = 0;
-		try {
-			outs = rfs.create(filename);
-
-			byte[] buf = new byte[64 * 1024];
-			int n = ins.read(buf, 0, (int) Math.min(buf.length, mapOutputLength));
-			while (n > 0) {
-				bytesRead += n;
-				shuffleClientMetrics.inputBytes(n);
-				outs.write(buf, 0, n);
-
-				// indicate we're making progress
-				reporter.progress();
-				n = ins.read(buf, 0, (int) Math.min(buf.length, mapOutputLength - bytesRead));
-			}
-
-			LOG.info("Read " + bytesRead + " bytes from map-output for " + taskattemptid);
-
-			outs.close();
-		} catch (IOException ioe) {
-			LOG.info("Failed to shuffle from " + taskattemptid, ioe);
-
-			// Discard the map-output
-			try {
-				input.discard();
-			} catch (IOException ignored) {
-				LOG.info("Failed to discard map-output from " + taskattemptid, ignored);
-			}
-			input = null;
-
-			// Close the streams
-			IOUtils.cleanup(LOG, ins, outs);
-
-			// Re-throw
-			throw ioe;
-		}
-
-		// Sanity check
-		if (bytesRead != mapOutputLength) {
-			try {
-				input.discard();
-			} catch (Exception ioe) {
-				// IGNORED because we are cleaning up
-				LOG.info("Failed to discard map-output from " + taskattemptid, ioe);
-			} catch (Throwable t) {
-				String msg = task.getTaskID() + " : Failed in shuffle to disk :" 
-				+ StringUtils.stringifyException(t);
-				LOG.error(msg);
-				throw new IOException(t);
-			}
-			input = null;
-
-			throw new IOException("Incomplete map output received for " +
-					taskattemptid + " (" + 
-					bytesRead + " instead of " + 
-					mapOutputLength + ")"
-			);
-		}
-
-		if (input != null) addInputFilesOnDisk(input);
-	}
-  */
 
 	private void configureClasspath(JobConf conf)
 	throws IOException {
@@ -1119,142 +999,6 @@ extends Buffer<K, V> implements InputCollector<K, V> {
 			inputFilesOnDisk.add(input);
 			inputFilesOnDisk.notifyAll();
 			LOG.info("Total input files on disk " + inputFilesOnDisk.size());
-		}
-	}
-  */
-
-
-
-	/** Starts merging the local copy (on disk) of the map's output so that
-	 * most of the reducer's input is sorted i.e overlapping shuffle
-	 * and merge phases.
-	 */
-   /*
-	private class LocalFSMerger extends Thread {
-		private LocalFileSystem localFileSys;
-		private LocalDirAllocator lDirAlloc;
-		private boolean exit;
-		private int mergeFactor;
-
-
-		public LocalFSMerger(LocalFileSystem fs, JobConf conf) {
-			this.localFileSys = fs;
-			this.lDirAlloc = new LocalDirAllocator("mapred.local.dir");
-			this.exit = false;
-			this.mergeFactor = conf.getInt("io.merge.factor", ioSortFactor);
-
-			setName("Thread for merging on-disk files");
-			setDaemon(true);
-		}
-		
-		@Override
-		public void interrupt() {
-			synchronized (inputFilesOnDisk) {
-				exit = true;
-				inputFilesOnDisk.notifyAll();
-			}
-		}
-
-		@SuppressWarnings("unchecked")
-		public void run() {
-			try {
-				LOG.info(task.getTaskID() + " Thread started: " + getName());
-				while(!exit){
-					synchronized (inputFilesOnDisk) {
-						while (!exit &&
-								inputFilesOnDisk.size() < mergeFactor) {
-							LOG.info(task.getTaskID() + " Thread waiting: " + getName() + 
-									". Input files on disk " + inputFilesOnDisk.size() + 
-									". Waiting for " + (mergeFactor));
-							inputFilesOnDisk.wait();
-						}
-					}
-					if(exit) {//to avoid running one extra time in the end
-						break;
-					}
-					List<Path> mapFiles = new ArrayList<Path>();
-					long approxOutputSize = 0;
-					int bytesPerSum = 
-						conf.getInt("io.bytes.per.checksum", 512);
-					int files = inputFilesOnDisk.size();
-					LOG.info(task.getTaskID() + "We have  " + 
-							inputFilesOnDisk.size() + " map outputs on disk. " +
-							"Triggering merge of " + files + " files");
-					// 1. Prepare the list of files to be merged. This list is prepared
-					// using a list of map output files on disk. Currently we merge
-					// io.sort.factor files into 1.
-					JInput last = null;
-					synchronized (inputFilesOnDisk) {
-						while (inputFilesOnDisk.size() > 0) {
-							last = inputFilesOnDisk.first();
-							FileStatus filestatus = last.status();
-							inputFilesOnDisk.remove(last);
-							mapFiles.add(filestatus.getPath());
-							approxOutputSize += filestatus.getLen();
-						}
-					}
-
-					// sanity check
-					if (mapFiles.size() == 0 || last == null) {
-						return;
-					}
-
-					// add the checksum length
-					//approxOutputSize += 
-					//	ChecksumFileSystem.getChecksumLength(approxOutputSize, bytesPerSum);
-
-					// 2. Start the on-disk merge process
-					Path outputPath = 
-						lDirAlloc.getLocalPathForWrite(mapFiles.get(0).toString(), 
-								approxOutputSize, conf).suffix(".merged");
-					Writer writer =  new Writer(conf, localFileSys, outputPath, 
-											    keyClass, valClass, codec, null);
-					RawKeyValueIterator iter  = null;
-					Path tmpDir = new Path(task.getTaskID().toString());
-					try {
-						iter = Merger.merge(conf, localFileSys,
-								keyClass, valClass,
-								codec, mapFiles.toArray(new Path[mapFiles.size()]), 
-								true, ioSortFactor, tmpDir, 
-								conf.getOutputKeyComparator(), reporter,
-								null, null);
-
-						if (null == combinerClass) {
-							Merger.writeFile(iter, writer, reporter, conf);
-						} else {
-							CombineOutputCollector combineCollector = new CombineOutputCollector();
-							combineCollector.setWriter(writer);
-							combineAndSpill(combineCollector, iter);
-						}
-						writer.close();
-					} catch (Exception e) {
-						localFileSys.delete(outputPath, true);
-						throw new IOException (StringUtils.stringifyException(e));
-					}
-					last.replace(outputPath);
-					addInputFilesOnDisk(last);
-
-					LOG.info(task.getTaskID() +
-							" Finished merging " + mapFiles.size() + 
-							" map output files on disk of total-size " + 
-							approxOutputSize + "." + 
-							" Local output file is " + last.file + " of size " +
-							localFileSys.getFileStatus(last.file).getLen());
-          
-				}
-			} catch (Exception e) {
-				LOG.warn(task.getTaskID()
-						+ " Merging of the local FS files threw an exception: "
-						+ StringUtils.stringifyException(e));
-				if (mergeThrowable == null) {
-					mergeThrowable = e;
-				}
-			} catch (Throwable t) {
-				String msg = task.getTaskID() + " : Failed to merge on the local FS" 
-				+ StringUtils.stringifyException(t);
-				LOG.error(msg);
-				mergeThrowable = t;
-			}
 		}
 	}
   */

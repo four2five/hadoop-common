@@ -38,6 +38,11 @@ public abstract class InMemoryBufferExchangeSource<H extends OutputInMemoryBuffe
 			return new StreamSource(rfs, conf, request);
 		}
     */
+    if (request.bufferType() != BufferType.INMEMORY) { 
+      LOG.error("Received a non-in-memory buffer request: " + request);
+      LOG.error("Converting it into an INMEMORY type");
+    }
+
     return new InMemoryBufferSource(conf, request);
 	}
 	
@@ -101,6 +106,7 @@ public abstract class InMemoryBufferExchangeSource<H extends OutputInMemoryBuffe
 	}
 	
 	public final Transfer send(OutputInMemoryBuffer buffer) {
+    LOG.info("Transferring buffer " + buffer.header());
 		synchronized (this) {
 			try {
 				return transfer(buffer);
@@ -143,16 +149,16 @@ public abstract class InMemoryBufferExchangeSource<H extends OutputInMemoryBuffe
 					ostream = new DataOutputStream(new BufferedOutputStream(socket.getOutputStream()));
 					istream = new DataInputStream(new BufferedInputStream(socket.getInputStream()));
 					
-					BufferExchange.Connect connection = 
-						WritableUtils.readEnum(istream, BufferExchange.Connect.class);
+					BufferExchange.Connect connection = WritableUtils.readEnum(istream, BufferExchange.Connect.class);
 					if (connection == BufferExchange.Connect.OPEN) {
 						WritableUtils.writeEnum(ostream, BufferType.INMEMORY);
 						ostream.flush();
-					}
-					else {
+					} else {
+            LOG.info("open() did not return OPEN, rather: " + connection);
 						return connection;
 					}
 				} catch (IOException e) {
+          LOG.error("Exception in BufferExchange.Connect open() " + e);
 					if (socket != null && !socket.isClosed()) {
 						try { socket.close();
 						} catch (Throwable t) { }
@@ -176,28 +182,50 @@ public abstract class InMemoryBufferExchangeSource<H extends OutputInMemoryBuffe
 		}
     */
 
+		OutputInMemoryBuffer.Header header = null;
+		BufferExchange.Transfer response = null; 
 		try {
       LOG.info("Source sending " + Integer.MAX_VALUE);
 			ostream.writeInt(Integer.MAX_VALUE); // Sending something
-			OutputInMemoryBuffer.Header header = buffer.seek(partition);
+			header = buffer.seek(partition);
 
       LOG.info("Source sending " + header);
 			OutputInMemoryBuffer.Header.writeHeader(ostream, header);
 			ostream.flush();
 
-			BufferExchange.Transfer response = WritableUtils.readEnum(istream, BufferExchange.Transfer.class);
+      // we're getting stuck here
+			response = WritableUtils.readEnum(istream, 
+                                         BufferExchange.Transfer.class);
+
 			if (BufferExchange.Transfer.READY == response) {
 				LOG.info(this + " sending " + header);
 				write(header, buffer.dataInputStream());
 				return BufferExchange.Transfer.SUCCESS;
 			} else { 
-				LOG.info("Not sending " + header + " because response != READY");
+				LOG.info("Not sending buffer for " + header + 
+                 " because response != READY. Rather it is " + response.toString());
+			  return response;
       }
-			return response;
 		} catch (IOException e) {
 			close(); // Close so reconnect will figure out current status.
 			LOG.debug(e);
-		}
+		} catch (NullPointerException npe) { 
+      LOG.info("Caught an npe transmitting header.");
+      if (null == buffer) { 
+        LOG.error(" buffer is null");
+      } else { 
+        LOG.error(" buffer is NOT null. header is " + header);
+      }
+    } catch (IllegalArgumentException iae) {
+      LOG.info(" caught an iae, partition: " + partition); 
+      //" buf.pos: " + buffer.position() + 
+               //" buf.lim " + buffer.limit() + " buf.cap " + buffer.capacity());
+    }
+
+		LOG.info("Something went sideways with " + header);
+    if (null != response) { 
+      LOG.info("   response is " + response.toString());
+    }
 		return BufferExchange.Transfer.RETRY;
 	}
 	
@@ -214,7 +242,7 @@ public abstract class InMemoryBufferExchangeSource<H extends OutputInMemoryBuffe
 			return;
 		}
 		
-		LOG.debug("Writing data for header " + header);
+		LOG.info("Writing data for header " + header);
 		long bytesSent = 0L;
 		byte[] buf = new byte[64 * 1024];
 		int n = fstream.read(buf, 0, (int)Math.min(length, buf.length));
@@ -244,54 +272,63 @@ public abstract class InMemoryBufferExchangeSource<H extends OutputInMemoryBuffe
 
 		@Override
 		protected final Transfer transfer(OutputInMemoryBuffer buffer) {
-			OutputInMemoryBuffer.InMemoryHeader header = (OutputInMemoryBuffer.InMemoryHeader) buffer.header();
+			OutputInMemoryBuffer.InMemoryHeader header = 
+        (OutputInMemoryBuffer.InMemoryHeader) buffer.header();
 			TaskID taskid = header.owner().getTaskID();
 			if (!cursor.containsKey(taskid) || cursor.get(taskid) == header.ids().first()) { 
 				BufferExchange.Connect result = open();
 				if (result == Connect.OPEN) {
-					LOG.debug("Transfer buffer " + buffer + ". Destination " + destination());
+					LOG.info("Transfer buffer " + buffer + ". Destination " + destination());
 					Transfer response = transmit(buffer);
 					if (response == Transfer.TERMINATE) {
+            LOG.info("Response is TERMINATE");
 						return Transfer.TERMINATE;
-					}
+					} else if (null == istream) { 
+            LOG.info("istream is null, sending Transfer.IGNORE");
+            return Transfer.IGNORE;
+          } else { 
+            LOG.info("istream is fine");
+          }
 
 					// Update my next cursor position. 
 					int position = header.ids().last() + 1;
 					try { 
 						int next = istream.readInt();
 						if (position != next) {
-							LOG.debug("Assumed next position " + position + " != actual " + next);
+							LOG.info("Assumed next position " + position + " != actual " + next);
 							position = next;
 						}
 					} catch (IOException e) { e.printStackTrace(); LOG.error(e); }
 
 					if (response == Transfer.SUCCESS) {
 						if (header.eof()) {
-							LOG.debug("Transfer end of file for source task " + taskid);
+							LOG.info("Transfer end of data for source task " + taskid);
 							close();
 						}
 						cursor.put(taskid, position);
-						LOG.debug("Transfer complete. New position " + cursor.get(taskid) + ". Destination " + destination());
-					}
-					else if (response == Transfer.IGNORE){
+						LOG.debug("Transfer complete. New position " + cursor.get(taskid) + 
+                      ". Destination " + destination());
+					} else if (response == Transfer.IGNORE){
+            LOG.info("response is IGNORE");
 						cursor.put(taskid, position); // Update my cursor position
-					}
-					else {
-						LOG.debug("Unsuccessful send. Transfer response: " + response);
+					} else {
+						LOG.info("Unsuccessful send. Transfer response: " + response);
 					}
 
 					return response;
-				}
-				else if (result == Connect.BUFFER_COMPLETE) {
+				} else if (result == Connect.BUFFER_COMPLETE) {
+					LOG.info("result is BUFFER_COMPLETE. Transfer success");
 					cursor.put(taskid, Integer.MAX_VALUE);
 					return Transfer.SUCCESS;
-				}
-				else {
+				} else {
+					LOG.info("result is " + result + " for buffer " + buffer + 
+                   ". Destination " + destination());
+          LOG.info("sending retry");
 					return Transfer.RETRY;
-				}
-			}
-			else {
-				LOG.debug("Transfer ignore header " + header + " current position " + cursor.get(taskid));
+        }
+			} else {
+				LOG.info("Transfer ignore header " + header + 
+                  " current position " + cursor.get(taskid));
 				return Transfer.IGNORE;
 			}
 		}
