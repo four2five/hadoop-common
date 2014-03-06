@@ -320,8 +320,10 @@ public class InMemoryManager implements InMemoryBufferUmbilicalProtocol {
 						
 						if (!open) return;
 						LOG.debug(this + " something to send.");
-						out.addAll(this.outputs); // Copy output files.
-						src.addAll(this.sources); // Copy requests.
+            synchronized(this) { 
+						  out.addAll(this.outputs); // Copy output files.
+						  src.addAll(this.sources); // Copy requests.
+            }
 						somethingToSend = false;  // Assume we send everything.
 						busy = true;
 					}
@@ -396,9 +398,13 @@ public class InMemoryManager implements InMemoryBufferUmbilicalProtocol {
 			for (OutputInMemoryBuffer buffer : outs) {
 				Iterator<InMemoryBufferExchangeSource> siter = srcs.iterator();
 				while (siter.hasNext()) {
-					if (!open) return;
+					if (!open) { 
+            LOG.error("In flush(), but !open");
+            return;
+          }
+
 					InMemoryBufferExchangeSource src = siter.next();
-					if (!buffer.isServiced(src.destination())) {
+					if (!buffer.isServiced(src.destination()) && buffer.getToService().contains(src.destination().getTaskID())) { 
             LOG.info("Sending buffer " + buffer.header().owner().toString() + 
                      " to " + src.destination() + 
                      " eof " + buffer.header().eof() + 
@@ -423,7 +429,9 @@ public class InMemoryManager implements InMemoryBufferUmbilicalProtocol {
 							LOG.info("Sent file " + buffer.header().owner() + " to " + src.destination());
 							buffer.serviced(src.destination());
 						}
-					}
+					} else { 
+            // log something about how this buffer is not meant to be serviced or was serviced
+          }
 				}
 				
         // all outputs are now "streams" for this purpose
@@ -735,10 +743,10 @@ public class InMemoryManager implements InMemoryBufferUmbilicalProtocol {
 			requestTransfer.transfer(request); // request is remote.
 		} else {
 			if (request instanceof ReduceBufferRequest) {
-        LOG.info("Servicing local buffer request: " + request.toString());
+        LOG.info("WTF? local ReduceBufferRequest: " + request.toString());
 				add((ReduceBufferRequest) request);
 			} else if (request instanceof MapBufferRequest) {
-        LOG.info("WTF? local MapBufferRequest: " + request.toString());
+        LOG.info("Servicing local MapBufferRequest: " + request.toString());
 				add((MapBufferRequest) request);
 			}
 		}
@@ -786,7 +794,7 @@ public class InMemoryManager implements InMemoryBufferUmbilicalProtocol {
 
 	private void add(MapBufferRequest request) throws IOException {
 		if (request.srcHost().equals(hostname)) {
-			LOG.info("Register " + request);
+			LOG.info("Register MBR " + request);
 			synchronized (this) {
 				register(request);
 			}
@@ -818,14 +826,14 @@ public class InMemoryManager implements InMemoryBufferUmbilicalProtocol {
 				for (BufferManager bm : this.bufferManagers.get(jobid).values()) {
           // only add this source if it's meant to be serviced
           //debug only
-          LOG.info("bm " + bm + " has toService.size(): " + bm.getToService().size() +  
+          LOG.debug("bm " + bm + " has toService.size(): " + bm.getToService().size() +  
                     " : " + bm.getToService());
 
           if (bm.getToService().contains(source.destination().getTaskID())) { 
             LOG.info("    Adding bm " + bm + " for source " + source);
 					  bm.add(source);
           } else { 
-            LOG.info("    bm " + bm + " should not service source " + source);
+            LOG.debug("    bm " + bm + " should not service source " + source);
           }
 				}
 			}
