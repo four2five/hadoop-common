@@ -809,7 +809,11 @@ public class JInMemOutputBuffer<K extends Object, V extends Object>
 		
 		eof = false;
 		bufindex = 0;
-		bufvoid  = kvbuffer.length;
+    int bufvoid = 0;
+	  if (kvbuffer != null) {  
+      bufvoid  = kvbuffer.length;
+    }
+
 		kvstart = kvend = kvindex = 0;
 		bufstart = bufend = bufindex = bufmark = 0;
 
@@ -828,7 +832,7 @@ public class JInMemOutputBuffer<K extends Object, V extends Object>
 			spills.clear();
       */
 
-			LOG.debug("Start new spill thread.");
+			LOG.info("Start new spill thread.");
 			// restart threads. 
 			this.spillThread = new SpillThread();
 			this.spillThread.setDaemon(true);
@@ -876,7 +880,11 @@ public class JInMemOutputBuffer<K extends Object, V extends Object>
 	}
 	
 	public synchronized void free() {
-    LOG.debug("in free, releasing " + kvbuffer.length + " bytes");
+    if (null == kvbuffer) { 
+      LOG.info("in free(), but kvbuffer is null");
+    } else { 
+      LOG.info("in free, releasing " + kvbuffer.length + " bytes");
+    }
 		reset(false);
 		kvbuffer = null;
 	}

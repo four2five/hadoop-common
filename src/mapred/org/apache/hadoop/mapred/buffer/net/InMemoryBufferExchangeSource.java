@@ -27,17 +27,6 @@ public abstract class InMemoryBufferExchangeSource<H extends OutputInMemoryBuffe
 
 	
 	public static final InMemoryBufferExchangeSource factory(JobConf conf, BufferRequest request) {
-    /*
-		if (request.bufferType() == BufferType.FILE) {
-			return new FileSource(rfs, conf, request);
-		}
-		if (request.bufferType() == BufferType.SNAPSHOT) {
-			return new SnapshotSource(rfs, conf, request);
-		}
-		if (request.bufferType() == BufferType.STREAM) {
-			return new StreamSource(rfs, conf, request);
-		}
-    */
     if (request.bufferType() != BufferType.INMEMORY) { 
       LOG.error("Received a non-in-memory buffer request: " + request);
       LOG.error("Converting it into an INMEMORY type");
@@ -79,7 +68,7 @@ public abstract class InMemoryBufferExchangeSource<H extends OutputInMemoryBuffe
 	
 	@Override
 	public String toString() {
-		return "RequestManager destination " + destination;
+		return "RequestManager destination " + destination + " : " + address; 
 	}
 
 	@Override
@@ -104,14 +93,18 @@ public abstract class InMemoryBufferExchangeSource<H extends OutputInMemoryBuffe
 	public TaskAttemptID destination() {
 		return this.destination;
 	}
+
+  public InetSocketAddress address() { 
+    return this.address;
+  }
 	
 	public final Transfer send(OutputInMemoryBuffer buffer) {
-    LOG.info("Transferring buffer " + buffer.header());
+    LOG.info(this + " transferring buffer " + buffer.header());
 		synchronized (this) {
 			try {
 				return transfer(buffer);
 			} catch (Exception e) {
-				System.err.println("ERROR: buffer " + buffer);
+				System.err.println(this + " ERROR: buffer " + buffer);
 				e.printStackTrace();
 				return Transfer.IGNORE;
 			}
@@ -121,6 +114,7 @@ public abstract class InMemoryBufferExchangeSource<H extends OutputInMemoryBuffe
 	protected abstract Transfer transfer(OutputInMemoryBuffer buffer);
 	
 	public void close() {
+    LOG.info(this + " closing sink for " + destination());
 		synchronized (this) {
 			if (socket != null && socket.isConnected()) {
 				try {
@@ -130,13 +124,13 @@ public abstract class InMemoryBufferExchangeSource<H extends OutputInMemoryBuffe
 					socket.close();
 				} catch (IOException e) {
 					LOG.error(e);
-				}
+				} finally{
+			    socket = null;
+			    ostream = null;
+			    istream = null;
+        }
 			}
-			
-			socket = null;
-			ostream = null;
-			istream = null;
-		}
+		} 
 	}
 
   // implicitly this is an InMemory open
@@ -160,7 +154,8 @@ public abstract class InMemoryBufferExchangeSource<H extends OutputInMemoryBuffe
 				} catch (IOException e) {
           LOG.error("Exception in BufferExchange.Connect open() " + e);
 					if (socket != null && !socket.isClosed()) {
-						try { socket.close();
+						try { 
+              socket.close();
 						} catch (Throwable t) { }
 					}
 					socket = null;
@@ -278,16 +273,16 @@ public abstract class InMemoryBufferExchangeSource<H extends OutputInMemoryBuffe
 			if (!cursor.containsKey(taskid) || cursor.get(taskid) == header.ids().first()) { 
 				BufferExchange.Connect result = open();
 				if (result == Connect.OPEN) {
-					LOG.info("Transfer buffer " + buffer + ". Destination " + destination());
+					LOG.info(this + " transfer buffer " + buffer + ". Destination " + destination());
 					Transfer response = transmit(buffer);
 					if (response == Transfer.TERMINATE) {
-            LOG.info("Response is TERMINATE");
+            LOG.info(this + " response is TERMINATE");
 						return Transfer.TERMINATE;
 					} else if (null == istream) { 
-            LOG.info("istream is null, sending Transfer.IGNORE");
+            LOG.info(this + " istream is null, sending Transfer.IGNORE");
             return Transfer.IGNORE;
           } else { 
-            LOG.info("istream is fine");
+            LOG.info(this + " istream is fine");
           }
 
 					// Update my next cursor position. 
@@ -295,149 +290,47 @@ public abstract class InMemoryBufferExchangeSource<H extends OutputInMemoryBuffe
 					try { 
 						int next = istream.readInt();
 						if (position != next) {
-							LOG.info("Assumed next position " + position + " != actual " + next);
+							LOG.info(this + " assumed next position " + position + " != actual " + next);
 							position = next;
 						}
 					} catch (IOException e) { e.printStackTrace(); LOG.error(e); }
 
 					if (response == Transfer.SUCCESS) {
 						if (header.eof()) {
-							LOG.info("Transfer end of data for source task " + taskid);
+							LOG.info(this + " transfer end of data for source task " + taskid);
 							close();
 						}
 						cursor.put(taskid, position);
-						LOG.debug("Transfer complete. New position " + cursor.get(taskid) + 
+						LOG.info(this + " transfer complete. New position " + cursor.get(taskid) + 
                       ". Destination " + destination());
 					} else if (response == Transfer.IGNORE){
-            LOG.info("response is IGNORE");
+            LOG.info(this + " response is IGNORE");
 						cursor.put(taskid, position); // Update my cursor position
 					} else {
-						LOG.info("Unsuccessful send. Transfer response: " + response);
+						LOG.info(this + " unsuccessful send. Transfer response: " + response);
 					}
 
 					return response;
 				} else if (result == Connect.BUFFER_COMPLETE) {
-					LOG.info("result is BUFFER_COMPLETE. Transfer success");
+					LOG.info(this + " result is BUFFER_COMPLETE. Transfer success");
 					cursor.put(taskid, Integer.MAX_VALUE);
 					return Transfer.SUCCESS;
-				} else {
-					LOG.info("result is " + result + " for buffer " + buffer + 
+				} else if (result == Connect.ERROR) {
+					LOG.info(this + " result is ERROR for buffer " + buffer + 
                    ". Destination " + destination());
-          LOG.info("sending retry");
+          LOG.info(this + " sending retry");
+					return Transfer.RETRY;
+				} else {
+					LOG.info(this + " result is " + result + " for buffer " + buffer + 
+                   ". Destination " + destination());
+          LOG.info(this + " sending retry");
 					return Transfer.RETRY;
         }
 			} else {
-				LOG.info("Transfer ignore header " + header + 
+				LOG.info(this + " Transfer ignore header " + header + 
                   " current position " + cursor.get(taskid));
 				return Transfer.IGNORE;
 			}
 		}
 	}
-
-  /*
-	private static class InMemoryBufferSource extends InMemoryBufferExchangeSource<OutputInMemoryBuffer.InMemoryHeader> {
-		private Map<TaskID, Long> cursor;
-		
-		public InMemoryBufferSource(JobConf conf, BufferRequest request) {
-			super(conf, request);
-			this.cursor = new HashMap<TaskID, Long>();
-		}
-		
-		@Override
-		protected final Transfer transfer(OutputInMemoryBuffer buffer) {
-			OutputInMemoryBuffer.InMemoryHeader header = (OutputInMemoryBuffer.InMemoryHeader) buffer.header();
-			TaskID taskid = header.owner().getTaskID();
-			if (!cursor.containsKey(taskid) || cursor.get(taskid) == header.sequence()) { 
-				BufferExchange.Connect result = open(); // implicitly, this is an InMemory open
-				if (result == Connect.OPEN) {
-					LOG.info("Transfer buffer " + buffer.header().owner() + " to Destination " + destination());
-					LOG.info("  Buffer eof " + buffer.header().eof() + " progress " + buffer.header().progress());
-					Transfer response = transmit(buffer);
-					if (response == Transfer.TERMINATE) {
-            LOG.info("Transfer terminated");
-						return Transfer.TERMINATE;
-					}
-
-					// Update my next cursor position. 
-					long position = header.sequence() + 1;
-					try { 
-						long next = istream.readLong();
-						if (position != next) {
-							position = next;
-						}
-					} catch (IOException e) { e.printStackTrace(); LOG.error(e); }
-
-					if (response == Transfer.SUCCESS) {
-						cursor.put(taskid, position);
-						LOG.info("Transfer complete. New position " + cursor.get(taskid) + ". Destination " + destination());
-					}
-					else if (response == Transfer.IGNORE){
-						cursor.put(taskid, position); // Update my cursor position
-					}
-					else {
-						LOG.info("Unsuccessful send. Transfer response: " + response);
-					}
-
-					return response;
-				}
-				else {
-          LOG.info("Transfer, returning retry");
-					return Transfer.RETRY;
-				}
-			} else {
-				LOG.info("Stream transfer ignore " + header +  " current sequence " + cursor.get(taskid));
-				return Transfer.IGNORE;
-			}
-		}
-	}
-  */
-	
-  /*
-	private static class SnapshotSource extends InMemoryBufferExchangeSource<OutputFile.SnapshotHeader> {
-		private Map<TaskID, Float> cursor;
-		
-		public SnapshotSource(FileSystem rfs, JobConf conf, BufferRequest request) {
-			super(rfs, conf, request);
-			this.cursor = new HashMap<TaskID, Float>();
-		}
-
-		@Override
-		protected final Transfer transfer(OutputFile file) {
-			OutputFile.SnapshotHeader header = (OutputFile.SnapshotHeader) file.header();
-			TaskID taskid = header.owner().getTaskID();
-			if (!cursor.containsKey(taskid) || cursor.get(taskid) < header.progress()) {
-				BufferExchange.Connect result = open(BufferExchange.BufferType.SNAPSHOT);
-				if (result == BufferExchange.Connect.OPEN) {
-					Transfer response = transmit(file);
-					if (response == Transfer.TERMINATE) {
-						return Transfer.TERMINATE;
-					}
-					
-					try {
-						float pos = istream.readFloat();
-						cursor.put(taskid, pos);
-						if (header.eof()) {
-							close();
-						}
-					} catch (IOException e) {
-						e.printStackTrace();
-						LOG.error(e);
-						return Transfer.RETRY;
-					}
-					return response;
-				}
-				else if (result == BufferExchange.Connect.BUFFER_COMPLETE) {
-					cursor.put(taskid, 1f);
-					close();
-					return Transfer.SUCCESS;
-				} 
-				else {
-					return Transfer.RETRY;
-				}
-			}
-			return Transfer.IGNORE;
-		}
-	}
-  */
-
 }

@@ -363,6 +363,10 @@ public class OutputInMemoryBuffer implements Comparable<OutputInMemoryBuffer>, W
 	public int toService() {
 		return this.toService.size();
 	}
+
+  public Set<TaskID> getToService() { 
+    return this.toService;
+  }
 	
 	public boolean isServiced(TaskAttemptID taskid) {
 		return this.serviced.contains(taskid);

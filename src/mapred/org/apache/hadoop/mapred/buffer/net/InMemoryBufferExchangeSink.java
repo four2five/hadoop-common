@@ -157,12 +157,10 @@ public class InMemoryBufferExchangeSink<K extends Object, V extends Object> impl
 		this.successful = Collections.synchronizedSet(new HashSet<TaskID>());
 
     int[] mapTaskDependencies = ((ReduceTask)task).getDependencies();
-    /*
-    LOG.info("This sink depends on " + mapTaskDependencies.length + " mapTasks");
+    LOG.info(this + " this sink depends on " + mapTaskDependencies.length + " mapTasks");
     for (int i=0; i<mapTaskDependencies.length; i++) { 
       LOG.info("  " + mapTaskDependencies[i]);
     }
-    */
     
     // now turn those map task ids into 
     TaskID reducerID = this.task.getTaskID().getTaskID();
@@ -174,8 +172,6 @@ public class InMemoryBufferExchangeSink<K extends Object, V extends Object> impl
       this.mapTaskIDs.add(tempID);
     }
     //LOG.info("mapTaskIDs size: " + this.mapTaskIDs.size());
-
-
 
 		/* The server socket and selector registration */
 		this.server = ServerSocketChannel.open();
@@ -274,7 +270,10 @@ public class InMemoryBufferExchangeSink<K extends Object, V extends Object> impl
 	 */
 	public synchronized void close() throws IOException {
 		LOG.info("JBufferSink is closing.");
-		if (this.acceptor == null) return; // Already done.
+		if (this.acceptor == null) { 
+      LOG.info("  JK, already done");
+      return; // Already done. 
+    }
 		try {
 			this.acceptor.interrupt();
 			this.server.close();
@@ -377,20 +376,27 @@ public class InMemoryBufferExchangeSink<K extends Object, V extends Object> impl
 		public final void run() {
 			try {
 				int open = Integer.MAX_VALUE;
+        H header = null;
 				while (open == Integer.MAX_VALUE) {
 					try {
-						LOG.info("Waiting for open signal.");
+						LOG.info(this + " Waiting for open signal.");
 						open = istream.readInt();
 
-            LOG.info("top of while loop, open: " + open);
-
+            LOG.info(this + " top of while loop, open: " + open);
+            
 						if (open == Integer.MAX_VALUE) {
-              LOG.info("in run, and open == MAX_VALUE");
-							H header = (H) OutputInMemoryBuffer.Header.readHeader(istream);
-							LOG.info("Handler received " + header.compressed() + " bytes. header: " + header);
+              LOG.info(this + " in run, and open == MAX_VALUE");
+							header = (H) OutputInMemoryBuffer.Header.readHeader(istream);
+							LOG.info(this + " Handler received " + header.compressed() + " bytes. header: " + header);
 						  receive(header);
-						} else { 
-              LOG.info("in run, but open != MAX_VALUE. open: " + open);
+						} else if (open == 0) {
+              if (header != null) { 
+                LOG.info(this + " in run, received close signal from: " + header.owner());
+              } else { 
+                LOG.info(this + " in run, received close signal but no idea who from");
+              }
+            } else { 
+              LOG.info(this + " in run, but open != MAX_VALUE. open: " + open);
             }
 					} catch (IOException e) {
 						e.printStackTrace();
@@ -399,7 +405,7 @@ public class InMemoryBufferExchangeSink<K extends Object, V extends Object> impl
 					}
 				}
 			} finally {
-				LOG.info("Handler done: " + this);
+				LOG.info(this + " Handler done");
 				done(this);
 				close();
 			}
@@ -417,7 +423,7 @@ public class InMemoryBufferExchangeSink<K extends Object, V extends Object> impl
 			super(collector, istream, ostream, mapTaskIDs);
 		}
 		
-	//	public void receive(OutputInMemoryBuffer.FileHeader header) throws IOException {
+	//public void receive(OutputInMemoryBuffer.FileHeader header) throws IOException 
 		public void receive(OutputInMemoryBuffer.InMemoryHeader header) throws IOException {
       LOG.info("In InMemoryBufferExchangeSink.receive()");
 			// Get my position for this source taskid. 

@@ -149,7 +149,11 @@ public class InMemoryManager implements InMemoryBufferUmbilicalProtocol {
 						socket.connect(location);
 						out = new DataOutputStream(new BufferedOutputStream(socket.getOutputStream()));
 						out.writeInt(handle.size());  // Tell remote end how many requests.
-						LOG.info("Sending " + handle.size() + " requests to " + location);
+            LOG.info("Sending " + handle.size() + " to " + location);
+            for (BufferRequest br : handle) { 
+						  LOG.info("  Sending " + handle + " to " + location);
+            }
+
 						for (BufferRequest request : handle) {
 							BufferRequest.write(out, request); // Write the request to the socket.
 							LOG.info("JB, Sent request " + request + " to " + location);
@@ -219,6 +223,9 @@ public class InMemoryManager implements InMemoryBufferUmbilicalProtocol {
 		/* Intermediate buffer outputs, in generation order. */
 		private SortedSet<OutputInMemoryBuffer> outputs;
 
+    // Set of tasks to service
+    private Set<TaskID> toService;
+
 		/* Requests for partitions in my buffer. 
 		 * Exchange sources will be ordered by partition so 
 		 * that we service them in the correct order (according
@@ -234,6 +241,7 @@ public class InMemoryManager implements InMemoryBufferUmbilicalProtocol {
 			this.open = true;
 			this.busy = false;
 			this.somethingToSend = false;
+      this.toService = new HashSet<TaskID>();
       LOG.info("Creating a BufferManager for task " + this.taskid);
 		}
 
@@ -254,6 +262,16 @@ public class InMemoryManager implements InMemoryBufferUmbilicalProtocol {
 			}
 			return false;
 		}
+
+    public void setToService(Set<TaskID> toService) { 
+      for (TaskID ts : toService) { 
+        this.toService.add(ts);
+      }
+    }
+
+    public Set<TaskID> getToService() { 
+      return this.toService;
+    }
 
 		/**
 		 * Indicates how well I'm keeping up with the generation
@@ -291,6 +309,7 @@ public class InMemoryManager implements InMemoryBufferUmbilicalProtocol {
 				SortedSet<OutputInMemoryBuffer> out = new TreeSet<OutputInMemoryBuffer>();
 				SortedSet<InMemoryBufferExchangeSource> src = new TreeSet<InMemoryBufferExchangeSource>();
 				while (open) {
+          LOG.info("\t\ttop of the while loop");
 					synchronized (this) {
 						while (!somethingToSend && open) {
 							LOG.info(this + " nothing to send.");
@@ -323,6 +342,7 @@ public class InMemoryManager implements InMemoryBufferUmbilicalProtocol {
 						src.clear();
 						if (open) Thread.sleep(1000); // Have a coffee
 					}
+          LOG.info("\t\tbottom of the while loop");
 				}
 			} catch (Throwable t) {
 				t.printStackTrace();
@@ -339,7 +359,9 @@ public class InMemoryManager implements InMemoryBufferUmbilicalProtocol {
 		 */
 		private void add(InMemoryBufferExchangeSource source) throws IOException {
 			synchronized (this) {
-        LOG.info("Adding source " + source + " to manager for " + this.taskid);
+        LOG.debug("Adding request source " + source + 
+                 " to manager for " + this.taskid + 
+                 " total size: " + this.sources.size());
 				this.sources.add(source);
 				somethingToSend = true;
 				this.notifyAll();
@@ -388,7 +410,8 @@ public class InMemoryManager implements InMemoryBufferUmbilicalProtocol {
 							close();
 							return;
 						} else if (BufferExchange.Transfer.RETRY == result) {
-              LOG.info("Retrying on " + buffer.header().owner().toString());
+              LOG.info("Retrying on " + buffer.header().owner().toString() + " to " + 
+                       src.destination() + " address " + src.address()); 
 							siter.remove();
 							stalls++;
 							somethingToSend = true; // Try again later.
@@ -396,7 +419,6 @@ public class InMemoryManager implements InMemoryBufferUmbilicalProtocol {
 							LOG.info("Tryed to send file " + buffer.header().owner() + 
                         " to " + src.destination() + " but receiver ignored it");
               // Don't count an ignored buffer send as serviced
-							//buffer.serviced(src.destination()); 
             } else if (BufferExchange.Transfer.SUCCESS == result) {
 							LOG.info("Sent file " + buffer.header().owner() + " to " + src.destination());
 							buffer.serviced(src.destination());
@@ -405,23 +427,21 @@ public class InMemoryManager implements InMemoryBufferUmbilicalProtocol {
 				}
 				
         // all outputs are now "streams" for this purpose
-				if ( //file.type() == OutputInMemoryFile.Type.STREAM && 
-						//buffer.paritions() == buffer.serviced()) {
-            buffer.toService() > 0 &&  // remove this later, sanity check for now
-						buffer.toService() == buffer.serviced()) {
+				if(buffer.toService() > 0 &&  // remove this later, sanity check for now
+					 buffer.toService() == buffer.serviced()) {
 					/* Assume no speculations for streaming. */
 					try {
+
 						LOG.info("Garbage collect output" + buffer.header());
             LOG.info("\tServiced: " + buffer.serviced + "\n" + 
                      "\ttoService: " + buffer.toService);
+            // remove it from outputs prior to deleting it
+					  synchronized(this) {
+						  this.outputs.remove(buffer);
+					  }
             buffer.delete(); // hopefully the GC cleans this up in short order
-						//file.delete(rfs);
 					} catch (IOException e) {
 						e.printStackTrace();
-					}
-					
-					synchronized(this) {
-						this.outputs.remove(buffer);
 					}
 				}
 			}
@@ -466,7 +486,7 @@ public class InMemoryManager implements InMemoryBufferUmbilicalProtocol {
 	private Map<JobID, Set<InMemoryBufferExchangeSource>> mapSources;
 
 	/* InMemoryManagers for task level requests (i.e., a map requesting the output of a reduce). */
-	private Map<TaskID, Set<InMemoryBufferExchangeSource>> reduceSources;
+	//private Map<TaskID, Set<InMemoryBufferExchangeSource>> reduceSources;
 
 	/* Each task will have a file manager associated with it. */
 	private Map<JobID, Map<TaskAttemptID, BufferManager>> bufferManagers;
@@ -480,7 +500,7 @@ public class InMemoryManager implements InMemoryBufferUmbilicalProtocol {
 		this.requestTransfer = new RequestTransfer();
 		this.executor  = Executors.newCachedThreadPool();
 		this.mapSources    = new HashMap<JobID, Set<InMemoryBufferExchangeSource>>();
-		this.reduceSources = new HashMap<TaskID, Set<InMemoryBufferExchangeSource>>();
+		//this.reduceSources = new HashMap<TaskID, Set<InMemoryBufferExchangeSource>>();
 		this.bufferManagers  = new ConcurrentHashMap<JobID, Map<TaskAttemptID, BufferManager>>();
 		this.hostname      = InetAddress.getLocalHost().getCanonicalHostName();
 		
@@ -643,7 +663,6 @@ public class InMemoryManager implements InMemoryBufferUmbilicalProtocol {
           LOG.info("Freeing buffers for tid: " + tid);
 				}
 			}
-			
 		}
 	}
 
@@ -662,10 +681,11 @@ public class InMemoryManager implements InMemoryBufferUmbilicalProtocol {
 
 			/* blow away map sources. */
 			if (this.mapSources.containsKey(jobid)) {
-				this.mapSources.remove(jobid);
+				this.mapSources.remove(jobid); 
 			}
 
 			/* blow away reduce sources. */
+      /*
 			Set<TaskID> rids = new HashSet<TaskID>();
 			for (TaskID rid : this.reduceSources.keySet()) {
 				if (rid.getJobID().equals(jobid)) {
@@ -675,6 +695,7 @@ public class InMemoryManager implements InMemoryBufferUmbilicalProtocol {
 			for (TaskID rid : rids) {
 				this.reduceSources.remove(rid);
 			}
+      */
 		}
 	}
 
@@ -709,14 +730,15 @@ public class InMemoryManager implements InMemoryBufferUmbilicalProtocol {
 	
 	@Override
 	public void request(BufferRequest request) throws IOException {
-    LOG.info("Servicing buffer request: " + request.toString());
 		if (!request.srcHost().equals(hostname)) {
+      LOG.info("Servicing remote buffer request: " + request.toString());
 			requestTransfer.transfer(request); // request is remote.
 		} else {
 			if (request instanceof ReduceBufferRequest) {
+        LOG.info("Servicing local buffer request: " + request.toString());
 				add((ReduceBufferRequest) request);
-			}
-			else if (request instanceof MapBufferRequest) {
+			} else if (request instanceof MapBufferRequest) {
+        LOG.info("WTF? local MapBufferRequest: " + request.toString());
 				add((MapBufferRequest) request);
 			}
 		}
@@ -736,32 +758,35 @@ public class InMemoryManager implements InMemoryBufferUmbilicalProtocol {
 		Map<TaskAttemptID, BufferManager> bufferManager = bufferManagers.get(jobid);
 		if (!bufferManager.containsKey(taskid)) {
 			LOG.info("Create new BufferManager for task " + taskid);
+      BufferManager bm = null;
 			synchronized (this) {
-				BufferManager bm = new BufferManager(taskid);
+				bm = new BufferManager(taskid);
 				bufferManager.put(taskid, bm);
 
 				/* pick up any outstanding requests and begin service thread */
 				register(bm); 
 			}
+      // Set, in the BufferManager, which Reduce tasks to actually send data to
+      bm.setToService(buffer.getToService());
 		}
 		bufferManager.get(taskid).add(buffer);
 	}
 
 	private void add(ReduceBufferRequest request) throws IOException {
+    LOG.error("Just received a ReduceBufferRequest. That should not be");
 		if (request.srcHost().equals(hostname)) {
-			LOG.debug("Register " + request);
+			LOG.info("Register " + request);
 			synchronized (this) {
 				register(request);
 			}
-		}
-		else {
+		} else {
 			LOG.error("Request is remote!");
 		}
 	}
 
 	private void add(MapBufferRequest request) throws IOException {
 		if (request.srcHost().equals(hostname)) {
-			LOG.debug("Register " + request);
+			LOG.info("Register " + request);
 			synchronized (this) {
 				register(request);
 			}
@@ -789,18 +814,28 @@ public class InMemoryManager implements InMemoryBufferUmbilicalProtocol {
 
 		if (source != null) {
 			if (this.bufferManagers.containsKey(jobid)) {
-			  LOG.info("Adding source " + source + " for all BufferManagers for job " + jobid);
+			  LOG.info("Adding request from " + source + " for all BufferManagers for job " + jobid);
 				for (BufferManager bm : this.bufferManagers.get(jobid).values()) {
-          LOG.info("    Adding bm " + bm + " for source " + source);
-					bm.add(source);
+          // only add this source if it's meant to be serviced
+          //debug only
+          LOG.info("bm " + bm + " has toService.size(): " + bm.getToService().size() +  
+                    " : " + bm.getToService());
+
+          if (bm.getToService().contains(source.destination().getTaskID())) { 
+            LOG.info("    Adding bm " + bm + " for source " + source);
+					  bm.add(source);
+          } else { 
+            LOG.info("    bm " + bm + " should not service source " + source);
+          }
 				}
 			}
 		}
 	}
 
 	private void register(ReduceBufferRequest request) throws IOException {
-		LOG.info("BufferController register reduce request " + request);
+		LOG.error("BufferController register reduce request " + request + ". WTF, this should not happen");
 
+    /*
 		TaskID taskid = request.reduceTaskId();
 		JobConf job = tracker.getJobConf("buck", taskid.getJobID());
 		InMemoryBufferExchangeSource source = InMemoryBufferExchangeSource.factory(job, request);
@@ -808,12 +843,10 @@ public class InMemoryManager implements InMemoryBufferUmbilicalProtocol {
 		if (!this.reduceSources.containsKey(taskid)) {
 			this.reduceSources.put(taskid, new HashSet<InMemoryBufferExchangeSource>());
 			this.reduceSources.get(taskid).add(source);
-		}
-		else if (!this.reduceSources.get(taskid).contains(source)) {
+		} else if (!this.reduceSources.get(taskid).contains(source)) {
 			this.reduceSources.get(taskid).add(source);
-		}
-		else {
-			LOG.debug(source + " already exists. request " + request);
+		} else {
+			LOG.error(source + " already exists. request " + request);
 			source = null;
 		}
 
@@ -827,6 +860,7 @@ public class InMemoryManager implements InMemoryBufferUmbilicalProtocol {
 				}
 			}
 		}
+    */
 	}
 
 	private void register(BufferManager bm) throws IOException {
@@ -839,6 +873,8 @@ public class InMemoryManager implements InMemoryBufferUmbilicalProtocol {
 				}
 			}
 		} else {
+      LOG.error("WTF, this is a bm for a reduce task. This should not happen");
+      /*
 			TaskID taskid = bm.taskid.getTaskID();
       LOG.info("register() adding buffermanager for reduces for job " + jobid);
 			if (this.reduceSources.containsKey(taskid)) {
@@ -846,8 +882,8 @@ public class InMemoryManager implements InMemoryBufferUmbilicalProtocol {
 					bm.add(source);
 				}
 			}
+      */
 		}
 		executor.execute(bm);
 	}
-
 }

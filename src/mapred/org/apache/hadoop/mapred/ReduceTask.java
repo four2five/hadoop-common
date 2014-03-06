@@ -205,19 +205,19 @@ public class ReduceTask extends Task {
 		                            mapTasks.size() + " map buffers.");
 		                }
 		              } catch (IOException e) {
-		                LOG.warn("InMemoryBufferUmbilical problem in taking request " + 
+		                LOG.error("InMemoryBufferUmbilical problem in taking request " + 
                              request + ". " + e);
 		              }
 		            } else { 
                   if (mapTasks.contains(mapTaskId)) { 
-                    LOG.info("  JB, Map task " + mapTaskId + " already in mapTasks");
+                    LOG.debug("  JB, Map task " + mapTaskId + " already in mapTasks");
                   } else if (!startReducersDynamically) { 
-                    LOG.info("  JB, Not starting tasks dynamically for");
+                    LOG.debug("  JB, Not starting tasks dynamically for");
                   } else if (!thisReducerCaresAboutThisOutput(mapTaskId.getTaskID(), 
                                                               mapTaskDependencies)) { 
-                    LOG.info("  JB, This reduce tasks does not care about map task " + mapTaskId);
+                    LOG.debug("  JB, This reduce tasks does not care about map task " + mapTaskId);
                   } else {
-                    LOG.info("  JB, I'm confoosed");
+                    LOG.error("  JB, I'm confoosed");
                   }
                 }
               }

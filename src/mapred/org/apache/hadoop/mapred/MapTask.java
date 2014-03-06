@@ -509,8 +509,6 @@ public class MapTask extends Task {
     int numReduceTasks = conf.getNumReduceTasks();
     LOG.info("numReduceTasks: " + numReduceTasks);
     MapOutputCollector collector = null;
-    //InputSplit instantiatedSplit = null;
-    //private int[] reduceTaskDependencies;
 
     boolean pipeline = job.getBoolean("mapred.map.pipeline", false);
 
@@ -987,6 +985,8 @@ public class MapTask extends Task {
         } else { 
           LOG.info("Not registering final output");
         }
+        // release the outputs
+        jRecordWriter.free();
       } else {
         LOG.info("Doing a close in a non-JRecordWriter");
         output.close(mapperContext);
