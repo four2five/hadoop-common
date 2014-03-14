@@ -455,7 +455,7 @@ public class DamascUtils {
     }
 
     public static String getPartitionerClassString(Configuration conf) { 
-      return conf.get(DamascUtils.PARTITIONER_CLASS, "arrayspec");
+      return conf.get(DamascUtils.PARTITIONER_CLASS, "hash");
     }
 
     public static String getFSTypeString(Configuration conf) {
