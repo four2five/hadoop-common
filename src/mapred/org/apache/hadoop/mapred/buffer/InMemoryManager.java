@@ -364,7 +364,7 @@ public class InMemoryManager implements InMemoryBufferUmbilicalProtocol {
 		 */
 		private void add(InMemoryBufferExchangeSource source) throws IOException {
 			synchronized (this) {
-        LOG.debug("Adding request source " + source + 
+        LOG.info("Adding request source " + source + 
                  " to manager for " + this.taskid + 
                  " total size: " + this.sources.size());
 				this.sources.add(source);

@@ -402,6 +402,7 @@ public class JInMemOutputBuffer<K extends Object, V extends Object>
 
 				boolean spill = forceSpill(); // flush what remains
 				if (pipeline) {
+          LOG.error("We should not be pipelining");
 					if (!spill) {
 						// we must create a sentinal spill with progress == 1f 
 						LOG.debug("SpillThread: create sentinel spill file for pipelining.");
@@ -421,14 +422,15 @@ public class JInMemOutputBuffer<K extends Object, V extends Object>
 						//		taskid, spills.size(), partitions * MAP_OUTPUT_INDEX_RECORD_LENGTH);
 						//FSDataOutputStream indexOut = localFs.create(index, false);
 						writeEmptyOutput(out, indexOut);
-						InMemoryPartitionBuffer spillFile = new InMemoryPartitionBuffer(spills.size(), baOut, baIndexOut, 1f, true);
-						LOG.debug("Finished spill sentinal. id = " + spills.size());
+						InMemoryPartitionBuffer spillFile = 
+              new InMemoryPartitionBuffer(spills.size(), baOut, baIndexOut, 1f, true);
+						LOG.info("Finished spill sentinal. id = " + spills.size());
 						spills.add(spillFile);
 						out.close(); 
             indexOut.close();
 					}
           LOG.info("Calling pipeline from close()");
-					pipeline();
+					//pipeline();
 				}
 				spillLock.notifyAll();
 			}
@@ -439,13 +441,13 @@ public class JInMemOutputBuffer<K extends Object, V extends Object>
 				float reduction = sortAndSpill();
 				
 				if (pipeline) {
-					LOG.debug("Check pipeline statistic.");
+					LOG.info("Check pipeline statistic.");
 					float stall_frac = umbilical.stallFraction(taskid);
 					LOG.info("Stall fraction " + stall_frac);
 					if (!open ||  (stall_frac < 0.5f && 
 							       (reduction * (spills.size() - nextPipelineSpill)) >= 1.0f)) {
-						LOG.debug("Perform pipeline.");
-						pipeline();
+						LOG.error("Perform pipeline. BAD JB");
+						//pipeline();
 					} else {
 						LOG.info("Hold off pipeline. stall fraction = " + stall_frac + 
 								". Backedup spills " + (spills.size() - nextPipelineSpill) +
@@ -463,6 +465,7 @@ public class JInMemOutputBuffer<K extends Object, V extends Object>
 		 // file and sent with the current buffer progress.
 		 // @throws IOException
 		 //
+     /*
 		private void pipeline() throws IOException {
 			int numSpillFiles = spills.size() - nextPipelineSpill;
 			if (numSpillFiles == 1) {
@@ -499,7 +502,6 @@ public class JInMemOutputBuffer<K extends Object, V extends Object>
                                     spill.index.toByteArray(), 
                                     spill.eof, partitions);
           }
-          */
           LOG.info("Sending buffer: " + buffer.header().owner().toString() +
                " eof: " + buffer.header().eof() +
                " progress " + buffer.header().progress());
@@ -514,6 +516,7 @@ public class JInMemOutputBuffer<K extends Object, V extends Object>
 				LOG.info("Pipeline spill file statistic: pipelined " + numSpillFiles + " spill files.");
 			}
 		}
+    */
 
 		@Override
 		public void run() {
@@ -723,9 +726,9 @@ public class JInMemOutputBuffer<K extends Object, V extends Object>
 		partitions = taskid.isMap() ? job.getNumReduceTasks() : 1;
 		partitioner = (Partitioner) ReflectionUtils.newInstance(job.getPartitionerClass(), job);
 		// sanity checks
-		final float spillper = job.getFloat("io.sort.spill.percent",(float)0.8);
+		final float spillper = job.getFloat("io.sort.spill.percent",(float)0.90);
 		final float recper = job.getFloat("io.sort.record.percent",(float)0.05);
-		final int sortmb = job.getInt("io.sort.mb", 100);
+		final int sortmb = job.getInt("io.sort.mb", 120);
 		if (spillper > (float)1.0 || spillper < (float)0.0) {
 			throw new IOException("Invalid \"io.sort.spill.percent\": " + spillper);
 		}
@@ -742,18 +745,21 @@ public class JInMemOutputBuffer<K extends Object, V extends Object>
 
 		float maxInMemCopyUse = 0.7f;
 		if (taskid.isMap()) {
-			maxInMemCopyUse = job.getFloat("mapred.job.map.buffer.percent", 0.70f);
+			maxInMemCopyUse = job.getFloat("mapred.job.map.buffer.percent", 0.90f);
 		}
 		else {
-			maxInMemCopyUse = job.getFloat("mapred.job.shuffle.input.buffer.percent", 0.70f);
+			maxInMemCopyUse = job.getFloat("mapred.job.shuffle.input.buffer.percent", 0.90f);
 		}
+    LOG.info("maxMemUsage1: " + maxMemUsage);
 		maxMemUsage = (int)Math.min(Runtime.getRuntime().maxMemory() * maxInMemCopyUse, maxMemUsage);
-    LOG.info("maxMemUsage: " + maxMemUsage);
+    LOG.info("maxMemUsage2: " + maxMemUsage);
 
 		int recordCapacity = (int)(maxMemUsage * recper);
 		recordCapacity -= recordCapacity % RECSIZE;
 		kvbufferSize = maxMemUsage - recordCapacity;
 		kvbuffer = new byte[(int)kvbufferSize];
+    LOG.info("kvbuffersize: " + ((int)kvbufferSize) + " maxMemUsage: " + maxMemUsage + 
+             " recordCapacity " + recordCapacity);
 		bufvoid = kvbuffer.length;
 		recordCapacity /= RECSIZE;
 		kvoffsets = new int[recordCapacity];
@@ -1351,7 +1357,7 @@ public class JInMemOutputBuffer<K extends Object, V extends Object>
 				InMemoryPartitionBuffer spill = new InMemoryPartitionBuffer(spills.size(), 
                                             baOut, baIndexOut, 
                                             progress.get(), this.eof);
-				LOG.info("Finished spill " + spills.size());
+				LOG.info("Finished sortAndSpill " + spills.size());
 				spills.add(spill);
 				//return combinerClass != null && rawDataSize > 0 ? 
 				//		(float) out.getPos() / (float) rawDataSize : 1f;
@@ -1436,7 +1442,7 @@ public class JInMemOutputBuffer<K extends Object, V extends Object>
 				}
 				InMemoryPartitionBuffer spill = new InMemoryPartitionBuffer(spills.size(), 
                                           baOut, baIndexOut, progress.get(), this.eof);
-				LOG.info("Finished spill " + spills.size());
+				LOG.info("Finished spillSingleRecord " + spills.size());
 				spills.add(spill);
 			} finally {
 				if (out != null) { 
