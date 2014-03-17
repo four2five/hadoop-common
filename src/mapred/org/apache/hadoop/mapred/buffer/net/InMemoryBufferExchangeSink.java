@@ -198,6 +198,7 @@ public class InMemoryBufferExchangeSink<K extends Object, V extends Object> impl
 
     public MyThread() { 
       super();
+      LOG.info("Starting a new MyThread");
     }
 
     public void setMapTaskIDs(HashSet<TaskID> mapTaskIDs) { 
@@ -240,7 +241,7 @@ public class InMemoryBufferExchangeSink<K extends Object, V extends Object> impl
  							continue;
  						}
  						
- 						LOG.debug("InMemoryBufferSink: " + ownerid + " opening connection.");
+ 						LOG.info("InMemoryBufferSink: " + ownerid + " opening connection. Handler size: " + handlers.size());
  						handlers.add(handler);
  						executor.execute(handler);
  					}
@@ -301,6 +302,7 @@ public class InMemoryBufferExchangeSink<K extends Object, V extends Object> impl
 	 * @param connection The completed connection.
 	 */
 	private void done(Handler handler) {
+    LOG.info("handler " + handler + " done, current size: " + this.handlers.size());
 		this.handlers.remove(handler);
 	}
 

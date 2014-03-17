@@ -2246,7 +2246,7 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
           String msg = 
             "Task " + tip.getTask().getTaskID() + " failed to report status for " 
             + (timeSinceLastReport / 1000) + " seconds. Killing!";
-          LOG.info(tip.getTask().getTaskID() + ": " + msg);
+          LOG.info("MarkUnresponsive: " + tip.getTask().getTaskID() + ": " + msg);
           ReflectionUtils.logThreadInfo(LOG, "lost task", 30);
           tip.reportDiagnosticInfo(msg);
           myInstrumentation.timedoutTask(tip.getTask().getTaskID());
@@ -2915,7 +2915,7 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
      */
     public synchronized void reportProgress(TaskStatus taskStatus) 
     {
-      LOG.info(task.getTaskID() + " " + taskStatus.getProgress() + 
+      LOG.info("reportProgress: " + task.getTaskID() + " " + taskStatus.getProgress() + 
           "% " + taskStatus.getStateString());
       // task will report its state as
       // COMMIT_PENDING when it is waiting for commit response and 

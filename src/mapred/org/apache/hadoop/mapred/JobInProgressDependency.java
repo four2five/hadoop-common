@@ -854,6 +854,9 @@ public class JobInProgressDependency extends JobInProgress {
     LOG.info("creating m->r dependencies");
     this.mapperToReducerDependencies = 
       createMapperToReducerArray(maps, reduces);
+    // Just flipe the reducer -> mapper  mappings --jbuck
+  //ArrayList<ArrayList<TaskInProgress>> reducerToMapperDependencies = null;  
+    //this.mapperToReducerDependencies = flipDependencies(reducerToMapperDependencies, numReduceTasks);
     LOG.info("done creating m->r dependencies");
 
 
@@ -922,6 +925,15 @@ public class JobInProgressDependency extends JobInProgress {
             + " map tasks and " + numReduceTasks + " reduce tasks.");
   }
 
+  /*
+  private ArrayList<ArrayList<TaskInProgress>>  
+  flipDependencies(ArrayList<ArrayList<TaskInProgress>> reducerToMapperMapping, 
+                   int numMapTasks)  {
+    ArrayList<ArrayList<TaskInProgress>> retListList = 
+      new ArrayList<ArrayList<TaskInProgress>>(numReduceTasks);
+  }
+  */
+
   private ArrayList<ArrayList<TaskInProgress>>  
   createReducerToMapperArray(TaskInProgress[] maps, int numReduceTasks)  {
     ArrayList<ArrayList<TaskInProgress>> retListList = 
@@ -946,12 +958,12 @@ public class JobInProgressDependency extends JobInProgress {
       reducerDeps = tempTSMI.getReducerDependencyInfo();
       // get each dependency for this split/Map task
 
-      LOG.debug("Map task:" + i + ", part:" + maps[i].idWithinJob() + " tsmi: " + 
+      LOG.info("Map task:" + i + ", part:" + maps[i].idWithinJob() + " tsmi: " + 
                 tempTSMI.toString() + "  feeds data to reducers");
       for( int j=0; j<reducerDeps.length; j++) { 
         // then add this split to the list for that reducer
         if( reducerDeps[j] >= numReduceTasks ) { 
-          LOG.warn("reducerDep: " + reducerDeps[j] + " > numReduceTasks: " + numReduceTasks + 
+          LOG.error("reducerDep: " + reducerDeps[j] + " > numReduceTasks: " + numReduceTasks + 
                    " BAD JB");
           continue;
         }
@@ -987,14 +999,17 @@ public class JobInProgressDependency extends JobInProgress {
       }
       reducerDeps = tempTSMI.getReducerDependencyInfo();
       tempList = retListList.get(i);
+      LOG.info("Map task:" + i + ", part:" + maps[i].idWithinJob() + " tsmi: " + 
+                tempTSMI.toString() + "  feeds data to reducers");
       //LOG.info("Map task[" + i + "]: " + maps[i]);
       for (int j=0; j<reducerDeps.length; j++) { 
-        if( reducerDeps[j] >= numMapTasks) { 
-          LOG.warn("reducerDep: " + reducerDeps[j] + " > numMapTasks: " + numMapTasks + 
-                   " BAD JB");
+        if( reducerDeps[j] >= numReduceTasks) { 
+          LOG.error("MapTask[" + i + " thinks it generates data for reducer " + 
+                   reducerDeps[j] + " but numReduceTasks " + reduces.length + " BAD JB");
           continue;
         }
         //LOG.info("\t" + reducerDeps[j]);
+        LOG.info("\t" + reducerDeps[j]);
         tempList.add(reduces[reducerDeps[j]]);
       }
     }

@@ -256,7 +256,8 @@ public class JInMemOutputBuffer<K extends Object, V extends Object>
 			  //OutputInMemoryBuffer buffer = new OutputInMemoryBuffer(taskid, spill.id, spill.progress, 
          //                 spill.data.toByteArray(), spill.index.toByteArray(), 
           //                spill.eof, partitions);
-		private void merge(List<InMemoryPartitionBuffer> spills, InMemoryPartitionBuffer output) throws IOException {
+		private void merge(List<InMemoryPartitionBuffer> spills, 
+                       InMemoryPartitionBuffer output) throws IOException {
 			if (spills.size() == 1) {
         LOG.info("spills.size() == 1, just copying the one spill and returning it");
         LOG.info("data: " + spills.get(0).data.size() + " index: " + spills.get(0).index.size());

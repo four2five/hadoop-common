@@ -190,6 +190,8 @@ public class TaskLog {
     try {
       fis = new BufferedReader(new InputStreamReader(
         SecureIOUtils.openForRead(indexFile, obtainLogDirOwner(taskid))));
+      //fis = new BufferedReader(new InputStreamReader(
+      //  SecureIOUtils.openForRead(indexFile, null)));
     } catch (FileNotFoundException ex) {
       LOG.warn("Index file for the log of " + taskid + " does not exist.");
 
