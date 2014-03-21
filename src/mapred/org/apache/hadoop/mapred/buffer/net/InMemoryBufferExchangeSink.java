@@ -246,8 +246,12 @@ public class InMemoryBufferExchangeSink<K extends Object, V extends Object> impl
  							continue;
  						}
  						
+<<<<<<< HEAD
  						LOG.info("InMemoryBufferSink: " + ownerid + 
                      " opening connection. Handler size: " + handlers.size());
+=======
+ 						LOG.info("InMemoryBufferSink: " + ownerid + " opening connection. Handler size: " + handlers.size());
+>>>>>>> 104caa6... Merge branch 'sidr_hop' of https://github.com/four2five/hadoop-common into sidr_hop
  						handlers.add(handler);
  						executor.execute(handler);
  					}
