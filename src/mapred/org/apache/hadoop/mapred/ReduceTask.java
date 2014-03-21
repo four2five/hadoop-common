@@ -231,10 +231,12 @@ public class ReduceTask extends Task {
         try {
           // why?
           //int waittime = mapTasks.size() == getNumberOfInputs() ? 60000 : 1000;
-          int waittime = mapTasks.size() == getNumberOfInputs() ? 4000 : 1000;
+          int waittime = mapTasks.size() == getNumberOfInputs() ? 500 : 250;
           sleep(waittime);
         } catch (InterruptedException e) { return; }
       }
+
+      LOG.info("Breaking out of the while loop");
 
       /*
       LOG.info("Seen all of the mapTasks. Time to loop, calling notify every so often");
@@ -3442,7 +3444,7 @@ public class ReduceTask extends Task {
     private class GetMapEventsThread extends Thread {
       
       private IntWritable fromEventId = new IntWritable(0);
-      private static final long SLEEP_TIME = 1000;
+      private static final long SLEEP_TIME = 250;
       
       public GetMapEventsThread() {
         setName("Thread for polling Map Completion Events");

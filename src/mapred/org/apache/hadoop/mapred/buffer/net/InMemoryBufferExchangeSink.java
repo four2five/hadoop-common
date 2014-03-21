@@ -198,6 +198,7 @@ public class InMemoryBufferExchangeSink<K extends Object, V extends Object> impl
 
     public MyThread() { 
       super();
+      LOG.info("Starting a new MyThread");
     }
 
     public void setMapTaskIDs(HashSet<TaskID> mapTaskIDs) { 
@@ -207,13 +208,15 @@ public class InMemoryBufferExchangeSink<K extends Object, V extends Object> impl
 		public void run() {
 			try {
  				while (server.isOpen()) {
+          LOG.info("Top of server.isOpen()");
  					SocketChannel channel = server.accept();
  					channel.configureBlocking(true);
  					/* Note: no buffered input stream due to memory pressure. */
+          LOG.info("  log 2");
  					DataInputStream  istream = new DataInputStream(channel.socket().getInputStream());
  					DataOutputStream ostream = 
                new DataOutputStream(new BufferedOutputStream(channel.socket().getOutputStream()));
- 					
+          LOG.info("  log 3");
  					if (complete()) {
              LOG.info("in run, complete() is true, closing ostream");
  						WritableUtils.writeEnum(ostream, Connect.BUFFER_COMPLETE);
@@ -240,7 +243,7 @@ public class InMemoryBufferExchangeSink<K extends Object, V extends Object> impl
  							continue;
  						}
  						
- 						LOG.debug("InMemoryBufferSink: " + ownerid + " opening connection.");
+ 						LOG.info("InMemoryBufferSink: " + ownerid + " opening connection. Handler size: " + handlers.size());
  						handlers.add(handler);
  						executor.execute(handler);
  					}
@@ -301,6 +304,7 @@ public class InMemoryBufferExchangeSink<K extends Object, V extends Object> impl
 	 * @param connection The completed connection.
 	 */
 	private void done(Handler handler) {
+    LOG.info("handler " + handler + " done, current size: " + this.handlers.size());
 		this.handlers.remove(handler);
 	}
 

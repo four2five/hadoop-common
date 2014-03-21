@@ -193,7 +193,7 @@ public abstract class InMemoryBufferExchangeSource<H extends OutputInMemoryBuffe
                                          BufferExchange.Transfer.class);
 
 			if (BufferExchange.Transfer.READY == response) {
-				LOG.info(this + " sending " + header);
+				LOG.info("JB, " + this + " sending " + header);
 				write(header, buffer.dataInputStream());
 				return BufferExchange.Transfer.SUCCESS;
 			} else { 

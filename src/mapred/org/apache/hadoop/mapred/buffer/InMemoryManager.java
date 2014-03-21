@@ -149,14 +149,16 @@ public class InMemoryManager implements InMemoryBufferUmbilicalProtocol {
 						socket.connect(location);
 						out = new DataOutputStream(new BufferedOutputStream(socket.getOutputStream()));
 						out.writeInt(handle.size());  // Tell remote end how many requests.
-            LOG.info("Sending " + handle.size() + " to " + location);
+            //LOG.info("Sending " + handle.size() + " to " + location);
+            /*
             for (BufferRequest br : handle) { 
 						  LOG.info("  Sending " + handle + " to " + location);
             }
+            */
 
 						for (BufferRequest request : handle) {
 							BufferRequest.write(out, request); // Write the request to the socket.
-							LOG.info("JB, Sent request " + request + " to " + location);
+							LOG.info("  Sent request " + request + " to " + location);
 						}
 						out.flush();
 						out.close();
@@ -307,12 +309,13 @@ public class InMemoryManager implements InMemoryBufferUmbilicalProtocol {
 				 * I will copy the outputs and requests that I'm about to service
 				 * into these objects before servicing them. */
 				SortedSet<OutputInMemoryBuffer> out = new TreeSet<OutputInMemoryBuffer>();
-				SortedSet<InMemoryBufferExchangeSource> src = new TreeSet<InMemoryBufferExchangeSource>();
+				SortedSet<InMemoryBufferExchangeSource> src = 
+            new TreeSet<InMemoryBufferExchangeSource>();
 				while (open) {
-          LOG.info("\t\ttop of the while loop");
+          //LOG.info("\t\ttop of the while loop");
 					synchronized (this) {
 						while (!somethingToSend && open) {
-							LOG.info(this + " nothing to send.");
+							LOG.debug(this + " nothing to send.");
 							try { 
                 this.wait();
 							} catch (InterruptedException e) { }
@@ -342,9 +345,9 @@ public class InMemoryManager implements InMemoryBufferUmbilicalProtocol {
 						
 						out.clear();
 						src.clear();
-						if (open) Thread.sleep(1000); // Have a coffee
+						if (open) Thread.sleep(250); // Have a coffee
 					}
-          LOG.info("\t\tbottom of the while loop");
+          //LOG.info("\t\tbottom of the while loop");
 				}
 			} catch (Throwable t) {
 				t.printStackTrace();
@@ -361,7 +364,7 @@ public class InMemoryManager implements InMemoryBufferUmbilicalProtocol {
 		 */
 		private void add(InMemoryBufferExchangeSource source) throws IOException {
 			synchronized (this) {
-        LOG.debug("Adding request source " + source + 
+        LOG.info("Adding request source " + source + 
                  " to manager for " + this.taskid + 
                  " total size: " + this.sources.size());
 				this.sources.add(source);
@@ -404,15 +407,16 @@ public class InMemoryManager implements InMemoryBufferUmbilicalProtocol {
           }
 
 					InMemoryBufferExchangeSource src = siter.next();
-					if (!buffer.isServiced(src.destination()) && buffer.getToService().contains(src.destination().getTaskID())) { 
+					if (!buffer.isServiced(src.destination()) && 
+                buffer.getToService().contains(src.destination().getTaskID())) { 
             LOG.info("Sending buffer " + buffer.header().owner().toString() + 
                      " to " + src.destination() + 
                      " eof " + buffer.header().eof() + 
                      " progress " + buffer.header().progress());
 						BufferExchange.Transfer result = src.send(buffer);
 						if (result == BufferExchange.Transfer.TERMINATE) {
-              LOG.info("Terminating after " + buffer.header().owner().toString());
-							LOG.info("Terminating " + this);
+              LOG.info(this + "Terminating after " + buffer.header().owner().toString());
+							//LOG.info("Terminating " + this);
 							close();
 							return;
 						} else if (BufferExchange.Transfer.RETRY == result) {
@@ -522,17 +526,20 @@ public class InMemoryManager implements InMemoryBufferUmbilicalProtocol {
 			String address = InetAddress.getLocalHost().getCanonicalHostName();
 			address += ":" + port;
 			retVal = NetUtils.createSocketAddr(address);
-      LOG.info("local hostname " + InetAddress.getLocalHost());
-      LOG.info("Canonical hostname " + InetAddress.getLocalHost().getCanonicalHostName());
-      InetAddress[] allAddresses = InetAddress.getAllByName(InetAddress.getLocalHost().getCanonicalHostName());
+      //LOG.info("local hostname " + InetAddress.getLocalHost());
+      //LOG.info("Canonical hostname " + InetAddress.getLocalHost().getCanonicalHostName());
+      InetAddress[] allAddresses = 
+        InetAddress.getAllByName(InetAddress.getLocalHost().getCanonicalHostName());
+        /*
       for (InetAddress oneAddress : allAddresses) { 
         LOG.info("  address: " + oneAddress);
       }
+      */
 		} catch (Throwable t) {
 			retVal = NetUtils.createSocketAddr("localhost:9021");
 		}
 
-    LOG.info("getControlAddress returning address " + retVal);
+    //LOG.info("getControlAddress returning address " + retVal);
     return retVal;
 	}
 
@@ -543,25 +550,29 @@ public class InMemoryManager implements InMemoryBufferUmbilicalProtocol {
 			int port = conf.getInt("mapred.buffer.manager.control.port", 9020);
 			address += ":" + port;
 		  retVal = NetUtils.createSocketAddr(address);
-      LOG.info("local hostname " + InetAddress.getLocalHost());
-      LOG.info("Canonical hostname " + InetAddress.getLocalHost().getCanonicalHostName());
-      InetAddress[] allAddresses = InetAddress.getAllByName(InetAddress.getLocalHost().getCanonicalHostName());
+      //LOG.info("local hostname " + InetAddress.getLocalHost());
+      //LOG.info("Canonical hostname " + InetAddress.getLocalHost().getCanonicalHostName());
+      InetAddress[] allAddresses = 
+        InetAddress.getAllByName(InetAddress.getLocalHost().getCanonicalHostName());
+      /*
       for (InetAddress oneAddress : allAddresses) { 
         LOG.info("  address: " + oneAddress);
       }
+      */
 		} catch (Throwable t) {
 			retVal = NetUtils.createSocketAddr("localhost:9020");
 		}
-    LOG.info("getServerAddress returning address " + retVal);
+    //LOG.info("getServerAddress returning address " + retVal);
     return retVal;
 	}
 
 	public void open() throws IOException {
 		Configuration conf = tracker.conf();
-		int maxMaps = conf.getInt("mapred.tasktracker.map.tasks.maximum", 2);
-		int maxReduces = conf.getInt("mapred.tasktracker.reduce.tasks.maximum", 1);
+		int maxMaps = conf.getInt("mapred.tasktracker.map.tasks.maximum", 4);
+		int maxReduces = conf.getInt("mapred.tasktracker.reduce.tasks.maximum", 2);
 
 		InetSocketAddress serverAddress = getServerAddress(conf);
+    LOG.info("RPC.getServer starting with " + (maxMaps + maxReduces) + " concurrent threads");
 		this.server = RPC.getServer(this, serverAddress.getHostName(), serverAddress.getPort(),
 				maxMaps + maxReduces, false, conf);
 		this.server.start();
@@ -841,7 +852,8 @@ public class InMemoryManager implements InMemoryBufferUmbilicalProtocol {
 	}
 
 	private void register(ReduceBufferRequest request) throws IOException {
-		LOG.error("BufferController register reduce request " + request + ". WTF, this should not happen");
+		LOG.error("BufferController register reduce request " + request + 
+              ". WTF, this should not happen");
 
     /*
 		TaskID taskid = request.reduceTaskId();

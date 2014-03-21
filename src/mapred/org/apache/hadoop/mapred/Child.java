@@ -280,7 +280,8 @@ class Child {
             try {
               // use job-specified working directory
               FileSystem.get(job).setWorkingDirectory(job.getWorkingDirectory());
-              taskFinal.run(job, umbilical, bufferUmbilical);        // run the task // -jbuck add the BufferUmb here
+              LOG.info("Working directory: " + job.getWorkingDirectory());
+              taskFinal.run(job, umbilical, bufferUmbilical);        // run the task 
             } finally {
               TaskLog.syncLogs
                 (logLocation, taskid, isCleanup, logIsSegmented(job));
