@@ -1136,7 +1136,17 @@ public class JobConf extends Configuration {
     setBoolean("mapred.dependency_scheduling", dependencyScheduling); 
   }
 
-  public boolean useDependencyScheduling() { return getBoolean("mapred.dependency_scheduling", false); }
+  public boolean useDependencyScheduling() { 
+    return getBoolean("mapred.dependency_scheduling", false); 
+  }
+  
+  public boolean failLastReduceTask() { 
+    return getBoolean("mapred.damasc.fail_last_reduce", false); 
+  }
+  
+  public boolean failFirstReduceTask() { 
+    return getBoolean("mapred.damasc.fail_first_reduce", false); 
+  }
   
   public boolean isDamasc() { return getBoolean("damasc.scihadoop", false); }
   

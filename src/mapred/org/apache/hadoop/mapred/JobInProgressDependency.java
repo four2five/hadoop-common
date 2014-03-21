@@ -576,7 +576,6 @@ public class JobInProgressDependency extends JobInProgress {
       for( int i=0; i<tips.size(); i++) { 
         //String[] splitLocations = splits[i].getLocations();
 
-        // -jbuck is this necessary?
         //tips.get(i).updateStatus(TaskStatus.State.UNASSIGNED);
 
         String[] splitLocations = tips.get(i).getWrappedSplit().getLocations();
@@ -608,7 +607,6 @@ public class JobInProgressDependency extends JobInProgress {
             //exists in the hostMaps, it must be the last element there since
             //we process one TIP at a time sequentially in the split-size order
 
-            // -jbuck since we're removing the "in size order" aspect,
             // does that break this logic? Seems like it should still hold...
             //if (hostMaps.get(hostMaps.size() - 1) != maps[i]) {
             //  hostMaps.add(maps[i]);
@@ -1375,7 +1373,26 @@ public class JobInProgressDependency extends JobInProgress {
                                             taskCompletionStatus, 
                                             httpTaskLogLocation
                                            );
-      }          
+      }   
+
+      // TODO --jbuck
+      // we want to be able to boobie trap some task completion events
+      // and turn successful executions into failures
+      if (taskEvent != null) {
+        if (state == TaskStatus.State.SUCCEEDED && !status.getIsMap()) {
+          // would this be the last reduce task ?
+          // only fail the first attempt 
+          LOG.info("JB, this task has idWithinJob: " + tip.idWithinJob());
+          LOG.info("v0: " + (finishedReduceTasks + failedReduceTIPs) + 
+                   " v1: " + (numReduceTasks-1));
+          if ((finishedReduceTasks + failedReduceTIPs) == (numReduceTasks-1) &&
+            conf.failLastReduceTask() ) {
+            LOG.info(" !!!!! I should kill this task, last reducetask !!!!!");
+          } else if (finishedReduceTasks == 0 && conf.failFirstReduceTask()) {
+            LOG.info(" !!!!! I should kill this task, first reduce task !!!!!");
+          }
+        }
+      }
 
       // Add the 'complete' task i.e. successful/failed
       // It _is_ safe to add the TaskCompletionEvent.Status.SUCCEEDED
@@ -1953,7 +1970,6 @@ public class JobInProgressDependency extends JobInProgress {
     Task result = reduces[target].getTaskToRun(tts.getTrackerName());
 
     //set the dependencies info for the reducers
-    // -jbuck here
   //ArrayList<ArrayList<TaskInProgress>> reducerToMapperDependencies = null;  
 
     LOG.info("JB, this reducer depends on " + this.reducerToMapperDependencies.get(target).size() + " mappers");
@@ -2650,7 +2666,6 @@ public class JobInProgressDependency extends JobInProgress {
             scheduleMap(tip);
 
             // remove the cache if its empty -
-            // -jbuck nope, we're chaning how the cache works
             /*
             if (cacheForLevel.size() == 0) {
               nonRunningMapCache.remove(key);
@@ -2980,8 +2995,7 @@ public class JobInProgressDependency extends JobInProgress {
       // if the job is killed, then mark the job killed.
       if (jobKilled) {
         terminateJob(JobStatus.KILLED);
-      }
-      else {
+      } else {
         jobComplete();
       }
       // The job has been killed/failed/successful

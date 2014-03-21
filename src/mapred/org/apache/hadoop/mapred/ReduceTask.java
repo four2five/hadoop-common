@@ -641,7 +641,8 @@ public class ReduceTask extends Task {
 
   @Override
   @SuppressWarnings("unchecked")
-  public void run(JobConf job, final TaskUmbilicalProtocol umbilical, InMemoryBufferUmbilicalProtocol bufferUmbilical)
+  public void run(JobConf job, final TaskUmbilicalProtocol umbilical, 
+                  InMemoryBufferUmbilicalProtocol bufferUmbilical)
     throws IOException, InterruptedException, ClassNotFoundException {
     this.umbilical = umbilical;
     job.setBoolean("mapred.skip.on", isSkipping());
