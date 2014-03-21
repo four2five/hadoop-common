@@ -212,6 +212,7 @@ public class InMemoryBufferExchangeSink<K extends Object, V extends Object> impl
  					SocketChannel channel = server.accept();
  					channel.configureBlocking(true);
  					/* Note: no buffered input stream due to memory pressure. */
+          LOG.info("  log 2");
  					DataInputStream  istream = new DataInputStream(channel.socket().getInputStream());
  					DataOutputStream ostream = 
                new DataOutputStream(

@@ -906,6 +906,33 @@ public class InMemoryManager implements InMemoryBufferUmbilicalProtocol {
 	private void register(ReduceBufferRequest request) throws IOException {
 		LOG.error("BufferController register reduce request " + request + 
               ". WTF, this should not happen");
+
+    /*
+		TaskID taskid = request.reduceTaskId();
+		JobConf job = tracker.getJobConf("buck", taskid.getJobID());
+		InMemoryBufferExchangeSource source = InMemoryBufferExchangeSource.factory(job, request);
+
+		if (!this.reduceSources.containsKey(taskid)) {
+			this.reduceSources.put(taskid, new HashSet<InMemoryBufferExchangeSource>());
+			this.reduceSources.get(taskid).add(source);
+		} else if (!this.reduceSources.get(taskid).contains(source)) {
+			this.reduceSources.get(taskid).add(source);
+		} else {
+			LOG.error(source + " already exists. request " + request);
+			source = null;
+		}
+
+		if (source != null) {
+			if (this.bufferManagers.containsKey(taskid.getJobID())) {
+				for (TaskAttemptID attempt : this.bufferManagers.get(taskid.getJobID()).keySet()) {
+					if (attempt.getTaskID().equals(taskid)) {
+						BufferManager bm = this.bufferManagers.get(taskid.getJobID()).get(attempt);
+						bm.add(source);
+					}
+				}
+			}
+		}
+    */
 	}
 
 	private void register(BufferManager bm) throws IOException {

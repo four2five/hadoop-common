@@ -670,6 +670,30 @@ extends Buffer<K, V> implements InputCollector<K, V> {
 			// Re-throw
 			throw oome;
 
+			LOG.info("Read " + bytesRead + " bytes from map-output for " + taskattemptid);
+		} catch (OutOfMemoryError oome) {
+			LOG.info("Failed to shuffle from " + taskattemptid, 
+					oome);
+
+			// Inform the ram-manager
+			ramManager.closeInMemoryFile(decompressedLength);
+			ramManager.unreserve(decompressedLength);
+
+			// Discard the map-output
+			try {
+				input.discard();
+			} catch (IOException ignored) {
+				LOG.error("Failed to discard map-output from " + taskattemptid, 
+						ignored);
+			}
+			input = null;
+
+			// Close the streams
+			IOUtils.cleanup(LOG, ins);
+
+			// Re-throw
+			throw oome;
+
 		} catch (IOException ioe) {
 			LOG.info("Failed to shuffle from " + taskattemptid, 
 					ioe);
@@ -693,6 +717,15 @@ extends Buffer<K, V> implements InputCollector<K, V> {
 			// Re-throw
 			throw ioe;
 		} 
+   /* catch (Throwable t) {
+      LOG.info("Caught a throwable, returning false from shuffleInMemory()");
+			t.printStackTrace();
+			LOG.error(t);
+			input = null;
+      throw t;
+		}
+    */
+		
 
 		// Close the in-memory file
 		ramManager.closeInMemoryFile(decompressedLength);
