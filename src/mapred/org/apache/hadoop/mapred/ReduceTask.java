@@ -136,7 +136,7 @@ public class ReduceTask extends Task {
 
     public void run() {
       //Set<TaskID> finishedMapTasks = new HashSet<TaskID>();
-      Set<TaskAttemptID>  mapTasks = new HashSet<TaskAttemptID>();
+      Set<TaskID>  mapTasks = new HashSet<TaskID>();
 
       int eid = 0;
       //while (!isInterrupted() && finishedMapTasks.size() < getNumberOfInputs()) 
@@ -163,7 +163,7 @@ public class ReduceTask extends Task {
 	            case OBSOLETE:
 	            case TIPFAILED:
 	            {
-	              TaskAttemptID mapTaskId = event.getTaskAttemptId();
+	              TaskID mapTaskId = event.getTaskAttemptId().getTaskID();
 	              if (!mapTasks.contains(mapTaskId)) {
 	                mapTasks.remove(mapTaskId);
 	              }
@@ -178,17 +178,15 @@ public class ReduceTask extends Task {
               //
 		            URI u = URI.create(event.getTaskTrackerHttp());
 		            String host = u.getHost();
-		            TaskAttemptID mapTaskId = event.getTaskAttemptId();
+		            //TaskAttemptID mapTaskId = event.getTaskAttemptId();
+		            TaskID mapTaskId = event.getTaskAttemptId().getTaskID();
 
                 // --jbuck this is where we filter out Map tasks that we do not care about
 		            if (!mapTasks.contains(mapTaskId) && 
-                    ( thisReducerCaresAboutThisOutput(mapTaskId.getTaskID(), mapTaskDependencies) || 
+                    ( thisReducerCaresAboutThisOutput(mapTaskId, mapTaskDependencies) || 
                       !startReducersDynamically)
                    ) {
 		              BufferExchange.BufferType type = BufferExchange.BufferType.INMEMORY;
-		              //BufferExchange.BufferType type = BufferExchange.BufferType.FILE;
-		              //if (inputSnapshots) type = BufferExchange.BufferType.SNAPSHOT;
-		              //if (stream) type = BufferExchange.BufferType.STREAM;
 		
 		              BufferRequest request =
 		                new MapBufferRequest(host, getTaskID(), sink.getAddress(), 
@@ -213,7 +211,7 @@ public class ReduceTask extends Task {
                     LOG.debug("  JB, Map task " + mapTaskId + " already in mapTasks");
                   } else if (!startReducersDynamically) { 
                     LOG.debug("  JB, Not starting tasks dynamically for");
-                  } else if (!thisReducerCaresAboutThisOutput(mapTaskId.getTaskID(), 
+                  } else if (!thisReducerCaresAboutThisOutput(mapTaskId, 
                                                               mapTaskDependencies)) { 
                     LOG.debug("  JB, This reduce tasks does not care about map task " + mapTaskId);
                   } else {

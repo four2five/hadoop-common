@@ -1864,13 +1864,16 @@ public class JobInProgress {
   }
 
   static String convertTrackerNameToHostName(String trackerName) {
+    LOG.info("convert in String: " + trackerName);
     // Ugly!
     // Convert the trackerName to it's host name
     int indexOfColon = trackerName.indexOf(":");
     String trackerHostName = (indexOfColon == -1) ? 
       trackerName : 
       trackerName.substring(0, indexOfColon);
-    return trackerHostName.substring("tracker_".length());
+    String retVal = trackerHostName.substring("tracker_".length());
+    LOG.info("convert out String: " + retVal);
+    return retVal;
   }
     
   /**

@@ -649,12 +649,18 @@ class TaskInProgress {
     return changed;
   }
 
+  public void forceDecrementComplete() { 
+      LOG.info("force decrementing completes");
+      this.completes--;
+  }
+
   /**
    * Indicate that one of the taskids in this TaskInProgress
    * has failed.
    */
   public void incompleteSubTask(TaskAttemptID taskid, 
                                 JobStatus jobStatus) {
+    LOG.info("in incompleteSubTask for task " + taskid + "\n status: " + jobStatus);
     //
     // Note the failure and its location
     //
@@ -666,6 +672,7 @@ class TaskInProgress {
       trackerName = status.getTaskTracker();
       trackerHostName = 
         JobInProgress.convertTrackerNameToHostName(trackerName);
+      LOG.info("trackerName: " + trackerName + " trackerHostName: " + trackerHostName);
       // Check if the user manually KILLED/FAILED this task-attempt...
       Boolean shouldFail = tasksToKill.remove(taskid);
       if (shouldFail != null) {
@@ -707,6 +714,7 @@ class TaskInProgress {
     // manipulate completed maps
     if (this.isMapTask() && !jobSetup && !jobCleanup && isComplete(taskid) && 
         jobStatus.getRunState() != JobStatus.SUCCEEDED) {
+      LOG.info("decrementing completes");
       this.completes--;
       
       // Reset the successfulTaskId since we don't have a SUCCESSFUL task now
@@ -718,7 +726,9 @@ class TaskInProgress {
     // recalculate the counts only if its a genuine failure
     if (tasks.contains(taskid)) {
       if (taskState == TaskStatus.State.FAILED) {
+        LOG.info("taskState == TaskStatus.State.FAILED");
         numTaskFailures++;
+        LOG.info("Failing task " + taskid + " on host " + trackerHostName);
         machinesWhereFailed.add(trackerHostName);
         if(maxSkipRecords>0) {
           //skipping feature enabled
@@ -728,10 +738,11 @@ class TaskInProgress {
           failedRanges.add(status.getNextRecordRange());
           skipping = startSkipping();
         }
-
       } else if (taskState == TaskStatus.State.KILLED) {
         numKilledTasks++;
       }
+    } else {
+      LOG.info("was going to fail, tasks.contains(taskid) was false");
     }
 
     if (numTaskFailures >= maxTaskAttempts) {
@@ -791,6 +802,7 @@ class TaskInProgress {
    * has successfully completed!
    */
   public void completed(TaskAttemptID taskid) {
+    LOG.info("completed task " + taskid);
     //
     // Record that this taskid is complete
     //
@@ -946,6 +958,7 @@ class TaskInProgress {
    * Return whether this TIP still needs to run
    */
   boolean isRunnable() {
+    LOG.info(" isRunnable(), failed: " + failed + " completes: " + completes);
     return !failed && (completes == 0);
   }
     
