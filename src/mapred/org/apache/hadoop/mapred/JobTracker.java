@@ -3309,13 +3309,13 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
                                                   boolean acceptNewTasks, 
                                                   short responseId) 
     throws IOException {
-    if (LOG.isDebugEnabled()) {
-      LOG.debug("Got heartbeat from: " + status.getTrackerName() + 
+    //if (LOG.isDebugEnabled()) {
+      LOG.info("Got heartbeat from: " + status.getTrackerName() + 
                 " (restarted: " + restarted + 
                 " initialContact: " + initialContact + 
                 " acceptNewTasks: " + acceptNewTasks + ")" +
                 " with responseId: " + responseId);
-    }
+    //}
 
     // Make sure heartbeat is from a tasktracker allowed by the jobtracker.
     if (!acceptTaskTracker(status)) {
@@ -3331,6 +3331,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
       faultyTrackers.checkTrackerFaultTimeout(status.getHost(), now);
     }
     
+    LOG.info("trackerToHeartbeatResponseMap.size(): " + trackerToHeartbeatResponseMap.size());
     HeartbeatResponse prevHeartbeatResponse =
       trackerToHeartbeatResponseMap.get(trackerName);
     boolean addRestartInfo = false;
