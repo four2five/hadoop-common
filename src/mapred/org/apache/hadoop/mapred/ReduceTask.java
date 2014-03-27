@@ -1707,6 +1707,8 @@ class ReduceTask extends Task {
         // Check if this map-output can be saved in-memory
         boolean shuffleInMemory = ramManager.canFitInMemory(decompressedLength); 
 
+        // need to log both shuffles to memory and disk --jbuck
+
         // Shuffle
         MapOutput mapOutput = null;
         if (shuffleInMemory) {
@@ -1864,6 +1866,7 @@ class ReduceTask extends Task {
                         mapOutputLoc.getTaskAttemptId(), shuffleData, 
                         compressedLength, numKeys, numKeysRepresented);
         
+        long startTime = System.currentTimeMillis();
         int bytesRead = 0;
         try {
           int n = input.read(shuffleData, 0, shuffleData.length);
@@ -1933,6 +1936,8 @@ class ReduceTask extends Task {
                                 mapOutputLength + ")"
           );
         }
+        startTime = System.currentTimeMillis() - startTime;
+        LOG.info("Shuffle time " + startTime + " for " + bytesRead + " bytes. inmemory");
 
         // TODO: Remove this after a 'fix' for HADOOP-3647
         if (LOG.isDebugEnabled()) {
@@ -1967,6 +1972,7 @@ class ReduceTask extends Task {
                         mapOutputLength, numRecords, numRecordsRepresented);
 
 
+        long startTime = System.currentTimeMillis();
         // Copy data to local-disk
         OutputStream output = null;
         long bytesRead = 0;
@@ -2043,6 +2049,9 @@ class ReduceTask extends Task {
                                 mapOutputLength + ")"
           );
         }
+
+        startTime = System.currentTimeMillis() - startTime;
+        LOG.info("Shuffle time " + startTime + " for " + bytesRead + " bytes. disk");
 
         return mapOutput;
 
@@ -3116,10 +3125,12 @@ class ReduceTask extends Task {
               URI u = URI.create(event.getTaskTrackerHttp());
               String host = u.getHost();
               TaskAttemptID taskId = event.getTaskAttemptId();
-              //LOG.info("\tcalling thisReducerCaresAboutThisOutput for task: " + taskId.getTaskID() + " with mapTaskDependencies.length: " + mapTaskDependencies.length);
+              //LOG.info("\tcalling thisReducerCaresAboutThisOutput for task: " + 
+              //         taskId.getTaskID() + " with mapTaskDependencies.length: " + mapTaskDependencies.length);
               //boolean startReducersDynamically = DamascUtils.startReducerDynamically(job);
 
-              if( thisReducerCaresAboutThisOutput( taskId.getTaskID(), mapTaskDependencies) || !startReducersDynamically) {
+              if( thisReducerCaresAboutThisOutput( taskId.getTaskID(), mapTaskDependencies) || 
+                  !startReducersDynamically) {
 
                 URL mapOutputLocation = new URL(event.getTaskTrackerHttp() + 
                                       "/mapOutput?job=" + taskId.getJobID() +
@@ -3134,7 +3145,7 @@ class ReduceTask extends Task {
                 loc.add(new MapOutputLocation(taskId, host, mapOutputLocation));
                 numNewMaps++;
               } else { 
-        //LOG.info(reduceTask.getTaskID() + " Thread started: " + getName());
+                //LOG.info(reduceTask.getTaskID() + " Thread started: " + getName());
                 LOG.debug("Reducer "  + reduceTask.getTaskID() + " is ignoring output from " + taskId.toString() );
               }
             }
