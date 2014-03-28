@@ -1558,6 +1558,8 @@ class ReduceTask extends Task {
         //long records = mapOutput.numRecords;
         FileSize fileSize = new FileSize(mapOutput.compressedSize, 
                                          mapOutput.numRecords, mapOutput.numRecordsRepresented);
+
+        LOG.info("JB, fileSize: " + fileSize);
         
         // lock the ReduceTask while we do the rename
         synchronized (ReduceTask.this) {
@@ -1694,10 +1696,10 @@ class ReduceTask extends Task {
               " arrived to reduce task " + reduce);
           return null;
         }
-        if (LOG.isDebugEnabled()) {
-          LOG.debug("header: " + mapId + ", compressed len: " + compressedLength +
+        //if (LOG.info()) {
+          LOG.info("header: " + mapId + ", compressed len: " + compressedLength +
               ", decompressed len: " + decompressedLength);
-        }
+        //}
 
         //We will put a file in memory if it meets certain criteria:
         //1. The size of the (decompressed) file should be less than 25% of 
@@ -1713,7 +1715,7 @@ class ReduceTask extends Task {
         MapOutput mapOutput = null;
         if (shuffleInMemory) {
           if (LOG.isDebugEnabled()) {
-            LOG.debug("Shuffling " + decompressedLength + " bytes (" + 
+            LOG.info("Shuffling " + decompressedLength + " bytes (" + 
                 compressedLength + " raw bytes) " + 
                 "into RAM from " + mapOutputLoc.getTaskAttemptId());
           }
@@ -1724,7 +1726,7 @@ class ReduceTask extends Task {
                                       numKeys, numKeysRepresented);
         } else {
           if (LOG.isDebugEnabled()) {
-            LOG.debug("Shuffling " + decompressedLength + " bytes (" + 
+            LOG.info("Shuffling " + decompressedLength + " bytes (" + 
                 compressedLength + " raw bytes) " + 
                 "into Local-FS from " + mapOutputLoc.getTaskAttemptId());
           }
@@ -1880,10 +1882,10 @@ class ReduceTask extends Task {
                            (shuffleData.length-bytesRead));
           }
 
-          if (LOG.isDebugEnabled()) {
+          //if (LOG.isDebugEnabled()) {
             LOG.debug("Read " + bytesRead + " bytes from map-output for " +
                 mapOutputLoc.getTaskAttemptId());
-          }
+          //}
 
           input.close();
         } catch (IOException ioe) {
@@ -1937,7 +1939,7 @@ class ReduceTask extends Task {
           );
         }
         startTime = System.currentTimeMillis() - startTime;
-        LOG.info("Shuffle time " + startTime + " for " + bytesRead + " bytes. inmemory");
+        LOG.info("Shuffle time " + startTime + " for " + bytesRead + " bytes. inmem");
 
         // TODO: Remove this after a 'fix' for HADOOP-3647
         if (LOG.isDebugEnabled()) {
