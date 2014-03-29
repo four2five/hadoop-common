@@ -926,6 +926,7 @@ public class ReduceTask extends Task {
       //RawKeyValueIterator rawIter,
       InMemoryBufferExchangeSink sink, TaskReporter reporter,
       InMemoryBufferUmbilicalProtocol bufferUmbilical,
+      final TaskUmbilicalProtocol umbilical,
       final FileSystem ignored,
       RawComparator<INKEY> comparator,
       Class<INKEY> keyClass,
@@ -933,7 +934,7 @@ public class ReduceTask extends Task {
     ) throws IOException {
 
     LOG.info("top of copy2");
-    long starttime = System.currentTimeMillis();
+    long startTime = System.nanoTime();
     synchronized (this) {
       LOG.info("ReduceTask " + getTaskID() + ": In copy function.");
       sink.open();
@@ -941,6 +942,8 @@ public class ReduceTask extends Task {
         LOG.info("ReduceTask: " + getTaskID() + " in copy loop. complete: " + sink.getProgress().get());
         copyPhase.set(sink.getProgress().get());
 
+        //reporter.setProgressFlag();
+        statusUpdate(umbilical);
         try { 
           LOG.info("before copy2 wait()");
           this.wait();
@@ -949,7 +952,7 @@ public class ReduceTask extends Task {
       }
 
       LOG.info("ReduceTask " + getTaskID() + " copy phase completed in " +
-           (System.currentTimeMillis() - starttime) + " ms.");
+           (System.nanoTime() - startTime) + " ms.");
       sink.close();
     }
     LOG.info("bottom of copy2");
@@ -1077,7 +1080,7 @@ public class ReduceTask extends Task {
     // Let's try to just do one applyReducer() and see how that goes.
     // The intent is to have all the input merge-sorted into on authoritative list
     //copy2(job, jInputBuffer, sink, tempReporter, bufferUmbilical, rfs, comparator, keyClass, valueClass);
-    copy2(job, jInputBuffer, sink, tempReporter, bufferUmbilical, 
+    copy2(job, jInputBuffer, sink, tempReporter, bufferUmbilical, umbilical,
           null, comparator, keyClass, valueClass);
     LOG.info("fetcher.interrupt()");
     fetcher.interrupt();
@@ -1138,7 +1141,7 @@ public class ReduceTask extends Task {
                                                trackedRW, committer,
                                                reporter, comparator, keyClass,
                                                valueClass);
-    long begin = System.currentTimeMillis();
+    long begin = System.nanoTime();
     reducer.run(reducerContext);
     trackedRW.close(reducerContext);
   }
@@ -2258,6 +2261,7 @@ public class ReduceTask extends Task {
                         mapOutputLoc.getTaskAttemptId(), shuffleData, 
                         compressedLength, numKeys, numKeysRepresented);
         
+        long startTime = System.nanoTime();
         int bytesRead = 0;
         try {
           int n = input.read(shuffleData, 0, shuffleData.length);
@@ -2327,6 +2331,10 @@ public class ReduceTask extends Task {
                                 mapOutputLength + ")"
           );
         }
+
+        long totalTime = System.nanoTime() - startTime;
+        LOG.info("Shuffle time " + totalTime + " for " + bytesRead + " bytes. reduce inmemory");
+
 
         // TODO: Remove this after a 'fix' for HADOOP-3647
         if (LOG.isDebugEnabled()) {
@@ -2590,7 +2598,6 @@ public class ReduceTask extends Task {
       getMapEventsThread.start();
       
       // start the clock for bandwidth measurement
-      long startTime = System.currentTimeMillis();
       long currentTime = startTime;
       long lastProgressTime = startTime;
       long lastOutputTime = 0;
@@ -2640,7 +2647,6 @@ public class ReduceTask extends Task {
           } 
 
 
-          currentTime = System.currentTimeMillis();
           boolean logNow = false;
           if (currentTime - lastOutputTime > MIN_LOG_TIME) {
             lastOutputTime = currentTime;

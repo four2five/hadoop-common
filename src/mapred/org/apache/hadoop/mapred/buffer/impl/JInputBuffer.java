@@ -502,7 +502,8 @@ extends Buffer<K, V> implements InputCollector<K, V> {
 			mergeOutputSize = createInMemorySegments(inMemorySegments, leaveBytes);
 		}
 
-		Path outputPath = outputHandle.getInputFileForWrite(task.getTaskID(), taskattemptid.getTaskID(), spills++, mergeOutputSize);
+		Path outputPath = outputHandle.getInputFileForWrite(task.getTaskID(), taskattemptid.getTaskID(), 
+                                                        spills++, mergeOutputSize);
 
 		Writer writer = 
 			new Writer(conf, localFileSys, outputPath,
@@ -592,6 +593,8 @@ extends Buffer<K, V> implements InputCollector<K, V> {
 					compressedLength + " raw bytes) " + 
 					"into RAM from " + taskattemptid);
 		} else {
+      LOG.error("Trying to Shuffle to disk but this should never happen");
+      /*
 			LOG.info("Shuffling " + decompressedLength + " bytes (" + 
 					compressedLength + " raw bytes) " + 
 					"into Local-FS from " + taskattemptid);
@@ -600,6 +603,7 @@ extends Buffer<K, V> implements InputCollector<K, V> {
                                                         spills++, decompressedLength);
 
 			shuffleToDisk(taskattemptid, istream, filename, compressedLength);
+      */
 		}
 		return true;
 	}
@@ -632,6 +636,7 @@ extends Buffer<K, V> implements InputCollector<K, V> {
 		byte[] shuffleData = new byte[decompressedLength];
 		JInput input = new JInput(taskattemptid, shuffleData, decompressedLength);
 
+    long startTime = System.currentTimeMillis();
 		int bytesRead = 0;
 		try {
 			int n = ins.read(shuffleData, 0, shuffleData.length);
@@ -643,8 +648,10 @@ extends Buffer<K, V> implements InputCollector<K, V> {
 				reporter.progress();
 				n = ins.read(shuffleData, bytesRead, shuffleData.length-bytesRead);
 			}
+      startTime = System.currentTimeMillis() - startTime;
 
-			LOG.debug("Read " + bytesRead + " bytes from map-output for " + taskattemptid);
+			LOG.debug("Shuffle time " + startTime + " for  " + bytesRead + 
+                " bytes from map-output for " + taskattemptid + " JInputBuffer");
 		} catch (IOException ioe) {
 			LOG.info("Failed to shuffle from " + taskattemptid, 
 					ioe);

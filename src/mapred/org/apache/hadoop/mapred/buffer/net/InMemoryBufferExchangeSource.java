@@ -143,7 +143,8 @@ public abstract class InMemoryBufferExchangeSource<H extends OutputInMemoryBuffe
 					ostream = new DataOutputStream(new BufferedOutputStream(socket.getOutputStream()));
 					istream = new DataInputStream(new BufferedInputStream(socket.getInputStream()));
 					
-					BufferExchange.Connect connection = WritableUtils.readEnum(istream, BufferExchange.Connect.class);
+					BufferExchange.Connect connection = 
+            WritableUtils.readEnum(istream, BufferExchange.Connect.class);
 					if (connection == BufferExchange.Connect.OPEN) {
 						WritableUtils.writeEnum(ostream, BufferType.INMEMORY);
 						ostream.flush();
@@ -188,7 +189,6 @@ public abstract class InMemoryBufferExchangeSource<H extends OutputInMemoryBuffe
 			OutputInMemoryBuffer.Header.writeHeader(ostream, header);
 			ostream.flush();
 
-      // we're getting stuck here
 			response = WritableUtils.readEnum(istream, 
                                          BufferExchange.Transfer.class);
 
@@ -202,17 +202,18 @@ public abstract class InMemoryBufferExchangeSource<H extends OutputInMemoryBuffe
 			  return response;
       }
 		} catch (IOException e) {
+      LOG.error("Caught an IOException in transmit: " + e.toString());
 			close(); // Close so reconnect will figure out current status.
 			LOG.debug(e);
 		} catch (NullPointerException npe) { 
-      LOG.info("Caught an npe transmitting header.");
+      LOG.error("Caught an npe transmitting header.");
       if (null == buffer) { 
         LOG.error(" buffer is null");
       } else { 
         LOG.error(" buffer is NOT null. header is " + header);
       }
     } catch (IllegalArgumentException iae) {
-      LOG.info(" caught an iae, partition: " + partition); 
+      LOG.error(" caught an iae, partition: " + partition); 
       //" buf.pos: " + buffer.position() + 
                //" buf.lim " + buffer.limit() + " buf.cap " + buffer.capacity());
     }
@@ -238,6 +239,7 @@ public abstract class InMemoryBufferExchangeSource<H extends OutputInMemoryBuffe
 		}
 		
 		LOG.info("Writing data for header " + header);
+    float startTime = System.currentTimeMillis();
 		long bytesSent = 0L;
 		byte[] buf = new byte[64 * 1024];
 		int n = fstream.read(buf, 0, (int)Math.min(length, buf.length));
@@ -249,7 +251,8 @@ public abstract class InMemoryBufferExchangeSource<H extends OutputInMemoryBuffe
 			n = fstream.read(buf, 0, (int) Math.min(length, buf.length));
 		}
 		ostream.flush();
-		LOG.debug(bytesSent + " total bytes sent for header " + header);
+    startTime = System.currentTimeMillis() - startTime;
+		LOG.info(bytesSent + " total bytes sent  in " + startTime + " ms for header " + header);
 	}
 	
 	//////////////////////////////////////////////////////////////////////////////////////
@@ -315,6 +318,11 @@ public abstract class InMemoryBufferExchangeSource<H extends OutputInMemoryBuffe
 					LOG.info(this + " result is BUFFER_COMPLETE. Transfer success");
 					cursor.put(taskid, Integer.MAX_VALUE);
 					return Transfer.SUCCESS;
+				} else if (result == Connect.CONNECTIONS_FULL) {
+					LOG.info(this + " result is CONNECTIONS_FULL for buffer " + buffer + 
+                   ". Destination " + destination());
+          LOG.info(this + " will retry");
+					return Transfer.RETRY;
 				} else if (result == Connect.ERROR) {
 					LOG.info(this + " result is ERROR for buffer " + buffer + 
                    ". Destination " + destination());

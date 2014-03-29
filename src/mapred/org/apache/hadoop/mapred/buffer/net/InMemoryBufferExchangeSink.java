@@ -212,11 +212,9 @@ public class InMemoryBufferExchangeSink<K extends Object, V extends Object> impl
  					SocketChannel channel = server.accept();
  					channel.configureBlocking(true);
  					/* Note: no buffered input stream due to memory pressure. */
-          LOG.info("  log 2");
  					DataInputStream  istream = new DataInputStream(channel.socket().getInputStream());
  					DataOutputStream ostream = 
                new DataOutputStream(new BufferedOutputStream(channel.socket().getOutputStream()));
-          LOG.info("  log 3");
  					if (complete()) {
              LOG.info("in run, complete() is true, closing ostream");
  						WritableUtils.writeEnum(ostream, Connect.BUFFER_COMPLETE);
@@ -225,7 +223,10 @@ public class InMemoryBufferExchangeSink<K extends Object, V extends Object> impl
  						LOG.info("Connections full. connections = " + handlers.size() + 
  								 ", max allowed " + maxConnections);
  						WritableUtils.writeEnum(ostream, Connect.CONNECTIONS_FULL);
+ 						ostream.flush();
  						ostream.close();
+            // let's give the system a chance to catch up
+            Thread.sleep(500); // 500 seconds enough ?
  					} else {
  						WritableUtils.writeEnum(ostream, Connect.OPEN);
  						ostream.flush();
@@ -253,6 +254,8 @@ public class InMemoryBufferExchangeSink<K extends Object, V extends Object> impl
  				if (!complete()) {
  					e.printStackTrace();
  				}
+ 			} catch (InterruptedException ie) { 
+        LOG.error("Supressing an InterruptedException: " + ie.toString());
  			}
  		}
  	}  // public MyThread

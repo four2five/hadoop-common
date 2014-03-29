@@ -20,11 +20,11 @@ import java.util.TreeSet;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.ChecksumFileSystem;
+//import org.apache.hadoop.fs.ChecksumFileSystem;
 import org.apache.hadoop.fs.FileStatus;
-import org.apache.hadoop.fs.FileSystem;
+//import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.LocalDirAllocator;
-import org.apache.hadoop.fs.LocalFileSystem;
+//import org.apache.hadoop.fs.LocalFileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.DataInputBuffer;
 import org.apache.hadoop.io.IOUtils;
@@ -307,10 +307,7 @@ extends Buffer<K, V> implements InputCollector<K, V> {
 	private ShuffleRamManager ramManager;
 
 	/* A reference to the local file system for writing the map outputs to. */
-	//private FileSystem localFileSys;
 	
-	//private FileSystem rfs;
-
 	/* Number of files to merge at a time */
 	private int ioSortFactor;
 
@@ -406,13 +403,6 @@ extends Buffer<K, V> implements InputCollector<K, V> {
     	// Setup the RamManager
     	ramManager = new ShuffleRamManager(conf);
 
-    	//this.localFileSys = FileSystem.getLocal(conf);
-    	//this.rfs = ((LocalFileSystem)this.localFileSys).getRaw();
-
-    	//start the on-disk-merge thread
-    	//localFSMergerThread = new LocalFSMerger((LocalFileSystem)localFileSys, conf);
-    	//localFSMergerThread.start();
-
     	//start the in memory merger thread
     	inMemFSMergeThread = new InMemFSMergeThread();
     	inMemFSMergeThread.start();
@@ -483,7 +473,30 @@ extends Buffer<K, V> implements InputCollector<K, V> {
     //ByteArrayOutputStream baIndexOut = new ByteArrayOutputStream(partitions * MAP_OUTPUT_INDEX_RECORD_LENGTH);
     //DataOutputStream indexOut = new DataOutputStream(baIndexOut);
     LOG.info("Allocating a BAOS size " + (int)mergeOutputSize);
-    ByteArrayOutputStream baOut =  new ByteArrayOutputStream((int)mergeOutputSize);
+    boolean successfullyAllocated = false;
+    int allocateCounter = 0;
+    ByteArrayOutputStream baOut = null;
+    while (!successfullyAllocated && allocateCounter < 5) { 
+      successfullyAllocated = true;
+      try {
+        LOG.info("\t\t Allocating attempt " + allocateCounter);
+        baOut =  new ByteArrayOutputStream((int)mergeOutputSize);
+      } catch (OutOfMemoryError oome) { 
+        successfullyAllocated = false;
+        LOG.info("!!!! JB, supressing OOME: " + oome.toString());
+        try {
+          Thread.sleep(2000); // if the allocate fails, sleep for 2 seconds and then try again
+        } catch (InterruptedException ie){
+          LOG.error("Surpressing an InterruptedException");
+        }
+      }
+      allocateCounter++;
+    }
+
+    if (null == baOut) { 
+      throw new OutOfMemoryError("Failed to allocate a ByteArrayOutputStream after " + allocateCounter + " attempts");
+    }
+
     DataOutputStream out = new DataOutputStream(baOut);
 
 		IFile.Writer writer = 
@@ -523,14 +536,9 @@ extends Buffer<K, V> implements InputCollector<K, V> {
 		} catch (Exception e) { 
 			//make sure that we delete the ondisk file that we created 
 			//earlier when we invoked cloneFileAttributes
-			//localFileSys.delete(outputPath, true);
 			throw (IOException)new IOException
 			("Intermediate merge failed").initCause(e);
 		}
-
-		// Note the output of the merge
-		//FileStatus status = localFileSys.getFileStatus(outputPath);
-		//addInputFilesOnDisk(new JInput(taskattemptid, outputPath, status.getLen()));
 
 		LOG.info("FLUSH: Merged " + inMemorySegments.size() + " segments, merged " +
 				mergeOutputSize + " bytes to satisfy reduce memory limit");
@@ -572,12 +580,17 @@ extends Buffer<K, V> implements InputCollector<K, V> {
 
 		// Shuffle
 		if (shuffleInMemory ) {  
+
+      long startTime = System.nanoTime();
       boolean successfulShuffle = shuffleInMemory(taskattemptid, istream,
 					                  (int)decompressedLength,
 					                  (int)compressedLength); 
+      long totalTime = System.nanoTime() - startTime;
+
       if ( successfulShuffle) { 
+        LOG.info("Shuffle time " + totalTime + " for " + compressedLength + " bytes. inmem2");
 			  LOG.info("Shuffeled " + decompressedLength + " bytes (" + 
-					  compressedLength + " raw bytes) " +  "into RAM from " + taskattemptid);
+					  compressedLength + " raw bytes) in " + startTime + " seconds into RAM from " + taskattemptid);
       } else  {
 			  LOG.error("Shuffle failed for header " + taskattemptid);
       }
@@ -680,15 +693,6 @@ extends Buffer<K, V> implements InputCollector<K, V> {
 			// Re-throw
 			throw ioe;
 		} 
-   /* catch (Throwable t) {
-      LOG.info("Caught a throwable, returning false from shuffleInMemory()");
-			t.printStackTrace();
-			LOG.error(t);
-			input = null;
-      throw t;
-		}
-    */
-		
 
 		// Close the in-memory file
 		ramManager.closeInMemoryFile(decompressedLength);
@@ -784,16 +788,6 @@ extends Buffer<K, V> implements InputCollector<K, V> {
 			}
 		}
 		return totalSize;
-	}
-
-	private Path[] getFiles(FileSystem fs)  throws IOException {
-		List<Path> fileList = new ArrayList<Path>();
-    /*
-		for (JInput input : inputFilesOnDisk) {
-			fileList.add(input.file);
-		}
-    */
-		return fileList.toArray(new Path[0]);
 	}
 
 	/**

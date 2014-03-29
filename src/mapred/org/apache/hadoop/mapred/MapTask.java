@@ -47,7 +47,7 @@ import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.FileSystem.Statistics;
 import org.apache.hadoop.fs.LocalDirAllocator;
-import org.apache.hadoop.fs.LocalFileSystem;
+//import org.apache.hadoop.fs.LocalFileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.BytesWritable;
 import org.apache.hadoop.io.DataInputBuffer;
@@ -144,7 +144,7 @@ public class MapTask extends Task {
     // job-setup or a job-cleanup task) and if the user wishes to run
     // IsolationRunner either by setting keep.failed.tasks.files to true or by
     // using keep.tasks.files.pattern
-    if (supportIsolationRunner(conf) && isMapOrReduce()) {
+    if (supportIsolationRunner(conf) && isMapOrReduce() && false) {
       // localize the split meta-information
       Path localSplitMeta =
         new LocalDirAllocator("mapred.local.dir").getLocalPathForWrite(
@@ -779,6 +779,9 @@ public class MapTask extends Task {
     throws IOException, ClassNotFoundException, InterruptedException {
       this.reporter = reporter;
       Statistics matchedStats = null;
+
+      LOG.info("In DirectMapOutputCollector.()");
+
       if (outputFormat instanceof org.apache.hadoop.mapreduce.lib.output.FileOutputFormat) {
         matchedStats = getFsStatistics(org.apache.hadoop.mapreduce.lib.output.FileOutputFormat
             .getOutputPath(jobContext), job);
@@ -791,6 +794,8 @@ public class MapTask extends Task {
 
       long bytesOutPrev = getOutputBytes(fsStats);
       out = outputFormat.getRecordWriter(taskContext);
+      Class cls = out.getClass();
+      System.out.print("JB, RecordWriter class: " + cls.getName());
       long bytesOutCurr = getOutputBytes(fsStats);
       fileOutputByteCounter.increment(bytesOutCurr - bytesOutPrev);
     }
@@ -1051,6 +1056,8 @@ public class MapTask extends Task {
       
       long bytesOutPrev = getOutputBytes(fsStats);
       out = job.getOutputFormat().getRecordWriter(fs, job, finalName, reporter);
+      Class cls = out.getClass();
+      System.out.print("JB, RecordWriter class: " + cls.getName());
       long bytesOutCurr = getOutputBytes(fsStats);
       fileOutputByteCounter.increment(bytesOutCurr - bytesOutPrev);
       recordsRepresented = 0;
