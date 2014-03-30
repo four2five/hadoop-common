@@ -1868,9 +1868,9 @@ class ReduceTask extends Task {
                         mapOutputLoc.getTaskAttemptId(), shuffleData, 
                         compressedLength, numKeys, numKeysRepresented);
         
-        long startTime = System.currentTimeMillis();
         int bytesRead = 0;
         try {
+          long startTime = System.nanoTime();
           int n = input.read(shuffleData, 0, shuffleData.length);
           while (n > 0) {
             bytesRead += n;
@@ -1881,6 +1881,8 @@ class ReduceTask extends Task {
             n = input.read(shuffleData, bytesRead, 
                            (shuffleData.length-bytesRead));
           }
+          long totalTime = System.nanoTime() - startTime;
+          LOG.info("Shuffle time " + totalTime + " for " + bytesRead + " bytes. inmem sidr");
 
           //if (LOG.isDebugEnabled()) {
             LOG.debug("Read " + bytesRead + " bytes from map-output for " +
@@ -1938,8 +1940,6 @@ class ReduceTask extends Task {
                                 mapOutputLength + ")"
           );
         }
-        startTime = System.currentTimeMillis() - startTime;
-        LOG.info("Shuffle time " + startTime + " for " + bytesRead + " bytes. inmem");
 
         // TODO: Remove this after a 'fix' for HADOOP-3647
         if (LOG.isDebugEnabled()) {
@@ -1974,7 +1974,6 @@ class ReduceTask extends Task {
                         mapOutputLength, numRecords, numRecordsRepresented);
 
 
-        long startTime = System.currentTimeMillis();
         // Copy data to local-disk
         OutputStream output = null;
         long bytesRead = 0;
@@ -1989,6 +1988,7 @@ class ReduceTask extends Task {
             readError = true;
             throw ioe;
           }
+          long startTime = System.nanoTime();
           while (n > 0) {
             bytesRead += n;
             shuffleClientMetrics.inputBytes(n);
@@ -2003,6 +2003,8 @@ class ReduceTask extends Task {
               throw ioe;
             }
           }
+          long totalTime = System.nanoTime() - startTime;
+          LOG.info("Shuffle time " + totalTime + " for " + bytesRead + " bytes. disk sidr");
 
           LOG.info("Read " + bytesRead + " bytes from map-output for " +
               mapOutputLoc.getTaskAttemptId());
@@ -2052,8 +2054,6 @@ class ReduceTask extends Task {
           );
         }
 
-        startTime = System.currentTimeMillis() - startTime;
-        LOG.info("Shuffle time " + startTime + " for " + bytesRead + " bytes. disk");
 
         return mapOutput;
 
