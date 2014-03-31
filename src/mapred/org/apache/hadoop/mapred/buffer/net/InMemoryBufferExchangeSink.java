@@ -214,7 +214,8 @@ public class InMemoryBufferExchangeSink<K extends Object, V extends Object> impl
  					/* Note: no buffered input stream due to memory pressure. */
  					DataInputStream  istream = new DataInputStream(channel.socket().getInputStream());
  					DataOutputStream ostream = 
-               new DataOutputStream(new BufferedOutputStream(channel.socket().getOutputStream()));
+               new DataOutputStream(
+                new BufferedOutputStream(channel.socket().getOutputStream()));
  					if (complete()) {
              LOG.info("in run, complete() is true, closing ostream");
  						WritableUtils.writeEnum(ostream, Connect.BUFFER_COMPLETE);
@@ -244,7 +245,8 @@ public class InMemoryBufferExchangeSink<K extends Object, V extends Object> impl
  							continue;
  						}
  						
- 						LOG.info("InMemoryBufferSink: " + ownerid + " opening connection. Handler size: " + handlers.size());
+ 						LOG.info("InMemoryBufferSink: " + ownerid + 
+                     " opening connection. Handler size: " + handlers.size());
  						handlers.add(handler);
  						executor.execute(handler);
  					}
@@ -394,7 +396,8 @@ public class InMemoryBufferExchangeSink<K extends Object, V extends Object> impl
 						if (open == Integer.MAX_VALUE) {
               LOG.info(this + " in run, and open == MAX_VALUE");
 							header = (H) OutputInMemoryBuffer.Header.readHeader(istream);
-							LOG.info(this + " Handler received " + header.compressed() + " bytes. header: " + header);
+							LOG.info(this + " Handler received " + 
+                       header.compressed() + " bytes. header: " + header);
 						  receive(header);
 						} else if (open == 0) {
               if (header != null) { 
@@ -463,7 +466,8 @@ public class InMemoryBufferExchangeSink<K extends Object, V extends Object> impl
             LOG.info("Issue receiving " + header);
           }
 					position.set(header.ids().last() + 1);
-					LOG.info("InMemoryBuffer handler done receiving up to position " + position.intValue());
+					LOG.info("InMemoryBuffer handler done receiving up to position " + 
+                   position.intValue());
 				} else {
 					LOG.info(this + " ignoring -- " + header);
 					WritableUtils.writeEnum(ostream, BufferExchange.Transfer.IGNORE);

@@ -380,7 +380,10 @@ public class InMemoryManager implements InMemoryBufferUmbilicalProtocol {
 		 */
 		private void add(OutputInMemoryBuffer buffer) throws IOException {
 			synchronized (this) {
-        LOG.info("Adding buffer " + buffer + " size: " + buffer.header().compressed() + " to manager for " + this.taskid);
+        LOG.info("Adding buffer " + buffer + 
+                 " capacity: " + buffer.data().capacity() + 
+                 " position: " + buffer.data().position() + 
+                 " to manager for " + this.taskid);
 				this.outputs.add(buffer);
 				somethingToSend = true;
 				this.notifyAll();
@@ -430,7 +433,8 @@ public class InMemoryManager implements InMemoryBufferUmbilicalProtocol {
                         " to " + src.destination() + " but receiver ignored it");
               // Don't count an ignored buffer send as serviced
             } else if (BufferExchange.Transfer.SUCCESS == result) {
-							LOG.info("Sent file " + buffer.header().owner() + " to " + src.destination());
+							LOG.info("Sent file " + buffer.header().owner() + 
+                       " to " + src.destination());
 							buffer.serviced(src.destination());
 						}
 					} else { 
@@ -445,7 +449,9 @@ public class InMemoryManager implements InMemoryBufferUmbilicalProtocol {
 					try {
 
 						// LOG.info("Garbage collect output" + buffer.header());
-            LOG.info("Garbage collecting buffer " + buffer.header() + " size: " + buffer.header().compressed() + " from manager for " + this.taskid);
+            LOG.info("Garbage collecting buffer " + buffer.header() + 
+                     " size: " + buffer.header().compressed() + 
+                     " from manager for " + this.taskid);
             LOG.info("\tServiced: " + buffer.serviced + "\n" + 
                      "\ttoService: " + buffer.toService);
             // remove it from outputs prior to deleting it

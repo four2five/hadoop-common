@@ -239,7 +239,7 @@ public abstract class InMemoryBufferExchangeSource<H extends OutputInMemoryBuffe
 		}
 		
 		LOG.info("Writing data for header " + header);
-    float startTime = System.currentTimeMillis();
+    long startTime = System.nanoTime();
 		long bytesSent = 0L;
 		byte[] buf = new byte[64 * 1024];
 		int n = fstream.read(buf, 0, (int)Math.min(length, buf.length));
@@ -251,8 +251,9 @@ public abstract class InMemoryBufferExchangeSource<H extends OutputInMemoryBuffe
 			n = fstream.read(buf, 0, (int) Math.min(length, buf.length));
 		}
 		ostream.flush();
-    startTime = System.currentTimeMillis() - startTime;
-		LOG.info(bytesSent + " total bytes sent  in " + startTime + " ms for header " + header);
+    long totalTime = System.nanoTime() - startTime;
+		LOG.info(bytesSent + " total bytes sent  in " + totalTime + 
+             " ms for header " + header);
 	}
 	
 	//////////////////////////////////////////////////////////////////////////////////////

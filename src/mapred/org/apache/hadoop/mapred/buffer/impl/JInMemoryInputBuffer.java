@@ -581,16 +581,13 @@ extends Buffer<K, V> implements InputCollector<K, V> {
 		// Shuffle
 		if (shuffleInMemory ) {  
 
-      long startTime = System.nanoTime();
       boolean successfulShuffle = shuffleInMemory(taskattemptid, istream,
 					                  (int)decompressedLength,
 					                  (int)compressedLength); 
-      long totalTime = System.nanoTime() - startTime;
 
       if ( successfulShuffle) { 
-        LOG.info("Shuffle time " + totalTime + " for " + compressedLength + " bytes. inmem2");
 			  LOG.info("Shuffeled " + decompressedLength + " bytes (" + 
-					  compressedLength + " raw bytes) in " + startTime + " seconds into RAM from " + taskattemptid);
+					  compressedLength + ") raw bytes");  
       } else  {
 			  LOG.error("Shuffle failed for header " + taskattemptid);
       }
@@ -634,6 +631,7 @@ extends Buffer<K, V> implements InputCollector<K, V> {
 		byte[] shuffleData = new byte[decompressedLength];
 		JInput input = new JInput(taskattemptid, shuffleData, decompressedLength);
 
+    long startTime = System.nanoTime();
 		int bytesRead = 0;
 		try {
 			int n = ins.read(shuffleData, 0, shuffleData.length);
@@ -645,8 +643,10 @@ extends Buffer<K, V> implements InputCollector<K, V> {
 				reporter.progress();
 				n = ins.read(shuffleData, bytesRead, shuffleData.length-bytesRead);
 			}
-
-			LOG.info("Read " + bytesRead + " bytes from map-output for " + taskattemptid);
+      long totalTime = System.nanoTime() - startTime;
+			LOG.info("Shuffle time " + totalTime + " read " + bytesRead + 
+               " bytes from map-output for " + taskattemptid + 
+               " inmem2");
 		} catch (OutOfMemoryError oome) {
 			LOG.info("Failed to shuffle from " + taskattemptid, 
 					oome);
