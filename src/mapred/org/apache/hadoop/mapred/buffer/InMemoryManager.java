@@ -428,11 +428,14 @@ public class InMemoryManager implements InMemoryBufferUmbilicalProtocol {
 							siter.remove();
 							stalls++;
 							somethingToSend = true; // Try again later.
-						} else if (BufferExchange.Transfer.IGNORE == result) { 
-							LOG.info("Tryed to send file " + buffer.header().owner() + 
-                        " to " + src.destination() + " but receiver ignored it");
-              // Don't count an ignored buffer send as serviced
-            } else if (BufferExchange.Transfer.SUCCESS == result) {
+					 // } else if (BufferExchange.Transfer.IGNORE == result) { 
+					 // 	LOG.info("Tryed to send file " + buffer.header().owner() + 
+           //             " to " + src.destination() + " but receiver ignored it");
+              // Count an ignored buffer send as serviced, since the receive will never ask for it again
+						//	buffer.serviced(src.destination());
+            } else if (BufferExchange.Transfer.SUCCESS == result || 
+                       BufferExchange.Transfer.IGNORE == result) {
+              // Count an ignored buffer send as serviced, since the receive will never ask for it again
 							LOG.info("Sent file " + buffer.header().owner() + 
                        " to " + src.destination());
 							buffer.serviced(src.destination());
