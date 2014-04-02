@@ -1318,6 +1318,7 @@ public class JobInProgressDependency extends JobInProgress {
                                       finishedReduceTasks == 0)); 
 
 
+    LOG.info("fail_last_reduce: " + conf.failLastReduceTask()); 
     if (artificially_fail_task) { 
       LOG.info("artificially fail this task: " + taskid);
       status.setRunState(TaskStatus.State.FAILED);
