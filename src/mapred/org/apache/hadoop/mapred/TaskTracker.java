@@ -2356,6 +2356,9 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
       if (tip.getTask().isMapTask()) {
         indexCache.removeMap(tip.getTask().getTaskID().toString());
       }
+
+      // cleanup the InMemoryManager TODO --jbuck
+      this.bufferController.purge(tip);
     }
   }
 
@@ -2763,7 +2766,7 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
   // lives at this TaskTracker.  It maintains the Task object,
   // its TaskStatus, and the TaskRunner.
   ///////////////////////////////////////////////////////
-  class TaskInProgress {
+  public class TaskInProgress {
     Task task;
     long lastProgressReport;
     StringBuffer diagnosticInfo = new StringBuffer();

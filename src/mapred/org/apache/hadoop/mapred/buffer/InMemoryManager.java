@@ -54,6 +54,7 @@ import org.apache.hadoop.ipc.RPC.Server;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.JobID;
 import org.apache.hadoop.mapred.TaskAttemptID;
+import org.apache.hadoop.mapred.Task;
 import org.apache.hadoop.mapred.TaskID;
 import org.apache.hadoop.mapred.TaskTracker;
 import org.apache.hadoop.mapred.buffer.net.BufferExchange;
@@ -247,6 +248,10 @@ public class InMemoryManager implements InMemoryBufferUmbilicalProtocol {
       LOG.info("Creating a BufferManager for task " + this.taskid);
 		}
 
+    public SortedSet<OutputInMemoryBuffer> getOutputs() { 
+      return this.outputs;
+    }
+
 		@Override
 		public String toString() {
 			return "BufferManager: buffer " + taskid;
@@ -381,6 +386,7 @@ public class InMemoryManager implements InMemoryBufferUmbilicalProtocol {
 		private void add(OutputInMemoryBuffer buffer) throws IOException {
 			synchronized (this) {
         LOG.info("Adding buffer " + buffer + 
+                 " size: " + buffer.header().compressed() + 
                  " capacity: " + buffer.data().capacity() + 
                  " position: " + buffer.data().position() + 
                  " to manager for " + this.taskid);
@@ -451,12 +457,14 @@ public class InMemoryManager implements InMemoryBufferUmbilicalProtocol {
 					/* Assume no speculations for streaming. */
 					try {
 
-						// LOG.info("Garbage collect output" + buffer.header());
             LOG.info("Garbage collecting buffer " + buffer.header() + 
                      " size: " + buffer.header().compressed() + 
+                     " size2: " + buffer.header().decompressed() + 
+                     " capacity: " + buffer.data().capacity() + 
                      " from manager for " + this.taskid);
             LOG.info("\tServiced: " + buffer.serviced + "\n" + 
                      "\ttoService: " + buffer.toService);
+
             // remove it from outputs prior to deleting it
 					  synchronized(this) {
 						  this.outputs.remove(buffer);
@@ -673,16 +681,70 @@ public class InMemoryManager implements InMemoryBufferUmbilicalProtocol {
 		return 0;
 	}
 	
+  // This is called when the parent TaskTracker needs to flush a task.
+  // This can happen when a task is KILLED or KILLED_UNCLEAN
+	//public void purge(TaskAttemptID tid) {
+	public void purge(TaskTracker.TaskInProgress tip) {
+		synchronized (this) {
+      Task task = tip.getTask();
+			JobID jobid = task.getJobID();
+			if (bufferManagers.containsKey(jobid)) {
+				Map<TaskAttemptID, BufferManager> bm_map = this.bufferManagers.get(jobid);
+        // need to get all the task attempts that were NOT the one that took it to success
+        //TaskAttemptID successfulAttempt = tip.getSuccessfulTaskid();
+        //TaskAttemptID[] allTaskAttemptIDs = tip.getAllTaskAttemptIDs();
+        //Task task = tip.getTask();
+        TaskAttemptID temptid = task.getTaskID();
+        //for(TaskAttemptID temptid : allTaskAttemptIDs) { 
+          // if this buffer manager has an entry for this tid and it's not the one
+          // that made the task successful, we need to clean it up
+				  //3if (bm_map.containsKey(temptid) && ! (successfulAttempt == temptid)) {
+				  if (bm_map.containsKey(temptid)) {
+            BufferManager tempBM = bm_map.get(temptid);
+            LOG.info("Freeing buffers for tid: " + temptid);
+            // TODO --jbuck, here is where we GC buffers for killed tasks
+            synchronized(tempBM) { 
+              Set<OutputInMemoryBuffer> buffers = tempBM.getOutputs();
+              for (OutputInMemoryBuffer buffer : buffers) { 
+                LOG.info("Garbage collecting buffer " + buffer.header() + 
+                        " size: " + buffer.header().compressed() + 
+                        " size2: " + buffer.header().decompressed() + 
+                        " capacity: " + buffer.data().capacity() + 
+                        " from manager for " + temptid);
+                LOG.info("\tServiced: " + buffer.serviced + "\n" + 
+                        "\ttoService: " + buffer.toService);
+                // remove it from outputs prior to deleting it.
+                // already synchronized on this
+					      tempBM.getOutputs().remove(buffer);
+                try { 
+                  buffer.delete(); // hopefully the GC cleans this up in short order
+                } catch (IOException ioe) { 
+                  LOG.error("Supressing an IOException in purge(TaskAttemptID): " + ioe.toString());
+                }
+				      } // for
+            } // synchronized(tempBM)
+          } else {  //  if (bm_map.containsKey(temptid) && ! (successfulAttempt == temptid))
+            LOG.info("purge called, while BufferManager has entries for job id " + jobid + 
+                    " it has no entries for TaskAttemptID " + temptid);
+          }
+        //} // for(TaskAttemptID temptid : allTaskAttemptIDs) 
+      } else { //  if (bufferManagers.containsKey(jobid))
+        LOG.info("purge called, but BufferManager doesn't contain job id " + jobid);
+      }
+    } // synchronized (this)
+  } // public void purge(...)
+
 	public void free(TaskAttemptID tid) {
 		synchronized (this) {
 			JobID jobid = tid.getJobID();
 			if (bufferManagers.containsKey(jobid)) {
 				Map<TaskAttemptID, BufferManager> bm_map = this.bufferManagers.get(jobid);
 				if (bm_map.containsKey(tid)) {
-					bm_map.get(tid).close();
+          BufferManager tmpBM = bm_map.get(tid);
+          tmpBM.close();
+					//bm_map.get(tid).close();
 					//bm_map.get(tid).delete();
-          LOG.info("Freeing buffers for tid: " + tid);
-				}
+        }
 			}
 		}
 	}
