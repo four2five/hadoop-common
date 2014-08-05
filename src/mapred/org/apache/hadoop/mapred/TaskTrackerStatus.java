@@ -415,7 +415,10 @@ public class TaskTrackerStatus implements Writable {
    * @return
    */
   private boolean isTaskRunning(TaskStatus taskStatus) {
+    LOG.info("\tisTaskRunning: "  + taskStatus.getTaskID());
+    LOG.info("\t\t" + taskStatus.getRunState() + " : " + taskStatus.inTaskCleanupPhase());
     TaskStatus.State state = taskStatus.getRunState();
+
     return (state == State.RUNNING || state == State.UNASSIGNED || 
             taskStatus.inTaskCleanupPhase());
   }
@@ -462,8 +465,10 @@ public class TaskTrackerStatus implements Writable {
    */
   public int countReduceTasks() {
     int reduceCount = 0;
+    LOG.info(" countReduceTasks");
     for (TaskStatus ts : taskReports) {
       if ((!ts.getIsMap()) && isTaskRunning(ts)) {
+        LOG.info("\t" + ts);
         reduceCount++;
       }
     }
@@ -481,6 +486,7 @@ public class TaskTrackerStatus implements Writable {
         reduceSlotsCount += ts.getNumSlots();
       }
     }
+    LOG.info("occupiedReduceSlots: " + reduceSlotsCount);
     return reduceSlotsCount;
   }
   
@@ -489,7 +495,10 @@ public class TaskTrackerStatus implements Writable {
    * @return available reduce slots
    */
   public int getAvailableReduceSlots() {
-    return getMaxReduceSlots() - countOccupiedReduceSlots();
+    int retVal = getMaxReduceSlots() - countOccupiedReduceSlots();
+    //return getMaxReduceSlots() - countOccupiedReduceSlots();
+    LOG.info("availableReduceSlots: " + retVal);
+    return retVal;
   }
   
 

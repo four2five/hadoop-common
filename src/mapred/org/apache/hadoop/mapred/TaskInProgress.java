@@ -385,6 +385,7 @@ class TaskInProgress {
   }
   
   private void resetSuccessfulTaskid() {
+    LOG.info("Resetting sucessful Taskid");
     this.successfulTaskId = null; 
   }
   
@@ -394,6 +395,7 @@ class TaskInProgress {
    * @return <code>true</code> if the tip is complete, else <code>false</code>
    */
   public synchronized boolean isComplete() {
+    LOG.info("isComplete? " + (completes > 0));
     return (completes > 0);
   }
 
@@ -627,6 +629,7 @@ class TaskInProgress {
       if (oldState == TaskStatus.State.FAILED ||
           oldState == TaskStatus.State.KILLED) {
         tasksToKill.put(taskid, true);
+        LOG.info("old state was KILLED, exiting");
         return false;	  
       }
           
@@ -652,6 +655,7 @@ class TaskInProgress {
   public void forceDecrementComplete() { 
       LOG.info("force decrementing completes");
       this.completes--;
+      LOG.info("Total completes: " + this.completes);
   }
 
   /**
@@ -716,19 +720,22 @@ class TaskInProgress {
         jobStatus.getRunState() != JobStatus.SUCCEEDED) {
       LOG.info("decrementing completes");
       this.completes--;
+      LOG.info("Total completes: " + this.completes);
       
       // Reset the successfulTaskId since we don't have a SUCCESSFUL task now
       resetSuccessfulTaskid();
+    } else {
+      LOG.info("in incompletesubtask, but not decrementing completes");
     }
 
     // Note that there can be failures of tasks that are hosted on a machine 
     // that has not yet registered with restarted jobtracker
     // recalculate the counts only if its a genuine failure
-    if (tasks.contains(taskid)) {
+    if (tasks.contains(taskid) && status != null) {
       if (taskState == TaskStatus.State.FAILED) {
         LOG.info("taskState == TaskStatus.State.FAILED");
         numTaskFailures++;
-        LOG.info("Failing task " + taskid + " on host " + trackerHostName);
+        LOG.info("In TIP, failing task " + taskid + " on host " + trackerHostName);
         machinesWhereFailed.add(trackerHostName);
         if(maxSkipRecords>0) {
           //skipping feature enabled
@@ -743,6 +750,7 @@ class TaskInProgress {
       }
     } else {
       LOG.info("was going to fail, tasks.contains(taskid) was false");
+      LOG.info("taskid: " + taskid);
     }
 
     if (numTaskFailures >= maxTaskAttempts) {
@@ -818,6 +826,7 @@ class TaskInProgress {
     //
 
     this.completes++;
+    LOG.info("Total completes: " + this.completes);
     this.execFinishTime = jobtracker.getClock().getTime();
     recomputeProgress();
     
@@ -1010,12 +1019,13 @@ class TaskInProgress {
       taskid = new TaskAttemptID( id, attemptId);
       ++nextTaskId;
     } else {
-      LOG.warn("Exceeded limit of " + (MAX_TASK_EXECS + maxTaskAttempts) +
+      LOG.error("Exceeded limit of " + (MAX_TASK_EXECS + maxTaskAttempts) +
               " (plus " + numKilledTasks + " killed)"  + 
               " attempts for the tip '" + getTIPId() + "'");
       return null;
     }
 
+    LOG.info("getTaskToRun() => addRunningTask");
     return addRunningTask(taskid, taskTracker);
   }
   
@@ -1076,6 +1086,7 @@ class TaskInProgress {
     }
 
     activeTasks.put(taskid, taskTracker);
+    LOG.info("JB, adding task " + taskid);
     tasks.add(taskid);
 
     // Ask JobTracker to note that the task exists

@@ -80,6 +80,8 @@ class JobQueueTaskScheduler extends TaskScheduler {
   @Override
   public synchronized List<Task> assignTasks(TaskTracker taskTracker)
       throws IOException {
+
+    LOG.info(" in assignTasks");
     TaskTrackerStatus taskTrackerStatus = taskTracker.getStatus(); 
     ClusterStatus clusterStatus = taskTrackerManager.getClusterStatus();
     final int numTaskTrackers = clusterStatus.getTaskTrackers();
@@ -225,6 +227,7 @@ class JobQueueTaskScheduler extends TaskScheduler {
             continue;
           }
 
+          LOG.info("Looking for a reduce task to schedule for job " + job);
           Task t = 
             job.obtainNewReduceTask(taskTrackerStatus, numTaskTrackers, 
                                     taskTrackerManager.getNumberOfUniqueHosts()
@@ -242,10 +245,12 @@ class JobQueueTaskScheduler extends TaskScheduler {
           }
         }
       }
+    } else { 
+      LOG.info("availableReduceSlots <= 0");
     }
     
-    if (LOG.isDebugEnabled()) {
-      LOG.debug("Task assignments for " + taskTrackerStatus.getTrackerName() + " --> " +
+    //if (LOG.isDebugEnabled()) {
+      LOG.info("Task assignments for " + taskTrackerStatus.getTrackerName() + " --> " +
                 "[" + mapLoadFactor + ", " + trackerMapCapacity + ", " + 
                 trackerCurrentMapCapacity + ", " + trackerRunningMaps + "] -> [" + 
                 (trackerCurrentMapCapacity - trackerRunningMaps) + ", " +
@@ -254,7 +259,7 @@ class JobQueueTaskScheduler extends TaskScheduler {
                 trackerCurrentReduceCapacity + "," + trackerRunningReduces + 
                 "] -> [" + (trackerCurrentReduceCapacity - trackerRunningReduces) + 
                 ", " + (assignedTasks.size()-assignedMaps) + "]");
-    }
+   // }
 
     return assignedTasks;
   }

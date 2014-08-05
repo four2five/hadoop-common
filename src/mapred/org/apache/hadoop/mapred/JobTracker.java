@@ -2702,6 +2702,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
     taskset.add(taskid);
 
     // taskid --> TIP
+    LOG.info("Adding tip for task: " + taskid);
     taskidToTIPMap.put(taskid, tip);
     
   }
@@ -2796,6 +2797,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
    * @param taskTracker tasktracker whose 'non-running' tasks are to be purged
    */
   private void removeMarkedTasks(String taskTracker) {
+    LOG.info("JB, in removeMarkedTasks");
     // Purge all the 'marked' tasks which were running at taskTracker
     Set<TaskAttemptID> markedTaskSet = 
       trackerToMarkedTasksMap.get(taskTracker);
@@ -2824,6 +2826,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
    * @param job the job about to be 'retired'
    */
   synchronized void removeJobTasks(JobInProgress job) { 
+    LOG.info("JB, in removeJobTasks");
     // iterate over all the task types
     for (TaskType type : TaskType.values()) {
       // iterate over all the tips of the type under consideration
@@ -3396,12 +3399,14 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
       } else {
         List<Task> tasks = getSetupAndCleanupTasks(taskTrackerStatus);
         if (tasks == null ) {
+          LOG.info("Calling assignTasks");
           tasks = taskScheduler.assignTasks(taskTrackers.get(trackerName));
         }
         if (tasks != null) {
           for (Task task : tasks) {
             expireLaunchingTasks.addNewTask(task.getTaskID());
-            LOG.debug(trackerName + " -> LaunchTask: " + task.getTaskID());
+            //LOG.debug(trackerName + " -> LaunchTask: " + task.getTaskID());
+            LOG.info(trackerName + " -> LaunchTask: " + task.getTaskID());
             actions.add(new LaunchTaskAction(task));
             //if (task.isMapTask() || task.isPipeline()) 
             if (task.isMapTask()) {
@@ -3409,7 +3414,19 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
               job.fastUpdateTaskRunningStatus(task, taskTrackerStatus);
             }
           }
+        } else { 
+          LOG.info("\t" + " assignTasks returned a null list of tasks");
         }
+      }
+    } else  {
+      if (isBlacklisted) { 
+        LOG.info("\t" + status.getHost() + " is blacklisted");
+      }
+      if (!acceptNewTasks) { 
+        LOG.info("\t not accepting new tasks");
+      }
+      if (!recoveryManager.shouldSchedule()) { 
+        LOG.info("\t Recovery manager says that we should not schedule");
       }
     }
       
@@ -3675,6 +3692,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
           // if this is lost tracker that came back now, and if it's blacklisted
           // increment the count of blacklisted trackers in the cluster
           if (isBlacklisted(trackerName)) {
+            LOG.info("This tracker " + trackerName + " is blacklisted");
             faultyTrackers.incrBlacklistedTrackers(1);
           }
           // This could now throw an UnknownHostException but only if the
@@ -4698,6 +4716,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
    */
   void updateTaskStatuses(TaskTrackerStatus status) {
     String trackerName = status.getTrackerName();
+    LOG.info("Job tracker processing task statuses for tracker: " + trackerName); //-jbuck
     for (TaskStatus report : status.getTaskReports()) {
       report.setTaskTracker(trackerName);
       TaskAttemptID taskId = report.getTaskID();
@@ -4733,6 +4752,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
       }
 
       TaskInProgress tip = taskidToTIPMap.get(taskId);
+      LOG.info("\t" + taskId + " : " + (TaskStatus)report.clone());
       // Check if the tip is known to the jobtracker. In case of a restarted
       // jt, some tasks might join in later
       if (tip != null || hasRestarted()) {
@@ -4759,7 +4779,12 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
         }
       } else {
         LOG.info("Serious problem.  While updating status, cannot find taskid " 
-                 + report.getTaskID());
+                 + taskId);
+        if (tip == null) { 
+          LOG.info("tip is null");
+        } else{ 
+          LOG.info("tip is: " + tip);
+        }
       }
       
       // Process 'failed fetch' notifications 

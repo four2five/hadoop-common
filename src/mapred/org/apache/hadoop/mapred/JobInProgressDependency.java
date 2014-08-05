@@ -1320,6 +1320,11 @@ public class JobInProgressDependency extends JobInProgress {
 
     if (artificially_fail_task) { 
       LOG.info("artificially fail this task: " + taskid);
+      LOG.info("isMap: " + status.getIsMap() + " getID: " + status.getTaskID().getId() + 
+               " fail_last_reduce: " + conf.failLastReduceTask() +
+               " finishedReduceTasks: " + finishedReduceTasks + 
+               " numReduceTasks-1: " + (numReduceTasks-1) 
+              );
       status.setRunState(TaskStatus.State.FAILED);
     }
 
@@ -1426,7 +1431,9 @@ public class JobInProgressDependency extends JobInProgress {
 
       if (artificially_fail_task) {
         LOG.info("Failing a task, artificially");
-        status.setRunState(TaskStatus.State.FAILED);
+        status.setRunState(TaskStatus.State.FAILED_UNCLEAN);
+        //status.setRunState(TaskStatus.State.FAILED);
+        LOG.info("Post setRunState is: " + status.getRunState());
 
         TaskCompletionEvent.Status taskCompletionStatus = 
           TaskCompletionEvent.Status.FAILED;
@@ -1435,7 +1442,9 @@ public class JobInProgressDependency extends JobInProgress {
         //failedTask(tip, taskid, status, taskTracker,
         //           wasRunning, wasComplete, wasAttemptRunning, true);
         failedTask(tip, taskid, status, taskTracker,
-                   true, false, true, true);
+                   true, true, true, true);
+        //retireReduce(tip);
+        //failReduce(tip);
 
         taskEvent = new TaskCompletionEvent(taskCompletionEventTracker, 
                                       taskid,
@@ -1456,7 +1465,7 @@ public class JobInProgressDependency extends JobInProgress {
                  " dependencies");
 
 
-        // --jbuck, now, fail dependent Map tasks so that they are rescheduled
+        // now, fail dependent Map tasks so that they are rescheduled
         boolean isComplete = tip.isComplete();
         boolean metricsDone = isComplete();
         final JobTrackerInstrumentation metrics = jobtracker.getInstrumentation();
@@ -1467,42 +1476,40 @@ public class JobInProgressDependency extends JobInProgress {
           TaskID tempTaskID = tempTIP.getTIPId();
           TaskAttemptID tempTaskAttemptID = new TaskAttemptID(tempTaskID, 0);
           TaskStatus tempStatus = new MapTaskStatus(tempTaskAttemptID, (float)0.0, status.getNumSlots(),
-                                                 TaskStatus.State.FAILED, status.getDiagnosticInfo(),
+                                                 TaskStatus.State.FAILED_UNCLEAN, status.getDiagnosticInfo(),
+                                                 //TaskStatus.State.FAILED, status.getDiagnosticInfo(),
                                                  status.getStateString(), status.getTaskTracker(),
                                                  TaskStatus.Phase.MAP, status.getCounters());
 
           // trying to sort out how to fail an already finished task
+          /*
           if (!metricsDone) {
             LOG.info("In !metrics done");
             runningReduceTasks -= 1;
+            LOG.info("\t\t" + "runningReduceTasks post-dec: " + runningReduceTasks);
             metrics.failedReduce(tempTaskAttemptID);
             this.queueMetrics.failedReduce(tempTaskAttemptID);
           } else { 
             LOG.info("NOT in !metrics done");
           }
+          */
 
           LOG.info("  Actually \"failing\", task: " + tempTIP.getTIPId());
           // Tell the job to fail the relevant task
+        //failedTask(tip, taskid, status, taskTracker,
+        //           wasRunning, wasComplete, wasAttemptRunning, true);
+          // TODO --jbuck pull out whether the Map task we're failing was running, completed, etc.
+          int mapTaskToCheckStatusOf = tempTaskID.getId();
+          LOG.info("Hey Joe, check map task: " + mapTaskToCheckStatusOf);
+          LOG.info("ok, here is it's TIPId: " + maps[mapTaskToCheckStatusOf].getTIPId());
+          boolean tempIsComplete = maps[mapTaskToCheckStatusOf].isComplete();
+
           failedTask(tempTIP, tempTaskAttemptID, tempStatus, taskTracker,
-                     true, false, true, true);
-          retireMap(tempTIP);
-          failMap(tempTIP);
+                     //true, false, true, true);
+                     true, true, true, true);
+          //retireMap(tempTIP);
+          //failMap(tempTIP);
 
-          // --jbuck start here. Construct a proper failure fora Map task
-          // Tell the job to fail the relevant task
-          //failedTask(tip, tempTaskAttemptID, status, taskTracker,
-          //          wasRunning, wasComplete, wasAttemptRunning);
-
-          // Did the task failure lead to tip failure?
-          /*
-          taskEvent = new TaskCompletionEvent(taskCompletionEventTracker, 
-                                          taskid,
-                                          tip.idWithinJob(),
-                                          true,
-                                          taskCompletionStatus, 
-                                          httpTaskLogLocation
-                                         );
-          */
         }                        
       }
 
@@ -2045,6 +2052,8 @@ public class JobInProgressDependency extends JobInProgress {
                                                int clusterSize,
                                                int numUniqueHosts
                                               ) throws IOException {
+
+    LOG.info("in obtainNewReduceTask");
     if (status.getRunState() != JobStatus.RUNNING) {
       LOG.info("Cannot create task split for " + profile.getJobID());
       return null;
@@ -2080,6 +2089,7 @@ public class JobInProgressDependency extends JobInProgress {
     int  target = findNewReduceTask(tts, clusterSize, numUniqueHosts, 
                                     status.reduceProgress());
     if (target == -1) {
+      LOG.info("findNewReduceTask returned -1, returning null");
       return null;
     }
     
@@ -2540,7 +2550,7 @@ public class JobInProgressDependency extends JobInProgress {
    * @param tip the tip that needs to be failed
    */
   private synchronized void failMap(TaskInProgress tip) {
-    LOG.info("top of failMap, tip: " + tip.getTIPId());
+    LOG.info("top of failMap, tip: " + tip.getTIPId() + " total: " + failedMaps.size()); 
     if (failedMaps == null) {
       LOG.warn("Failed cache for maps is missing! Job details are missing.");
       return;
@@ -2559,7 +2569,7 @@ public class JobInProgressDependency extends JobInProgress {
    */
   private synchronized void failReduce(TaskInProgress tip) {
     LOG.info("in failReduce, nonRunningReduces.size() " + nonRunningReduces.size()); 
-    LOG.info("in failReduce, tip: " + tip.getTIPId()); // --jbuck
+    LOG.info("in failReduce, tip: " + tip.getTIPId()); 
     if (nonRunningReduces == null) {
       LOG.warn("Failed cache for reducers missing!! "
                + "Job details are missing.");
@@ -2954,9 +2964,9 @@ public class JobInProgressDependency extends JobInProgress {
                                              int numUniqueHosts,
                                              double avgProgress) {
     if (numReduceTasks == 0) {
-      if(LOG.isDebugEnabled()) {
+      //if(LOG.isDebugEnabled()) {
         LOG.debug("No reduces to schedule for " + profile.getJobID());
-      }
+      //}
       return -1;
     }
 
@@ -2967,6 +2977,7 @@ public class JobInProgressDependency extends JobInProgress {
     this.clusterSize = clusterSize;
 
     if (!shouldRunOnTaskTracker(taskTracker)) {
+      LOG.info("Should not run tasks on tracker: " + taskTracker);
       return -1;
     }
 
@@ -2987,7 +2998,7 @@ public class JobInProgressDependency extends JobInProgress {
     // finalMapTaskCompletionTime == -1 until the last Map Task finishes. 
     // Don't start speculative Reducers if MapTasks are still running
     if (hasSpeculativeReduces && (-1 != finalMapTaskCompletionTime) ) {
-    //if (hasSpeculativeReduces) {
+    //if (hasSpeculativeReduces) 
       LOG.info("JB, finding a speculative reduce task");
       tip = findSpeculativeTask(runningReduces, tts, avgProgress, 
                                 jobtracker.getClock().getTime(), false);
@@ -3479,10 +3490,12 @@ public class JobInProgressDependency extends JobInProgress {
       // Except after garbageCollect in a different thread.
       if (!tip.isJobCleanupTask() && !tip.isJobSetupTask()) {
         if (tip.isMapTask() && !metricsDone) {
+          LOG.info("\t\t" + "decrementing map counters for failed task: " + taskid);
           runningMapTasks -= 1;
           metrics.failedMap(taskid);
           this.queueMetrics.failedMap(taskid);
         } else if (!metricsDone) {
+          LOG.info("\t\t" + "decrementing reduce counters for failed task: " + taskid);
           runningReduceTasks -= 1;
           metrics.failedReduce(taskid);
           this.queueMetrics.failedReduce(taskid);
@@ -3491,6 +3504,8 @@ public class JobInProgressDependency extends JobInProgress {
       
       // Metering
       meterTaskAttempt(tip, status);
+    } else { 
+      LOG.info("\t\t" + "in failed task but NOT decrementing counters");
     }
         
     //update running  count on task failure.
@@ -3510,6 +3525,7 @@ public class JobInProgressDependency extends JobInProgress {
         // remove from the running queue and put in the failed queue if the tip
         // is not complete
         if (!isComplete) {
+          LOG.info("\t\t" + "reduce task that was running but is no longer running, died");
           retireReduce(tip);
           failReduce(tip);
         }

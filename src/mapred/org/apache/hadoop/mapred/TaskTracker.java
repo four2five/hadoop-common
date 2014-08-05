@@ -1998,6 +1998,7 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
     // else resend the previous status information.
     //
     if (status == null) {
+      //LOG.info("Building a new heartbeat");
       synchronized (this) {
         status = new TaskTrackerStatus(taskTrackerName, localHostname, 
                                        httpPort, 
@@ -2025,6 +2026,7 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
       localMinSpaceStart = minSpaceStart;
     }
     if (askForNewTask) {
+      //LOG.info("I am asking for a new task");
       askForNewTask = enoughFreeSpace(localMinSpaceStart);
       long freeDiskSpace = getFreeSpace();
       long totVmem = getTotalVirtualMemoryOnTT();
@@ -2049,6 +2051,8 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
       status.getResourceStatus().setCpuFrequency(cpuFreq);
       status.getResourceStatus().setNumProcessors(numCpu);
       status.getResourceStatus().setCpuUsage(cpuUsage);
+    } else { 
+      LOG.info("Not asking for a new task");
     }
     //add node health information
     
@@ -2076,8 +2080,10 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
     //
     heartbeatResponseId = heartbeatResponse.getResponseId();
       
+    LOG.info("Processing heartbeat at TaskTracker");
     synchronized (this) {
       for (TaskStatus taskStatus : status.getTaskReports()) {
+        LOG.info("\t" + taskStatus.getTaskID() + " : " + taskStatus.getRunState());
         if (taskStatus.getRunState() != TaskStatus.State.RUNNING &&
             taskStatus.getRunState() != TaskStatus.State.UNASSIGNED &&
             taskStatus.getRunState() != TaskStatus.State.COMMIT_PENDING &&

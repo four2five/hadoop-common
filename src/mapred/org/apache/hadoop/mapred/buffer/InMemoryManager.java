@@ -245,7 +245,7 @@ public class InMemoryManager implements InMemoryBufferUmbilicalProtocol {
 			this.busy = false;
 			this.somethingToSend = false;
       this.toService = new HashSet<TaskID>();
-      LOG.info("Creating a BufferManager for task " + this.taskid);
+      //LOG.info("Creating a BufferManager for task " + this.taskid);
 		}
 
     public SortedSet<OutputInMemoryBuffer> getOutputs() { 
@@ -447,6 +447,14 @@ public class InMemoryManager implements InMemoryBufferUmbilicalProtocol {
 							buffer.serviced(src.destination());
 						}
 					} else { 
+            if (buffer.isServiced(src.destination())) { 
+              LOG.info("NOT sending buffer because " + buffer.header().owner().toString() + 
+                       " already send data to " + src.destination());
+            } 
+            if ( !buffer.getToService().contains(src.destination().getTaskID())) { 
+              LOG.info("NOT sending buffer because " +  buffer.header().owner().toString() +
+                       " getToService() does not contain an entry for " + src.destination().getTaskID());
+            }
             // log something about how this buffer is not meant to be serviced or was serviced
           }
 				}
@@ -873,6 +881,7 @@ public class InMemoryManager implements InMemoryBufferUmbilicalProtocol {
 		if (!this.mapSources.containsKey(jobid)) {
       LOG.info("Adding first map source for job " + jobid);
 			this.mapSources.put(jobid, new HashSet<InMemoryBufferExchangeSource>());
+      LOG.info("Adding entry in mapSources for source: " + source);
 			this.mapSources.get(jobid).add(source);
 		} else if (!this.mapSources.get(jobid).contains(source)) {
       LOG.info("Adding map source for job " + source);
