@@ -36,6 +36,10 @@ import org.apache.hadoop.mapreduce.RecordReader;
  * @see RecordReader
  */
 public abstract class InputSplit {
+
+    private boolean _hasReducerDependencyInfo;
+    private int[] _reducerDependencyInfo;
+    
   /**
    * Get the size of the split, so that the input splits can be sorted by size.
    * @return the number of bytes in the split
@@ -57,10 +61,11 @@ public abstract class InputSplit {
   public boolean hasReducerDependencyInfo() { return false; }
 
   public void setReducerDependencyInfo(int[] reducersThatDependOnThisSplit) { 
-    return;
+    this._reducerDependencyInfo = reducersThatDependOnThisSplit;
+    this._hasReducerDependencyInfo = true;
   }
 
   public int[] getReducerDependencyInfo() { 
-    return null;
+    return this._reducerDependencyInfo;
   }
 }

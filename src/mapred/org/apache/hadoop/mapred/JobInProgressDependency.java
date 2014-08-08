@@ -792,7 +792,7 @@ public class JobInProgressDependency extends JobInProgress {
       NetUtils.verifyHostnames(split.getLocations());
 
       // debuggin 
-      LOG.info("TaskSplitMetaInfo[" + jbCounter + "]:" + split.toString());
+      LOG.info("Joe, TaskSplitMetaInfo[" + jbCounter + "]:" + split.toString());
       jbCounter++;
     }
     

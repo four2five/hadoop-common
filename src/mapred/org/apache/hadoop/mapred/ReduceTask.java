@@ -235,6 +235,11 @@ public class ReduceTask extends Task {
       }
 
       LOG.info("Breaking out of the while loop");
+      LOG.info("About to notifyAll");
+      synchronized(this.task) { 
+        this.task.notifyAll();
+      }
+      LOG.info("post notifyAll");
 
       /*
       LOG.info("Seen all of the mapTasks. Time to loop, calling notify every so often");
@@ -1079,6 +1084,7 @@ public class ReduceTask extends Task {
     // Let's try to just do one applyReducer() and see how that goes.
     // The intent is to have all the input merge-sorted into on authoritative list
     //copy2(job, jInputBuffer, sink, tempReporter, bufferUmbilical, rfs, comparator, keyClass, valueClass);
+
     copy2(job, jInputBuffer, sink, tempReporter, bufferUmbilical, umbilical,
           null, comparator, keyClass, valueClass);
     LOG.info("fetcher.interrupt()");

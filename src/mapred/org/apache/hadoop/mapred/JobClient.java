@@ -1008,7 +1008,15 @@ public class JobClient extends Configured implements MRConstants, Tool  {
         " but it is NOT configured for the cluster");
     } else if( jobConf.useDependencyScheduling() ) { 
       LOG.info("The cluster IS configured to use dependency scheduling but " + input.getClass().getName() + 
-      " does not support it");
+      " does not support it. Assuming global dependencies");
+      int[] dummyListOfAllReduceTasks = new int[job.getNumReduceTasks()];
+      for (int i=0; i < dummyListOfAllReduceTasks.length; i++) { 
+        dummyListOfAllReduceTasks[i] = i;
+      }
+
+      for( int i=0; i<array.length; i++) { 
+        array[i].setReducerDependencyInfo(dummyListOfAllReduceTasks);
+      }
     }
    
 
